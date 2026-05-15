@@ -6,7 +6,10 @@ import django.db.models.deletion
 def _add_approve_client_permission(apps, schema_editor):
     Permission = apps.get_model("auth", "Permission")
     ContentType = apps.get_model("contenttypes", "ContentType")
-    ct = ContentType.objects.get(app_label="masters", model="client")
+    ct, _ = ContentType.objects.get_or_create(
+        app_label="masters",
+        model="client",
+    )
     Permission.objects.get_or_create(
         content_type=ct,
         codename="approve_client",
@@ -22,6 +25,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        ("contenttypes", "0002_remove_content_type_name"),
         ("masters", "0009_client_passport_aadhaar_foreign_citizen"),
     ]
 
