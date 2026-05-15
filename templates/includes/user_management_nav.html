@@ -1,0 +1,20 @@
+{% if perms.core.view_employee %}
+  <ul class="nav nav-tabs mb-3 flex-column flex-sm-row border-bottom">
+    <li class="nav-item">
+      <a
+        class="nav-link {% if user_management_section == 'users' %}active{% endif %}"
+        href="{% url 'user_list' %}"
+        >Users</a
+      >
+    </li>
+    {% if user.is_superuser %}
+      <li class="nav-item">
+        <a
+          class="nav-link {% if user_management_section == 'groups' %}active{% endif %}"
+          href="{% url 'user_group_list' %}"
+          >Access groups</a
+        >
+      </li>
+    {% endif %}
+  </ul>
+{% endif %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}MIS Client Wise Report — CA Office Suite{% endblock %}
+{% block page_title %}MIS Client Wise Report{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">From date</label>
+        {{ form.from_date }}
+        {% if form.from_date.errors %}<div class="text-danger small">{{ form.from_date.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">To date</label>
+        {{ form.to_date }}
+        {% if form.to_date.errors %}<div class="text-danger small">{{ form.to_date.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label small text-secondary mb-0">{{ form.clients.label }}</label>
+        {{ form.clients }}
+        {% if form.clients.help_text %}<div class="form-text">{{ form.clients.help_text }}</div>{% endif %}
+      </div>
+      <div class="col-12 d-flex gap-2 mt-2">
+        <button class="btn btn-primary btn-sm" type="submit">Run report</button>
+        {% if perms.reports.export_mis_client_wise_report and request.GET %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_mis_client_wise_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_mis_client_wise' %}">Clear</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_index' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  {% if request.GET %}
+    <div class="card p-3">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Client ID</th>
+              <th>Client name</th>
+              <th class="text-end">Fees</th>
+              <th class="text-end">GST</th>
+              <th class="text-end">Receipts</th>
+              <th class="text-end">Expenses</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                <td class="mono">{{ r.client_id }}</td>
+                <td>{{ r.client_name }}</td>
+                <td class="text-end mono">{{ r.fees }}</td>
+                <td class="text-end mono">{{ r.gst }}</td>
+                <td class="text-end mono">{{ r.receipts }}</td>
+                <td class="text-end mono">{{ r.expenses }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="text-secondary">No MIS entries for the selected filters.</td></tr>
+            {% endfor %}
+            {% if rows %}
+              <tr class="table-light fw-semibold">
+                <td colspan="2" class="text-end">Total</td>
+                <td class="text-end mono">{{ totals.fees }}</td>
+                <td class="text-end mono">{{ totals.gst }}</td>
+                <td class="text-end mono">{{ totals.receipts }}</td>
+                <td class="text-end mono">{{ totals.expenses }}</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="card p-3 text-secondary small">Select filters and click <strong>Run report</strong>.</div>
+  {% endif %}
+{% endblock %}
+

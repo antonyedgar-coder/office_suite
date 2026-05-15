@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Access group — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New access group{% else %}Edit access group{% endif %}{% endblock %}
+
+{% block content %}
+  {% include "includes/user_management_nav.html" %}
+
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      <div class="col-12 col-md-6">
+        <label class="form-label">Group name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12">
+        <label class="form-label">{{ form.assigned_permissions.label }}</label>
+        {{ form.assigned_permissions }}
+        {% if form.assigned_permissions.help_text %}<div class="form-text">{{ form.assigned_permissions.help_text }}</div>{% endif %}
+        {% if form.assigned_permissions.errors %}<div class="text-danger small">{{ form.assigned_permissions.errors }}</div>{% endif %}
+        <div class="form-text">Hold Ctrl (Windows) or ⌘ (Mac) to select multiple permissions.</div>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'user_group_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

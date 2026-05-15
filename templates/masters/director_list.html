@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Director Mapping — CA Office Suite{% endblock %}
+{% block page_title %}Director Mapping{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md">
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Director name / DIN / Company or LLP name / Client ID / CIN / LLPIN" />
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.masters.add_directormapping %}
+          <a class="btn btn-primary" href="{% url 'director_create' %}">Map directors</a>
+          <a class="btn btn-outline-primary" href="{% url 'director_mapping_bulk_import' %}">Bulk upload CSV</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Director</th>
+            <th style="width: 110px">DIN</th>
+            <th>Company / LLP</th>
+            <th style="width: 130px">Appointed</th>
+            <th style="width: 130px">Cessation</th>
+            <th style="width: 130px">Reason</th>
+            <th style="width: 120px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in mappings %}
+            <tr>
+              <td>{{ m.director.client_name }}</td>
+              <td class="mono">{{ m.director.din }}</td>
+              <td>
+                <div><span class="mono">{{ m.company.client_id }}</span> <span class="text-secondary">—</span> {{ m.company.client_name }}</div>
+                {% if m.company.cin or m.company.llpin %}
+                  <div class="small text-secondary mono">{% if m.company.cin %}CIN {{ m.company.cin }}{% endif %}{% if m.company.cin and m.company.llpin %} · {% endif %}{% if m.company.llpin %}LLPIN {{ m.company.llpin }}{% endif %}</div>
+                {% endif %}
+              </td>
+              <td>{% if m.appointed_date %}{{ m.appointed_date }}{% else %}—{% endif %}</td>
+              <td>{{ m.cessation_date|default:"—" }}</td>
+              <td>{% if m.reason_for_cessation %}{{ m.get_reason_for_cessation_display }}{% else %}—{% endif %}</td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                  {% if perms.masters.change_directormapping %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'director_edit' m.pk %}">Edit</a>
+                  {% endif %}
+                  {% if perms.masters.delete_directormapping %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'director_delete' m.pk %}">Delete</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-secondary">No director mappings found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+

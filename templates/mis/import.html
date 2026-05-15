@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Bulk upload — CA Office Suite{% endblock %}
+{% block page_title %}Bulk upload{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <div class="mb-2 fw-semibold">
+      {% if mode == "fees" %}Fees Details{% elif mode == "receipts" %}Receipts{% else %}Expenses Details{% endif %}
+      — Bulk upload
+    </div>
+    <div class="text-secondary small mb-3">
+      Upload a <strong>.csv</strong> file (recommended) or <strong>.xlsx</strong>, preview errors, then confirm import.
+      Download a template first to match the required columns.
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap mb-3">
+      {% if mode == "fees" %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_fees_import_template' %}">Download template</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_fees_list' %}">Back</a>
+      {% elif mode == "receipts" %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_receipts_import_template' %}">Download template</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_receipt_list' %}">Back</a>
+      {% else %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_expenses_import_template' %}">Download template</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_expense_list' %}">Back</a>
+      {% endif %}
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+      {% csrf_token %}
+      <div class="col-12 col-md-6">
+        <label class="form-label">Upload file (.csv or .xlsx)</label>
+        <input class="form-control" type="file" name="upload_file" accept=".csv,.xlsx" required />
+        <div class="form-text">Make sure the first row has the exact header names from the template.</div>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Upload and preview</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

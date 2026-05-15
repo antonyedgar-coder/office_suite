@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Director DIR-3 KYC — CA Office Suite{% endblock %}
+{% block page_title %}Director DIR-3 KYC{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <p class="text-secondary small mb-3">
+      Cadence is by <strong>Indian financial year</strong> (April–March), not by counting calendar years from the filing date.
+      Any two dates in the same FY (for example <strong>01-04-2026</strong> and <strong>30-06-2026</strong>) are treated the same:
+      the <strong>next</strong> DIR-3 e-KYC for that director can be recorded only from <strong>01-April</strong> of the FY that begins
+      <strong>three FY starts</strong> after the FY of the last filing (for FY <strong>2026-27</strong>, next from <strong>01-04-2029</strong>, FY <strong>2029-30</strong>).
+    </p>
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md">
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Search director name, DIN, Client ID, or SRN" />
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.dirkyc.add_dir3kyc %}
+          <a class="btn btn-primary" href="{% url 'dirkyc_create' %}">New DIR-3 KYC</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Date done</th>
+            <th>Director</th>
+            <th style="width: 100px">DIN</th>
+            <th style="width: 120px">FY when done</th>
+            <th style="width: 120px">Next allowed FY</th>
+            <th style="width: 130px">Next allowed from</th>
+            <th>SRN</th>
+            <th style="width: 140px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.date_done }}</td>
+              <td>{{ r.director.client_name }}</td>
+              <td class="mono">{{ r.director.din }}</td>
+              <td class="mono">{{ r.fy_when_done_label }}</td>
+              <td class="mono">{{ r.next_allowed_fy_label }}</td>
+              <td class="mono">{{ r.next_allowed_from_date }}</td>
+              <td class="mono">{{ r.srn }}</td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                  {% if perms.dirkyc.change_dir3kyc %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'dirkyc_edit' r.pk %}">Edit</a>
+                  {% endif %}
+                  {% if perms.dirkyc.delete_dir3kyc %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'dirkyc_delete' r.pk %}">Delete</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="text-secondary">No DIR-3 KYC records.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="text-secondary small mt-2">Showing up to 500 latest rows. Saving a new row checks the latest prior filing for that director (by date).</div>
+  </div>
+{% endblock %}

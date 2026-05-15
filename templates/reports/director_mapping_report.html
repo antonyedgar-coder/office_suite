@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}Director Mapping Report — CA Office Suite{% endblock %}
+{% block page_title %}Director Mapping Report{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Filters</div>
+    <div class="text-secondary small mb-3">
+      <strong>Company-wise</strong> (All companies or one company): one block per company — client ID and name use merged cells; each current director as on the as-on date appears on its own row with DIN and appointment / cessation dates.
+      <strong>Director-wise</strong> (All directors or one director): one block per director — DIN and name merged; each company mapping (full history) on its own row with dates.
+      Flat multi-filter view keeps the full detail grid. CSV repeats company or director identifiers on each data row (no merged cells).
+    </div>
+
+    <form method="get" class="row g-2" id="dmReportForm">
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.as_of_date.label }}</label>
+        {{ form.as_of_date }}
+        {% if form.as_of_date.errors %}<div class="text-danger small">{{ form.as_of_date.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.director_scope.label }}</label>
+        {{ form.director_scope }}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.director_din.label }}</label>
+        <div class="position-relative">
+          {{ form.director_din }}
+          <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_din" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.director_name.label }}</label>
+        <div class="position-relative">
+          {{ form.director_name }}
+          <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_name" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.company_scope.label }}</label>
+        {{ form.company_scope }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.company_name.label }}</label>
+        <div class="position-relative">
+          {{ form.company_name }}
+          <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="company_name" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.company_cin.label }}</label>
+        <div class="position-relative">
+          {{ form.company_cin }}
+          <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="company_cin" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
+        </div>
+      </div>
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+        <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_director_mapping' %}">Clear</a>
+        {% if perms.reports.export_director_mapping_report %}
+          {% if request.GET %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_director_mapping_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
+          {% endif %}
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">Dashboard</a>
+      </div>
+    </form>
+  </div>
+
+  {% if request.GET %}
+    {% if form.errors %}
+      <div class="alert alert-warning">Please fix the errors above and submit again.</div>
+    {% else %}
+      <div class="card p-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+          <div>
+            {% if layout == "by_company" or layout == "flat_company_first" %}
+              <div class="fw-semibold mb-1">Company-wise report</div>
+            {% elif layout == "by_director" or layout == "flat_director_first" %}
+              <div class="fw-semibold mb-1">Director-wise report</div>
+            {% endif %}
+            <span class="fw-semibold">{{ count }}</span>
+            {% if layout == "by_company" or layout == "flat_company_first" %}
+              <span class="text-secondary">director seat{{ count|pluralize }} as on <strong>{{ as_of }}</strong> (company-wise)</span>
+            {% elif layout == "by_director" %}
+              <span class="text-secondary">company mapping{{ count|pluralize }} (director-wise, full history)</span>
+            {% elif layout == "flat_director_first" %}
+              <span class="text-secondary">active seat{{ count|pluralize }} as on <strong>{{ as_of }}</strong> (director-wise)</span>
+            {% else %}
+              <span class="text-secondary">active mapping{{ count|pluralize }} as on <strong>{{ as_of }}</strong> (detail columns)</span>
+            {% endif %}
+            {% if truncated %}
+              <span class="text-warning small">(showing first {{ dm_display_rows }} of {{ count }} data row{{ count|pluralize }}; CSV is complete)</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="table-responsive">
+          {% if layout == "by_company" or layout == "flat_company_first" %}
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 110px">Client ID</th>
+                <th>Company name</th>
+                <th>Director name</th>
+                <th style="width: 110px">DIN</th>
+                <th style="width: 120px">Date of appointment</th>
+                <th style="width: 120px">Date of cessation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if rows %}
+                {% for g in rows %}
+                  {% for line in g.lines %}
+                <tr>
+                  {% if forloop.first %}
+                  <td class="mono align-middle" rowspan="{{ g.lines|length }}">{{ g.company_client_id }}</td>
+                  <td class="align-middle" rowspan="{{ g.lines|length }}">{{ g.company_name }}</td>
+                  {% endif %}
+                  <td>{{ line.director_name }}</td>
+                  <td class="mono">{{ line.din|default:"—" }}</td>
+                  <td>{% if line.appointed_date %}{{ line.appointed_date }}{% else %}—{% endif %}</td>
+                  <td>{% if line.cessation_date %}{{ line.cessation_date }}{% else %}—{% endif %}</td>
+                </tr>
+                  {% endfor %}
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="6" class="text-secondary">No rows match.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+          {% elif layout == "by_director" or layout == "flat_director_first" %}
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 110px">DIN</th>
+                <th>Director name</th>
+                <th>Company name</th>
+                <th style="width: 120px">Date of appointment</th>
+                <th style="width: 120px">Date of cessation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if rows %}
+                {% for g in rows %}
+                  {% for line in g.lines %}
+                <tr>
+                  {% if forloop.first %}
+                  <td class="mono align-middle" rowspan="{{ g.lines|length }}">{{ g.din|default:"—" }}</td>
+                  <td class="align-middle" rowspan="{{ g.lines|length }}">{{ g.director_name }}</td>
+                  {% endif %}
+                  <td>{{ line.company_name }}</td>
+                  <td>{% if line.appointed_date %}{{ line.appointed_date }}{% else %}—{% endif %}</td>
+                  <td>{% if line.cessation_date %}{{ line.cessation_date }}{% else %}—{% endif %}</td>
+                </tr>
+                  {% endfor %}
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="5" class="text-secondary">No rows match.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+          {% else %}
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Director</th>
+                <th style="width: 100px">DIN</th>
+                <th>Company / LLP</th>
+                <th style="width: 100px">Co. ID</th>
+                <th style="width: 130px">CIN</th>
+                <th style="width: 110px">LLPIN</th>
+                <th style="width: 110px">Appointed</th>
+                <th style="width: 110px">Cessation</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in rows %}
+                <tr>
+                  <td>{{ m.director.client_name }}</td>
+                  <td class="mono">{{ m.director.din }}</td>
+                  <td>{{ m.company.client_name }}</td>
+                  <td class="mono">{{ m.company.client_id }}</td>
+                  <td class="mono">{{ m.company.cin|default:"—" }}</td>
+                  <td class="mono">{{ m.company.llpin|default:"—" }}</td>
+                  <td>{% if m.appointed_date %}{{ m.appointed_date }}{% else %}—{% endif %}</td>
+                  <td>{{ m.cessation_date|default:"—" }}</td>
+                  <td class="small">{% if m.reason_for_cessation %}{{ m.get_reason_for_cessation_display }}{% else %}—{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="9" class="text-secondary">No rows match.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <script>
+    (function () {
+      var dirUrl = "{% url 'reports_api_suggest_directors' %}";
+      var coUrl = "{% url 'reports_api_suggest_companies' %}";
+
+      function debounce(fn, ms) {
+        var t;
+        return function () {
+          var args = arguments;
+          clearTimeout(t);
+          t = setTimeout(function () { fn.apply(null, args); }, ms);
+        };
+      }
+
+      function wireSuggest(inputName, slot, baseUrl) {
+        var inp = document.querySelector("#dmReportForm [name='" + inputName + "']");
+        if (!inp) return;
+        var wrap = inp.closest(".position-relative");
+        var list = wrap ? wrap.querySelector(".js-suggest-list") : null;
+        if (!list) return;
+
+        function hide() {
+          list.classList.add("d-none");
+          list.innerHTML = "";
+        }
+
+        function render(items) {
+          list.innerHTML = "";
+          if (!items || !items.length) {
+            hide();
+            return;
+          }
+          items.forEach(function (it) {
+            var li = document.createElement("li");
+            li.className = "list-group-item list-group-item-action py-1 small";
+            li.textContent = it.label;
+            li.addEventListener("mousedown", function (e) {
+              e.preventDefault();
+              inp.value = it.value;
+              hide();
+            });
+            list.appendChild(li);
+          });
+          list.classList.remove("d-none");
+        }
+
+        var run = debounce(function () {
+          var q = (inp.value || "").trim();
+          if (q.length < 1) {
+            hide();
+            return;
+          }
+          var u = baseUrl + "?slot=" + encodeURIComponent(slot) + "&q=" + encodeURIComponent(q);
+          fetch(u, { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { render(data.results || []); })
+            .catch(function () { hide(); });
+        }, 280);
+
+        inp.addEventListener("input", run);
+        inp.addEventListener("focus", run);
+        document.addEventListener("click", function (e) {
+          if (!wrap.contains(e.target)) hide();
+        });
+      }
+
+      wireSuggest("director_din", "din", dirUrl);
+      wireSuggest("director_name", "name", dirUrl);
+      wireSuggest("company_name", "name", coUrl);
+      wireSuggest("company_cin", "cin", coUrl);
+    })();
+  </script>
+{% endblock %}

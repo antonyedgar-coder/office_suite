@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Client Master — CA Office Suite{% endblock %}
+{% block page_title %}Client Master{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md">
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Search by name / group / file no / PAN / passport / client ID" />
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.masters.approve_client %}
+          <a class="btn btn-outline-warning" href="{% url 'client_pending_list' %}">Pending approvals</a>
+        {% endif %}
+        {% if perms.masters.add_client %}
+          <a class="btn btn-outline-primary" href="{% url 'client_import' %}">Import CSV</a>
+          <a class="btn btn-primary" href="{% url 'client_create' %}">New Client</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 110px">Client ID</th>
+            <th>Name</th>
+            <th style="width: 120px">Group</th>
+            <th style="width: 120px">File No</th>
+            <th style="width: 160px">Type</th>
+            <th style="width: 120px">Branch</th>
+            <th style="width: 140px">PAN</th>
+            <th style="width: 140px">Passport</th>
+            <th style="width: 130px">DOB</th>
+            <th style="width: 130px">Status</th>
+            <th style="width: 120px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in clients %}
+            <tr>
+              <td class="mono">{{ c.client_id }}</td>
+              <td>{{ c.client_name }}</td>
+              <td class="small">{% if c.client_group %}{{ c.client_group.name }}{% else %}—{% endif %}</td>
+              <td class="small mono">{{ c.file_no|default:"—" }}</td>
+              <td><span class="badge text-bg-light">{{ c.client_type }}</span></td>
+              <td>{{ c.branch }}</td>
+              <td class="mono">{{ c.pan }}</td>
+              <td class="mono">{{ c.passport_no|default:"—" }}</td>
+              <td class="mono">{% if c.dob %}{{ c.dob|date:"d-m-Y" }}{% else %}—{% endif %}</td>
+              <td>
+                {% if c.approval_status == "pending" %}
+                  <span class="badge text-bg-warning text-dark">Pending</span>
+                {% else %}
+                  <span class="badge text-bg-success">Approved</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                  {% if perms.masters.change_client %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'client_edit' c.client_id %}">Edit</a>
+                  {% endif %}
+                  {% if perms.masters.delete_client %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'client_delete' c.client_id %}">Delete</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11" class="text-secondary">No clients found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+

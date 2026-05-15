@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Reports — CA Office Suite{% endblock %}
+{% block page_title %}Reports{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <div class="text-secondary small mb-3">
+      Available reports are listed below. Use the sidebar under <strong>Reports</strong> for quick access when you have permission.
+    </div>
+    <ul class="list-group list-group-flush">
+      <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
+        <div>
+          <div class="fw-medium">Client Master Report</div>
+          <div class="text-secondary small">Filters and CSV export — requires view/export permissions.</div>
+        </div>
+        {% if perms.reports.view_client_master_report %}
+          <a class="btn btn-sm btn-primary" href="{% url 'reports_client_master' %}">Open</a>
+        {% else %}
+          <span class="text-secondary small">No access</span>
+        {% endif %}
+      </li>
+      <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
+        <div>
+          <div class="fw-medium">MIS Report</div>
+          <div class="text-secondary small">Flexible MIS report with selectable details (Fees/GST/Receipts/Expenses).</div>
+        </div>
+        <a class="btn btn-sm btn-primary" href="{% url 'reports_mis' %}">Open</a>
+      </li>
+      <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
+        <div>
+          <div class="fw-medium">Director Mapping Report</div>
+          <div class="text-secondary small">Active appointments as on a date; filter by director (DIN/name), company (name/CIN), or all.</div>
+        </div>
+        {% if perms.reports.view_director_mapping_report %}
+          <a class="btn btn-sm btn-primary" href="{% url 'reports_director_mapping' %}">Open</a>
+        {% else %}
+          <span class="text-secondary small">No access</span>
+        {% endif %}
+      </li>
+      <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
+        <div>
+          <div class="fw-medium">DIR-3 KYC Report</div>
+          <div class="text-secondary small">DIR-3 / DIR e-KYC filings with optional director and date filters.</div>
+        </div>
+        {% if perms.reports.view_dir3kyc_report %}
+          <a class="btn btn-sm btn-primary" href="{% url 'reports_dir3kyc' %}">Open</a>
+        {% else %}
+          <span class="text-secondary small">No access</span>
+        {% endif %}
+      </li>
+    </ul>
+  </div>
+{% endblock %}

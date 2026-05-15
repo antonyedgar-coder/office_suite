@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Fees Details — CA Office Suite{% endblock %}
+{% block page_title %}Fees Details{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md">
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Search by client name / Client ID / PAN" />
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.mis.add_feesdetail %}
+          <a class="btn btn-primary" href="{% url 'mis_fees_create' %}">New fees entry</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Client</th>
+            <th>PAN</th>
+            <th class="text-end">Fees</th>
+            <th class="text-end">GST</th>
+            <th class="text-end">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.date }}</td>
+              <td>{{ r.client.client_name }}</td>
+              <td class="mono">{{ r.pan_no }}</td>
+              <td class="text-end mono">{{ r.fees_amount }}</td>
+              <td class="text-end mono">{{ r.gst_amount }}</td>
+              <td class="text-end mono fw-semibold">{{ r.total_amount }}</td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                  {% if perms.mis.change_feesdetail %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_fees_edit' r.pk %}">Edit</a>
+                  {% endif %}
+                  {% if perms.mis.delete_feesdetail %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'mis_fees_delete' r.pk %}">Delete</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-secondary">No fees entries.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="text-secondary small mt-2">Showing up to 500 latest rows.</div>
+  </div>
+{% endblock %}
+

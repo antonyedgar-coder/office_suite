@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Import Preview — CA Office Suite{% endblock %}
+{% block page_title %}Import Preview{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div>
+        <div class="fw-semibold">Preview</div>
+        <div class="text-secondary small">
+          Rows: {{ total_rows|default:rows|length }}.
+          Errors: {{ error_count|default:0 }}
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'client_import' %}">Upload another CSV</a>
+        {% if can_import %}
+          <form method="post" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="1" />
+            <button class="btn btn-success" type="submit">Confirm Import</button>
+          </form>
+        {% else %}
+          <span class="text-danger small">Fix errors to enable import.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if error_rows %}
+    <div class="card p-3">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width: 70px">Row</th>
+              <th style="width: 120px">Type</th>
+              <th style="width: 110px">Branch</th>
+              <th>Name</th>
+              <th style="width: 140px">PAN</th>
+              <th style="width: 260px">Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in error_rows %}
+              <tr class="table-danger">
+                <td class="mono">{{ r.row_num }}</td>
+                <td>{{ r.data.client_type }}</td>
+                <td>{{ r.data.branch }}</td>
+                <td>{{ r.data.client_name }}</td>
+                <td class="mono">{{ r.data.pan }}</td>
+                <td class="text-danger small">
+                  {% for e in r.errors %}{{ e }}{% if not forloop.last %}<br />{% endif %}{% endfor %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="card p-3">
+      <div class="text-success fw-semibold">No errors found in the file.</div>
+      <div class="text-secondary small">Click “Confirm Import” to save all rows.</div>
+    </div>
+  {% endif %}
+{% endblock %}
+

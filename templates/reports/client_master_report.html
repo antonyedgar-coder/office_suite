@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Client Master Report — CA Office Suite{% endblock %}
+{% block page_title %}Client Master Report{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Filters</div>
+    <div class="text-secondary small mb-3">
+      This report lists only <strong>approved</strong> Client Master records (pending clients stay in Masters until an approver accepts them).
+      Leave fields blank to ignore them. Multiple filled fields are combined with <strong>AND</strong> (all must match).
+      Use <strong>Directors only</strong> to list clients marked as director in Client Master.
+    </div>
+
+    <form method="get" class="row g-2">
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">Type of Client</label>
+        {{ form.client_type }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.branch.label }}</label>
+        {{ form.branch }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.is_director.label }}</label>
+        {{ form.is_director }}
+      </div>
+      <div class="col-12 col-md-8">
+        <label class="form-label small text-secondary mb-0">Client Name</label>
+        {{ form.client_name }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">DIN</label>
+        {{ form.din }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">PAN</label>
+        {{ form.pan }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">GSTIN</label>
+        {{ form.gstin }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">CIN</label>
+        {{ form.cin }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">LLPIN</label>
+        {{ form.llpin }}
+      </div>
+      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+        <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_client_master' %}">Clear filters</a>
+        {% if perms.reports.export_client_master_report %}
+          {% if request.GET %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_client_master_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
+          {% else %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_client_master_csv' %}">Download CSV (all clients)</a>
+          {% endif %}
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">Back to dashboard</a>
+      </div>
+    </form>
+  </div>
+
+  {% if request.GET %}
+    <div class="card p-3">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <div>
+          <span class="fw-semibold">{{ count }}</span>
+          <span class="text-secondary">client{{ count|pluralize }} matching</span>
+          {% if truncated %}
+            <span class="text-warning small">(showing first 500 rows below; CSV includes all matches)</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Client ID</th>
+              <th>Type</th>
+              <th>Branch</th>
+              <th>Name</th>
+              <th>Group</th>
+              <th>File No</th>
+              <th>PAN</th>
+              <th>Passport</th>
+              <th>Aadhaar</th>
+              <th>GSTIN</th>
+              <th>DOB</th>
+              <th>CIN</th>
+              <th>LLPIN</th>
+              <th>Director</th>
+              <th>DIN</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in clients %}
+              <tr>
+                <td class="mono">{{ c.client_id }}</td>
+                <td><span class="badge text-bg-light">{{ c.client_type }}</span></td>
+                <td>{{ c.branch }}</td>
+                <td>{{ c.client_name }}</td>
+                <td class="small">{% if c.client_group %}{{ c.client_group.name }}{% else %}—{% endif %}</td>
+                <td class="small mono">{{ c.file_no|default:"—" }}</td>
+                <td class="mono">{{ c.pan }}</td>
+                <td class="mono">{{ c.passport_no|default:"—" }}</td>
+                <td class="mono">{{ c.aadhaar_no|default:"—" }}</td>
+                <td class="mono">{{ c.gstin }}</td>
+                <td class="mono">{% if c.dob %}{{ c.dob|date:"d-m-Y" }}{% else %}—{% endif %}</td>
+                <td class="mono">{{ c.cin }}</td>
+                <td class="mono">{{ c.llpin }}</td>
+                <td>{% if c.is_director %}Yes{% else %}—{% endif %}</td>
+                <td class="mono">{{ c.din }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="15" class="text-secondary">No clients match the current filters.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="card p-3 text-secondary small">
+      Choose filters and click <strong>Apply filters</strong> to preview results, or use <strong>Download CSV</strong> to export all clients.
+    </div>
+  {% endif %}
+{% endblock %}

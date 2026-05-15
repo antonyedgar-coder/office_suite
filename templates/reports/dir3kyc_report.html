@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}DIR-3 KYC Report — CA Office Suite{% endblock %}
+{% block page_title %}DIR-3 KYC Report{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Filters</div>
+    <div class="text-secondary small mb-3">
+      Choose <strong>All DIR-3 filings</strong> for one row per MCA filing, or <strong>Latest per director</strong> for compliance (last KYC date, last FY, next allowed window, FY gap as on date).
+      Director DIN and name fields suggest matches from Client Master as you type.
+    </div>
+
+    <form method="get" class="row g-2" id="dir3ReportForm">
+      <div class="col-12 col-md-6">
+        <label class="form-label small text-secondary mb-0">{{ form.view_mode.label }}</label>
+        {{ form.view_mode }}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.director_scope.label }}</label>
+        {{ form.director_scope }}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.as_of_date.label }}</label>
+        {{ form.as_of_date }}
+        {% if form.as_of_date.help_text %}<div class="form-text">{{ form.as_of_date.help_text }}</div>{% endif %}
+      </div>
+
+      <div class="col-12"><div class="text-secondary small fw-semibold mt-1">Director search</div></div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.director_din.label }}</label>
+        <div class="position-relative">
+          {{ form.director_din }}
+          <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_din" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-9">
+        <label class="form-label small text-secondary mb-0">{{ form.director_name.label }}</label>
+        <div class="position-relative">
+          {{ form.director_name }}
+          <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_name" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
+        </div>
+      </div>
+
+      <div class="col-12"><div class="text-secondary small fw-semibold mt-1">Filings view</div></div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.date_done_from.label }}</label>
+        {{ form.date_done_from }}
+        {% if form.date_done_from.errors %}<div class="text-danger small">{{ form.date_done_from.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.date_done_to.label }}</label>
+        {{ form.date_done_to }}
+        {% if form.date_done_to.errors %}<div class="text-danger small">{{ form.date_done_to.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12"><div class="text-secondary small fw-semibold mt-1">Compliance view</div></div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.last_kyc_fy.label }}</label>
+        {{ form.last_kyc_fy }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.date_last_kyc_from.label }}</label>
+        {{ form.date_last_kyc_from }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.date_last_kyc_to.label }}</label>
+        {{ form.date_last_kyc_to }}
+        {% if form.date_last_kyc_to.errors %}<div class="text-danger small">{{ form.date_last_kyc_to.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12">
+        <div class="form-check mt-1">
+          {{ form.din_not_done_3fy }}
+          <label class="form-check-label small" for="{{ form.din_not_done_3fy.id_for_label }}">{{ form.din_not_done_3fy.label }}</label>
+        </div>
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+        <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_dir3kyc' %}">Clear</a>
+        {% if perms.reports.export_dir3kyc_report %}
+          {% if request.GET %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_dir3kyc_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
+          {% endif %}
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">Dashboard</a>
+      </div>
+    </form>
+  </div>
+
+  {% if request.GET %}
+    {% if form.errors %}
+      <div class="alert alert-warning">Please fix the errors above and submit again.</div>
+    {% else %}
+      {% if mode == "compliance" %}
+        <div class="card p-3">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div>
+              <span class="fw-semibold">{{ count }}</span>
+              <span class="text-secondary">director{{ count|pluralize }} (latest KYC per director)</span>
+              {% if truncated %}
+                <span class="text-warning small">(showing first 500 rows)</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Director</th>
+                  <th style="width: 100px">DIN</th>
+                  <th style="width: 100px">Client ID</th>
+                  <th>Date of last KYC</th>
+                  <th style="width: 100px">Last FY</th>
+                  <th style="width: 120px">Next from</th>
+                  <th style="width: 110px">Next FY</th>
+                  <th style="width: 90px">FY gap</th>
+                  <th style="width: 120px">>=3 FY rule</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in compliance_rows %}
+                  <tr>
+                    <td>{{ r.director_name }}</td>
+                    <td class="mono">{{ r.din }}</td>
+                    <td class="mono">{{ r.client_id }}</td>
+                    <td>{{ r.last_kyc_date|default:"—" }}</td>
+                    <td class="mono">{{ r.last_kyc_fy_label }}</td>
+                    <td class="mono">{{ r.next_allowed_from|default:"—" }}</td>
+                    <td class="mono">{{ r.next_allowed_fy_label }}</td>
+                    <td class="mono">{{ r.fy_since_last }}</td>
+                    <td>{% if r.not_done_3fy %}<span class="badge text-bg-warning small">Yes</span>{% else %}<span class="text-secondary small">No</span>{% endif %}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="9" class="text-secondary">No rows match.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% else %}
+        <div class="card p-3">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div>
+              <span class="fw-semibold">{{ count }}</span>
+              <span class="text-secondary">record{{ count|pluralize }}</span>
+              {% if truncated %}
+                <span class="text-warning small">(showing first 500; CSV includes all)</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Date done</th>
+                  <th>Director</th>
+                  <th style="width: 100px">DIN</th>
+                  <th style="width: 100px">Client ID</th>
+                  <th style="width: 100px">FY done</th>
+                  <th style="width: 110px">Next allowed FY</th>
+                  <th style="width: 120px">Next from</th>
+                  <th>SRN</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rows %}
+                  <tr>
+                    <td>{{ r.date_done }}</td>
+                    <td>{{ r.director.client_name }}</td>
+                    <td class="mono">{{ r.director.din }}</td>
+                    <td class="mono">{{ r.director.client_id }}</td>
+                    <td class="mono">{{ r.fy_when_done_label }}</td>
+                    <td class="mono">{{ r.next_allowed_fy_label }}</td>
+                    <td class="mono">{{ r.next_allowed_from_date }}</td>
+                    <td class="mono">{{ r.srn }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="8" class="text-secondary">No rows match.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+
+  <script>
+    (function () {
+      var dirUrl = "{% url 'reports_api_suggest_directors' %}";
+
+      function debounce(fn, ms) {
+        var t;
+        return function () {
+          var args = arguments;
+          clearTimeout(t);
+          t = setTimeout(function () { fn.apply(null, args); }, ms);
+        };
+      }
+
+      function wireSuggest(inputName, slot) {
+        var inp = document.querySelector("#dir3ReportForm [name='" + inputName + "']");
+        if (!inp) return;
+        var wrap = inp.closest(".position-relative");
+        var list = wrap ? wrap.querySelector(".js-suggest-list") : null;
+        if (!list) return;
+
+        function hide() {
+          list.classList.add("d-none");
+          list.innerHTML = "";
+        }
+
+        function render(items) {
+          list.innerHTML = "";
+          if (!items || !items.length) {
+            hide();
+            return;
+          }
+          items.forEach(function (it) {
+            var li = document.createElement("li");
+            li.className = "list-group-item list-group-item-action py-1 small";
+            li.textContent = it.label;
+            li.addEventListener("mousedown", function (e) {
+              e.preventDefault();
+              inp.value = it.value;
+              hide();
+            });
+            list.appendChild(li);
+          });
+          list.classList.remove("d-none");
+        }
+
+        var run = debounce(function () {
+          var q = (inp.value || "").trim();
+          if (q.length < 1) {
+            hide();
+            return;
+          }
+          var u = dirUrl + "?slot=" + encodeURIComponent(slot) + "&q=" + encodeURIComponent(q);
+          fetch(u, { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { render(data.results || []); })
+            .catch(function () { hide(); });
+        }, 280);
+
+        inp.addEventListener("input", run);
+        inp.addEventListener("focus", run);
+        document.addEventListener("click", function (e) {
+          if (!wrap.contains(e.target)) hide();
+        });
+      }
+
+      wireSuggest("director_din", "din");
+      wireSuggest("director_name", "name");
+    })();
+  </script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Delete director mapping — CA Office Suite{% endblock %}
+{% block page_title %}Delete director mapping{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <p class="mb-2">
+      Delete mapping:
+      <strong>{{ mapping.director.client_name }}</strong>
+      <span class="text-secondary">→</span>
+      <strong>{{ mapping.company.client_name }}</strong>
+      <span class="mono text-secondary">({{ mapping.company.client_id }})</span>
+    </p>
+    <p class="text-secondary small mb-3">This cannot be undone.</p>
+    <form method="post" class="d-inline-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Delete</button>
+      <a class="btn btn-outline-secondary" href="{% url 'director_list' %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Director DIR-3 KYC — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New DIR-3 KYC{% else %}Edit DIR-3 KYC{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="text-secondary small">
+      Pick the director from <strong>Client Master</strong> (Individual or Foreign Citizen, marked director, with DIN). Enter the date the DIR-3 / DIR e-KYC was completed and the MCA <strong>SRN</strong>.
+      A further e-KYC for the same director is allowed only from <strong>01-April</strong> of the FY that begins three FYs after the FY of the director’s latest prior filing (FY-based, not “three years from the date”).
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+
+      <div class="col-12 col-md-6">
+        <label class="form-label">Director</label>
+        <input class="form-control" id="directorSearch" list="directorSuggestions" placeholder="Type name, DIN, or Client ID…" autocomplete="off" />
+        <datalist id="directorSuggestions"></datalist>
+        {{ form.director }}
+        {% if form.director.errors %}<div class="text-danger small">{{ form.director.errors }}</div>{% endif %}
+        {% if form.director_search.errors %}<div class="text-danger small">{{ form.director_search.errors }}</div>{% endif %}
+        <div class="form-text">{{ form.director_search.help_text }}</div>
+      </div>
+
+      <div class="col-12 col-md-3">
+        <label class="form-label">Date of DIR-3 KYC done</label>
+        {{ form.date_done }}
+        {% if form.date_done.errors %}<div class="text-danger small">{{ form.date_done.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12 col-md-3">
+        <label class="form-label">SRN (DIR e-KYC)</label>
+        {{ form.srn }}
+        {% if form.srn.errors %}<div class="text-danger small">{{ form.srn.errors }}</div>{% endif %}
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'dirkyc_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      var search = document.getElementById("directorSearch");
+      var hidden = document.querySelector("input[data-dirkyc-director-hidden='1']");
+      var list = document.getElementById("directorSuggestions");
+      if (!search || !hidden || !list) return;
+
+      var directors = [];
+      {% for opt in form.fields.director.queryset %}
+        directors.push({ id: "{{ opt.pk }}", label: "{{ opt.client_name|escapejs }} — DIN {{ opt.din|upper|escapejs }} — {{ opt.client_id|escapejs }}" });
+      {% endfor %}
+
+      function renderSuggestions(q) {
+        list.innerHTML = "";
+        var qq = (q || "").toLowerCase().trim();
+        var shown = 0;
+        for (var i = 0; i < directors.length; i++) {
+          var c = directors[i];
+          var t = (c.label || "").toLowerCase();
+          if (!qq || t.indexOf(qq) !== -1) {
+            var o = document.createElement("option");
+            o.value = c.label;
+            list.appendChild(o);
+            shown++;
+            if (shown >= 50) break;
+          }
+        }
+      }
+
+      function syncHiddenFromLabel() {
+        var v = (search.value || "").trim();
+        var match = null;
+        for (var i = 0; i < directors.length; i++) {
+          if (directors[i].label === v) {
+            match = directors[i];
+            break;
+          }
+        }
+        hidden.value = match ? match.id : "";
+      }
+
+      if (hidden.value) {
+        for (var i = 0; i < directors.length; i++) {
+          if (directors[i].id === hidden.value) {
+            search.value = directors[i].label;
+            break;
+          }
+        }
+      }
+
+      renderSuggestions("");
+      search.addEventListener("input", function () {
+        hidden.value = "";
+        renderSuggestions(search.value);
+      });
+      search.addEventListener("change", syncHiddenFromLabel);
+      search.addEventListener("blur", syncHiddenFromLabel);
+    })();
+  </script>
+{% endblock %}

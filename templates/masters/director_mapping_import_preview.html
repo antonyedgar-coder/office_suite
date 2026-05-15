@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Director mapping bulk upload preview — CA Office Suite{% endblock %}
+{% block page_title %}Director mapping bulk upload preview{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-1">Preview</div>
+    {% if file_errors %}
+      <div class="alert alert-danger mb-0">{{ file_errors.0 }}</div>
+    {% else %}
+      <div class="text-secondary small">
+        Total rows in file: <strong>{{ total_rows }}</strong>.
+        {% if error_rows %}
+          Rows with errors (shown below): <strong>{{ error_rows|length }}</strong>.
+        {% elif can_import %}
+          All rows passed validation.
+        {% else %}
+          No data rows found.
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card p-3">
+    {% if file_errors %}
+      <p class="text-secondary small mb-0">Fix the file header or format, then upload again.</p>
+    {% elif can_import %}
+      <p class="text-success small mb-3">Ready to import <strong>{{ total_rows }}</strong> row(s). Use the button below to save them.</p>
+    {% elif error_rows %}
+      <p class="text-secondary small mb-2">Only rows with validation errors are listed. Correct them in your CSV and re-upload.</p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Director ID</th>
+              <th>DIN</th>
+              <th>Director name</th>
+              <th>Company ID</th>
+              <th>Company name</th>
+              <th>Appointed</th>
+              <th>Cession</th>
+              <th>Reason</th>
+              <th>Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in error_rows %}
+              <tr class="table-warning">
+                <td class="mono">{{ r.row_num }}</td>
+                <td class="mono">{{ r.data.director_client_id }}</td>
+                <td class="mono">{{ r.data.din_no }}</td>
+                <td>{{ r.data.director_name }}</td>
+                <td class="mono">{{ r.data.company_client_id }}</td>
+                <td>{{ r.data.company_name }}</td>
+                <td>{% if r.data.appointed_date %}{{ r.data.appointed_date }}{% else %}—{% endif %}</td>
+                <td>{{ r.data.cessation_date|default:"—" }}</td>
+                <td>{{ r.data.reason_for_cessation|default:"—" }}</td>
+                <td class="text-danger small">{{ r.errors|join:", " }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-secondary small mb-0">No data rows to preview.</p>
+    {% endif %}
+
+    <div class="d-flex gap-2 mt-3">
+      {% if can_import %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="confirm" value="1" />
+          <button class="btn btn-primary" type="submit">Confirm import</button>
+        </form>
+      {% elif error_rows %}
+        <span class="text-secondary small">Fix the errors in your CSV and upload again.</span>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{% url 'director_mapping_bulk_import' %}">Back</a>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Access groups — CA Office Suite{% endblock %}
+{% block page_title %}Access groups{% endblock %}
+
+{% block content %}
+  {% include "includes/user_management_nav.html" %}
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="text-secondary small">
+      Groups bundle permissions. Assign users to groups under <strong>Users</strong>, or grant extra permissions directly per user.
+    </div>
+    <a class="btn btn-primary btn-sm" href="{% url 'user_group_create' %}">New group</a>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Group name</th>
+            <th>Permissions</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in groups %}
+            <tr>
+              <td class="fw-medium">{{ g.name }}</td>
+              <td class="text-secondary small">{{ g.permissions.count }} assigned</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'user_group_edit' g.pk %}">Edit</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'user_group_delete' g.pk %}">Delete</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-secondary">No groups yet. Create one to reuse the same access profile for several users.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

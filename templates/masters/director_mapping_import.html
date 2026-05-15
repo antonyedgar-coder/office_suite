@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Director mapping bulk upload — CA Office Suite{% endblock %}
+{% block page_title %}Director mapping bulk upload{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <div class="text-secondary small mb-3">
+      Upload a CSV file (opens in Excel) to create multiple director mappings. Header row must match the template exactly.
+      <strong>DIRECTOR_CLIENT_ID</strong>, <strong>DIN_NO</strong>, and <strong>DIRECTOR_NAME</strong> must match Client Master for the director (Individual or Foreign Citizen, marked director, with DIN).
+      <strong>COMPANY_CLIENT_ID</strong> and <strong>COMPANY_NAME</strong> must match an eligible company client.
+      <strong>DATE_OF_APPOINTMENT</strong> is optional; if <strong>DATE_OF_CESSION</strong> is filled, an appointment date is required on the same row.
+      Format <strong>DIN_NO</strong> as text in Excel (or quote the cell) so leading zeros are kept; the importer also pads short all-digit DINs to 8 characters when a zero was lost.
+      If <strong>DATE_OF_CESSION</strong> is filled, <strong>REASON_FOR_CESSION</strong> is required: Resigned, Disqualified, Terminated, or Death (case-insensitive).
+      Only one <strong>active</strong> mapping (no cessation date) is allowed per director and company at a time; after cessation is recorded, a later reappointment is allowed.
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap mb-3">
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'director_mapping_bulk_import_template' %}">Download template</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'director_list' %}">Back to list</a>
+      {% if perms.masters.add_directormapping %}
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'director_create' %}">Map on screen (company first)</a>
+      {% endif %}
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+      {% csrf_token %}
+      <div class="col-12 col-md-6">
+        <label class="form-label">CSV file (.csv)</label>
+        <input class="form-control" type="file" name="upload_file" accept=".csv" required />
+        <div class="form-text">Save as CSV from Excel if needed. UTF-8 recommended.</div>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Upload and preview</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

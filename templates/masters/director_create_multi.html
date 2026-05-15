@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Director Mapping — CA Office Suite{% endblock %}
+{% block page_title %}New director mappings{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <p class="text-secondary small mb-0">
+      Choose the <strong>company / LLP</strong> first, then add one or more <strong>directors</strong>.
+      <strong>Appointed date</strong> is optional; <strong>cessation date</strong> requires an appointed date, and if cessation is set then <strong>reason for cessation</strong> is required.
+      Use <strong>Add another director</strong> to map several directors to the same company in one save.
+    </p>
+    {% if perms.masters.add_directormapping %}
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'director_mapping_bulk_import' %}">Bulk upload (CSV)</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'director_mapping_bulk_import_template' %}">Download CSV template</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+
+      <div class="col-12">
+        <div class="fw-semibold mb-2">1. Company / LLP</div>
+        <label class="form-label" for="companySearch">Company / LLP</label>
+        <input class="form-control" id="companySearch" list="companySuggestions" placeholder="Type company/LLP name, CIN, LLPIN, or client ID…" autocomplete="off" />
+        <datalist id="companySuggestions"></datalist>
+        {{ company_form.company }}
+        {% if company_form.company.errors %}<div class="text-danger small">{{ company_form.company.errors }}</div>{% endif %}
+        <div class="form-text">Eligible types: Private/Public Limited, Nidhi, FPO, Sec 8, LLP. Only one active appointment (no cessation) per director and company; record cessation before a new appointment to the same company.</div>
+      </div>
+
+      <div class="col-12 mt-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+          <div class="fw-semibold">2. Directors</div>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="dmAddLine">Add another director</button>
+        </div>
+
+        {% if formset.non_form_errors %}
+          <div class="alert alert-danger small">{{ formset.non_form_errors }}</div>
+        {% endif %}
+
+        {{ formset.management_form }}
+
+        <datalist id="directorSuggestions"></datalist>
+
+        <div id="dm-lines">
+          {% for f in formset %}
+            <div class="dm-line card p-3 mb-3" data-line-ix="{{ forloop.counter0 }}">
+              <div class="fw-semibold text-secondary small mb-2">Director row {{ forloop.counter }}</div>
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="dirSearch{{ forloop.counter0 }}">Director</label>
+                  <input class="form-control js-dir-search" id="dirSearch{{ forloop.counter0 }}" data-ix="{{ forloop.counter0 }}" list="directorSuggestions" placeholder="Type name, DIN, or client ID…" autocomplete="off" />
+                  {{ f.director }}
+                  {% if f.director.errors %}<div class="text-danger small">{{ f.director.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12 col-md-6 col-lg-2">
+                  <label class="form-label">Appointed date</label>
+                  {{ f.appointed_date }}
+                  {% if f.appointed_date.errors %}<div class="text-danger small">{{ f.appointed_date.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12 col-md-6 col-lg-2">
+                  <label class="form-label">Cessation date</label>
+                  {{ f.cessation_date }}
+                  {% if f.cessation_date.errors %}<div class="text-danger small">{{ f.cessation_date.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12 col-md-6 col-lg-2">
+                  <label class="form-label">Reason for cessation</label>
+                  {{ f.reason_for_cessation }}
+                  {% if f.reason_for_cessation.errors %}<div class="text-danger small">{{ f.reason_for_cessation.errors }}</div>{% endif %}
+                </div>
+              </div>
+              {% if f.non_field_errors %}
+                <div class="text-danger small mt-2">{{ f.non_field_errors }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save all mappings</button>
+        <a class="btn btn-outline-secondary" href="{% url 'director_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  <template id="dmRowTpl">
+    {% with f=formset.empty_form %}
+      <div class="dm-line card p-3 mb-3" data-line-ix="__prefix__">
+        <div class="fw-semibold text-secondary small mb-2">Director row (new)</div>
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="dirSearch__prefix__">Director</label>
+            <input class="form-control js-dir-search" id="dirSearch__prefix__" data-ix="__prefix__" list="directorSuggestions" placeholder="Type name, DIN, or client ID…" autocomplete="off" />
+            {{ f.director }}
+          </div>
+          <div class="col-12 col-md-6 col-lg-2">
+            <label class="form-label">Appointed date</label>
+            {{ f.appointed_date }}
+          </div>
+          <div class="col-12 col-md-6 col-lg-2">
+            <label class="form-label">Cessation date</label>
+            {{ f.cessation_date }}
+          </div>
+          <div class="col-12 col-md-6 col-lg-2">
+            <label class="form-label">Reason for cessation</label>
+            {{ f.reason_for_cessation }}
+          </div>
+        </div>
+      </div>
+    {% endwith %}
+  </template>
+
+  {{ directors_opts|json_script:"dm-directors-json" }}
+  {{ companies_opts|json_script:"dm-companies-json" }}
+
+  <script>
+    (function () {
+      var directors = JSON.parse(document.getElementById("dm-directors-json").textContent);
+      var companies = JSON.parse(document.getElementById("dm-companies-json").textContent);
+
+      function wireAutocomplete(searchInput, listEl, hiddenInput, options) {
+        if (!searchInput || !listEl || !hiddenInput) return;
+
+        function renderSuggestions(q) {
+          listEl.innerHTML = "";
+          var qq = (q || "").toLowerCase().trim();
+          var shown = 0;
+          for (var i = 0; i < options.length; i++) {
+            var c = options[i];
+            var t = (c.label || "").toLowerCase();
+            if (!qq || t.indexOf(qq) !== -1) {
+              var o = document.createElement("option");
+              o.value = c.label;
+              listEl.appendChild(o);
+              shown++;
+              if (shown >= 50) break;
+            }
+          }
+        }
+
+        function syncHiddenFromLabel() {
+          var v = (searchInput.value || "").trim();
+          var match = null;
+          for (var i = 0; i < options.length; i++) {
+            if (options[i].label === v) {
+              match = options[i];
+              break;
+            }
+          }
+          hiddenInput.value = match ? match.id : "";
+        }
+
+        if (hiddenInput.value) {
+          for (var j = 0; j < options.length; j++) {
+            if (options[j].id === hiddenInput.value) {
+              searchInput.value = options[j].label;
+              break;
+            }
+          }
+        }
+
+        renderSuggestions("");
+        searchInput.addEventListener("input", function () {
+          hiddenInput.value = "";
+          renderSuggestions(searchInput.value);
+        });
+        searchInput.addEventListener("change", syncHiddenFromLabel);
+        searchInput.addEventListener("blur", syncHiddenFromLabel);
+      }
+
+      function wireCompanyPick() {
+        var search = document.getElementById("companySearch");
+        var list = document.getElementById("companySuggestions");
+        var hidden = document.querySelector("input[data-dir-mapping-hidden='company']");
+        wireAutocomplete(search, list, hidden, companies);
+      }
+
+      function wireDirectorRow(ix) {
+        var search = document.getElementById("dirSearch" + ix);
+        var list = document.getElementById("directorSuggestions");
+        var hidden = document.getElementById("id_lines-" + ix + "-director");
+        wireAutocomplete(search, list, hidden, directors);
+      }
+
+      function addDmLine() {
+        var totalInput = document.getElementById("id_lines-TOTAL_FORMS");
+        var ix = parseInt(totalInput.value, 10);
+        var tpl = document.getElementById("dmRowTpl");
+        var html = tpl.innerHTML.replace(/__prefix__/g, String(ix));
+        document.getElementById("dm-lines").insertAdjacentHTML("beforeend", html);
+        totalInput.value = String(ix + 1);
+        wireDirectorRow(ix);
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        wireCompanyPick();
+        var total = parseInt(document.getElementById("id_lines-TOTAL_FORMS").value, 10);
+        for (var i = 0; i < total; i++) {
+          wireDirectorRow(i);
+        }
+        var addBtn = document.getElementById("dmAddLine");
+        if (addBtn) addBtn.addEventListener("click", addDmLine);
+      });
+    })();
+  </script>
+{% endblock %}

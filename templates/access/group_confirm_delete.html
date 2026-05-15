@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Delete group — CA Office Suite{% endblock %}
+{% block page_title %}Delete access group{% endblock %}
+
+{% block content %}
+  {% include "includes/user_management_nav.html" %}
+
+  <div class="card p-3">
+    <p>Delete group <strong>{{ group.name }}</strong>? Users in this group will lose those inherited permissions until you assign another group or direct permissions.</p>
+    <form method="post" class="d-flex gap-2">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Delete</button>
+      <a class="btn btn-outline-secondary" href="{% url 'user_group_list' %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

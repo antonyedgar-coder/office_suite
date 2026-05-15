@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Import Groups — Preview{% endblock %}
+{% block page_title %}Group import — Preview{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div>
+        <div class="fw-semibold">Preview</div>
+        <div class="text-secondary small">
+          Rows: {{ total_rows|default:rows|length }}.
+          Errors: {{ error_count|default:0 }}
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'client_group_bulk_import' %}">Upload another CSV</a>
+        {% if can_import %}
+          <form method="post" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="1" />
+            <button class="btn btn-success" type="submit">Confirm import</button>
+          </form>
+        {% else %}
+          <span class="text-danger small">Fix errors to enable import.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if error_rows %}
+    <div class="card p-3">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width: 70px">Row</th>
+              <th>Name</th>
+              <th>Notes</th>
+              <th style="width: 100px">Active</th>
+              <th style="width: 280px">Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in error_rows %}
+              <tr class="table-danger">
+                <td class="mono">{{ r.row_num }}</td>
+                <td>{{ r.data.name }}</td>
+                <td class="small">{{ r.data.notes|default:"—" }}</td>
+                <td>{% if r.data.is_active %}Yes{% else %}No{% endif %}</td>
+                <td class="text-danger small">
+                  {% for e in r.errors %}{{ e }}{% if not forloop.last %}<br />{% endif %}{% endfor %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="card p-3">
+      <div class="text-success fw-semibold">No errors found in the file.</div>
+      <div class="text-secondary small">Group IDs are assigned on import (e.g. GRJ001). Click “Confirm import” to save all rows.</div>
+    </div>
+  {% endif %}
+{% endblock %}

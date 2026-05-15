@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Reset test data — CA Office Suite{% endblock %}
+{% block page_title %}Reset test data{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-1">Danger zone</div>
+    <div class="text-secondary small">
+      This screen is for clearing <strong>test</strong> data in one click so you can upload again.
+      It does <strong>not</strong> delete Client Master.
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="fw-semibold mb-2">Current rows</div>
+    <div class="row g-2 small mb-3">
+      <div class="col-6 col-md-4"><span class="text-secondary">Client Master</span><div class="mono fw-semibold">{{ counts.clients }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">MIS Fees</span><div class="mono fw-semibold">{{ counts.fees }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">MIS Receipts</span><div class="mono fw-semibold">{{ counts.receipts }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">MIS Expenses</span><div class="mono fw-semibold">{{ counts.expenses }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Director mappings</span><div class="mono fw-semibold">{{ counts.director_mappings }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">DIR-3 KYC</span><div class="mono fw-semibold">{{ counts.dir3kyc }}</div></div>
+    </div>
+
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      <input type="hidden" name="confirm" value="1" />
+
+      <div class="col-12">
+        <div class="fw-semibold mb-2">What to delete</div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="delMis" name="delete_mis" value="1" checked />
+          <label class="form-check-label" for="delMis">MIS data (Fees + Receipts + Expenses)</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="delDm" name="delete_director_mapping" value="1" checked />
+          <label class="form-check-label" for="delDm">Director Mapping data</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="delKyc" name="delete_dir3kyc" value="1" checked />
+          <label class="form-check-label" for="delKyc">DIR-3 KYC data</label>
+        </div>
+        <hr class="my-3" />
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="delClients" name="delete_clients" value="1" />
+          <label class="form-check-label" for="delClients">
+            <strong>Client Master (ALL clients)</strong>
+          </label>
+          <div class="form-text text-danger">
+            This will also wipe MIS + Director Mapping + DIR-3 KYC automatically to avoid dependency errors, and it will reset Client ID sequences.
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-danger">Delete selected test data</button>
+        <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

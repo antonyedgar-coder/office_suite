@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block title %}MIS Report — CA Office Suite{% endblock %}
+{% block page_title %}MIS Report{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <p class="text-secondary small mb-2">
+      All figures include only MIS rows linked to <strong>approved</strong> Client Master clients (same rule as MIS entry screens).
+    </p>
+    <form method="get" class="row g-2 align-items-start" id="misReportForm">
+      <div class="col-12 col-md-2" id="misDateFromWrap">
+        <label class="form-label small text-secondary mb-0">From date</label>
+        {{ form.from_date }}
+        {% if form.from_date.errors %}<div class="text-danger small">{{ form.from_date.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-2" id="misDateToWrap">
+        <label class="form-label small text-secondary mb-0">To date</label>
+        {{ form.to_date }}
+        {% if form.to_date.errors %}<div class="text-danger small">{{ form.to_date.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.report_view.label }}</label>
+        {{ form.report_view }}
+        {% if form.report_view.errors %}<div class="text-danger small">{{ form.report_view.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0" for="misFyDropdown">{{ form.financial_years.label }}</label>
+        <div class="dropdown w-100">
+          <button
+            class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex justify-content-between align-items-center py-2"
+            type="button"
+            id="misFyDropdown"
+            data-bs-toggle="dropdown"
+            data-bs-auto-close="outside"
+            aria-expanded="false"
+          >
+            <span id="misFyDropdownLabel" class="text-truncate me-2">Select FY…</span>
+          </button>
+          <ul class="dropdown-menu shadow-sm border mt-1 p-2" style="min-width: 100%; max-height: 280px; overflow-y: auto" aria-labelledby="misFyDropdown">
+            {% for val, label in form.fields.financial_years.choices %}
+              <li>
+                <label class="form-check small mb-0 d-flex align-items-center gap-2 py-1 px-2 rounded">
+                  <input
+                    class="form-check-input mis-fy-cb flex-shrink-0 mt-0"
+                    type="checkbox"
+                    name="financial_years"
+                    value="{{ val }}"
+                    {% if val in mis_fy_selected %}checked{% endif %}
+                  />
+                  <span class="text-wrap">{{ label }}</span>
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% if form.financial_years.errors %}<div class="text-danger small">{{ form.financial_years.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.branch.label }}</label>
+        {{ form.branch }}
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label small text-secondary mb-0">Details</label>
+        {{ form.details }}
+      </div>
+
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-secondary mb-0">{{ form.client_id.label }}</label>
+        {{ form.client_id }}
+        <datalist id="clientIdList">
+          {% for c in client_suggestions %}
+            <option value="{{ c.client_id }}">{{ c.client_name }}</option>
+          {% endfor %}
+        </datalist>
+      </div>
+      <div class="col-12 col-md-5">
+        <label class="form-label small text-secondary mb-0">{{ form.client_name.label }}</label>
+        {{ form.client_name }}
+        <datalist id="clientNameList">
+          {% for c in client_suggestions %}
+            <option value="{{ c.client_name }}">{{ c.client_id }}{% if c.pan %} — {{ c.pan }}{% endif %}</option>
+          {% endfor %}
+        </datalist>
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label small text-secondary mb-0">{{ form.pan.label }}</label>
+        {{ form.pan }}
+        <datalist id="panList">
+          {% for c in client_suggestions %}
+            {% if c.pan %}<option value="{{ c.pan }}">{{ c.client_name }} ({{ c.client_id }})</option>{% endif %}
+          {% endfor %}
+        </datalist>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary mb-0">{{ form.client_type.label }}</label>
+        {{ form.client_type }}
+      </div>
+
+      <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+        <button class="btn btn-primary btn-sm" type="submit">Run report</button>
+        {% if perms.reports.export_mis_report %}
+          {% if request.GET %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_mis_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
+          {% else %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Run the report first, then download the same view as CSV.">
+              Download CSV
+            </button>
+          {% endif %}
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_mis' %}">Clear</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_index' %}">Back</a>
+      </div>
+    </form>
+    <script>
+      (function () {
+        const rv = document.getElementById("id_report_view");
+        const fromWrap = document.getElementById("misDateFromWrap");
+        const toWrap = document.getElementById("misDateToWrap");
+        function sync() {
+          const monthWise = rv && rv.value === "month_wise";
+          [fromWrap, toWrap].forEach(function (el) {
+            if (!el) return;
+            el.classList.toggle("opacity-50", monthWise);
+            el.title = monthWise
+              ? "Not used for Month wise report (period comes from FY)."
+              : "";
+          });
+        }
+        if (rv) {
+          rv.addEventListener("change", sync);
+          sync();
+        }
+      })();
+      (function () {
+        function updateFyLabel() {
+          const labelEl = document.getElementById("misFyDropdownLabel");
+          if (!labelEl) return;
+          const cbs = document.querySelectorAll(".mis-fy-cb:checked");
+          if (cbs.length === 0) {
+            labelEl.textContent = "Select FY…";
+            return;
+          }
+          const texts = Array.from(cbs).map(function (cb) {
+            const span = cb.closest("label") && cb.closest("label").querySelector("span");
+            return span ? span.textContent.trim() : cb.value;
+          });
+          labelEl.textContent = texts.length <= 2 ? texts.join(", ") : texts.length + " FYs selected";
+        }
+        document.querySelectorAll(".mis-fy-cb").forEach(function (cb) {
+          cb.addEventListener("change", updateFyLabel);
+        });
+        updateFyLabel();
+      })();
+    </script>
+  </div>
+
+  {% if request.GET %}
+    <div class="card p-3">
+      <div class="table-responsive">
+        {% if mis_month_mode and mis_month_multi_fy %}
+          {% if mis_month_multi_body %}
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th rowspan="2" class="align-middle border-end">Month</th>
+                {% for g in mis_multi_fy_groups %}
+                  <th colspan="{{ g.colspan }}" class="text-center {% if not forloop.first %}border-start{% endif %}">{{ g.fy }}</th>
+                {% endfor %}
+              </tr>
+              <tr>
+                {% for spec in mis_multi_column_specs %}
+                  <th class="text-end small text-secondary {% if spec.group_start %}border-start{% endif %}">
+                    {% if spec.dk == "FEES" %}Fees{% elif spec.dk == "GST" %}GST{% elif spec.dk == "RECEIPTS" %}Receipts{% else %}Expenses{% endif %}
+                  </th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in mis_month_multi_body %}
+                <tr>
+                  <td class="fw-medium border-end">{{ r.month_label }}</td>
+                  {% for cell in r.cells %}
+                    <td class="text-end mono {% if cell.group_start %}border-start{% endif %}">{{ cell.val }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+              <tr class="table-light fw-semibold">
+                <td class="text-end border-end">Total</td>
+                {% for fc in mis_multi_footer_cells %}
+                  <td class="text-end mono {% if fc.group_start %}border-start{% endif %}">{{ fc.val }}</td>
+                {% endfor %}
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+            <p class="text-secondary mb-0">No non-zero values for the selected FY(s) and filters.</p>
+          {% endif %}
+        {% elif mis_month_mode %}
+          {% if mis_month_rows %}
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Month</th>
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in mis_month_rows %}
+                <tr>
+                  <td>{{ r.month_label }}</td>
+                  {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
+                  {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
+                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
+                </tr>
+              {% endfor %}
+              <tr class="table-light fw-semibold">
+                <td class="text-end">Total</td>
+                {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
+                {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+            <p class="text-secondary mb-0">No non-zero values for the selected FY and filters.</p>
+          {% endif %}
+        {% elif report_view == "type_wise" %}
+          <p class="small text-secondary mb-2">Only client types and amount columns with non-zero values are shown.</p>
+          {% if rows %}
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Type of client</th>
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>{{ r.client_type }}</td>
+                  {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
+                  {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
+                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
+                </tr>
+              {% endfor %}
+              <tr class="table-light fw-semibold">
+                <td class="text-end">Total</td>
+                {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
+                {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+            <p class="text-secondary mb-0">No non-zero values for the selected filters.</p>
+          {% endif %}
+        {% elif report_view == "client_wise" %}
+          <p class="small text-secondary mb-2">Only clients and amount columns with non-zero values are shown.</p>
+          {% if rows %}
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Client ID</th>
+                <th>Client name</th>
+                <th>PAN</th>
+                <th>Type</th>
+                <th>Branch</th>
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td class="mono">{{ r.client_id }}</td>
+                  <td>{{ r.client_name }}</td>
+                  <td class="mono">{{ r.pan }}</td>
+                  <td>{{ r.client_type }}</td>
+                  <td>{{ r.branch }}</td>
+                  {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
+                  {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
+                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
+                </tr>
+              {% endfor %}
+              <tr class="table-light fw-semibold">
+                <td colspan="5" class="text-end">Total</td>
+                {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
+                {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+            <p class="text-secondary mb-0">No non-zero values for the selected filters.</p>
+          {% endif %}
+        {% else %}
+          <p class="small text-secondary mb-2">Only transactions and amount columns with non-zero values are shown.</p>
+          {% if rows %}
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Client ID</th>
+                <th>Client name</th>
+                <th>PAN</th>
+                <th>Type</th>
+                <th>Branch</th>
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>{{ r.date }}</td>
+                  <td class="mono">{{ r.client_id }}</td>
+                  <td>{{ r.client_name }}</td>
+                  <td class="mono">{{ r.pan }}</td>
+                  <td>{{ r.client_type }}</td>
+                  <td>{{ r.branch }}</td>
+                  {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
+                  {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
+                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
+                </tr>
+              {% endfor %}
+              <tr class="table-light fw-semibold">
+                <td colspan="6" class="text-end">Total</td>
+                {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
+                {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
+                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+            <p class="text-secondary mb-0">No non-zero values for the selected filters.</p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="card p-3 text-secondary small">Select filters and click <strong>Run report</strong>.</div>
+  {% endif %}
+{% endblock %}
+

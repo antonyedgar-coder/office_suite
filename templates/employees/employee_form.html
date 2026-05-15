@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}User Management — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New user{% else %}Edit user{% endif %}{% endblock %}
+
+{% block content %}
+  {% include "includes/user_management_nav.html" %}
+
+  <div class="card p-3">
+    <form method="post" class="row g-3" id="userForm">
+      {% csrf_token %}
+
+      {% if mode == "create" %}
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.user_type.label }}</label>
+          {{ form.user_type }}
+          {% if form.user_type.errors %}<div class="text-danger small">{{ form.user_type.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-6"></div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.official_email.label }}</label>
+          {{ form.official_email }}
+          {% if form.official_email.help_text %}<div class="form-text">{{ form.official_email.help_text }}</div>{% endif %}
+          {% if form.official_email.errors %}<div class="text-danger small">{{ form.official_email.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-6"></div>
+
+        <div class="col-12 col-md-8 data-employee-only">
+          <label class="form-label" id="label_name">{{ form.full_name.label }}</label>
+          {{ form.full_name }}
+          {% if form.full_name.help_text %}<div class="form-text">{{ form.full_name.help_text }}</div>{% endif %}
+          {% if form.full_name.errors %}<div class="text-danger small">{{ form.full_name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-12 data-client-only" style="display: none">
+          <div class="alert alert-light border mb-0 py-2">
+            <strong>Client name</strong> and contact details are loaded from <strong>Client Master</strong> when you save, using the email above.
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6 data-employee-only">
+          <label class="form-label">Contact no.</label>
+          {{ form.contact_no }}
+        </div>
+        <div class="col-12 data-employee-only">
+          <label class="form-label">Address</label>
+          {{ form.address }}
+        </div>
+        <div class="col-12 col-md-4 data-employee-only">
+          <label class="form-label">Date of joining</label>
+          {{ form.date_of_joining }}
+          {% if form.date_of_joining.errors %}<div class="text-danger small">{{ form.date_of_joining.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-6 data-employee-only">
+          <label class="form-label">Contact person</label>
+          {{ form.contact_person }}
+        </div>
+        <div class="col-12 col-md-4 data-employee-only">
+          <label class="form-label">Aadhar no.</label>
+          {{ form.aadhar_no }}
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">{{ form.password.label }}</label>
+          {{ form.password }}
+          {% if form.password.errors %}<div class="text-danger small">{{ form.password.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">{{ form.password_confirm.label }}</label>
+          {{ form.password_confirm }}
+          {% if form.password_confirm.errors %}<div class="text-danger small">{{ form.password_confirm.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <div class="form-check mb-2">
+            {{ form.force_password_change }}
+            <label class="form-check-label" for="{{ form.force_password_change.id_for_label }}">{{ form.force_password_change.label }}</label>
+          </div>
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <div class="form-check mb-2">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.groups.label }}</label>
+          {{ form.groups }}
+          {% if form.groups.help_text %}<div class="form-text">{{ form.groups.help_text }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.user_permissions.label }}</label>
+          {{ form.user_permissions }}
+          {% if form.user_permissions.help_text %}<div class="form-text">{{ form.user_permissions.help_text }}</div>{% endif %}
+        </div>
+
+      {% else %}
+        <div class="col-12 col-md-6">
+          <label class="form-label text-secondary small">Type of user</label>
+          <div>
+            {{ employee.get_user_type_display }}
+            {% if employee.user_type == 'client' and employee.linked_client %}
+              <span class="text-secondary small ms-2 mono">({{ employee.linked_client.client_id }})</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small text-secondary">Email ID (login)</label>
+          <input class="form-control" type="email" value="{{ official_email }}" disabled readonly />
+          <div class="form-text">For client users this must stay aligned with Client Master (synced on save).</div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">{{ form.full_name.label }}</label>
+          {{ form.full_name }}
+          {% if form.full_name.errors %}<div class="text-danger small">{{ form.full_name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">Contact no.</label>
+          {{ form.contact_no }}
+        </div>
+        <div class="col-12">
+          <label class="form-label">Address</label>
+          {{ form.address }}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Date of joining</label>
+          {{ form.date_of_joining }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Contact person</label>
+          {{ form.contact_person }}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Aadhar no.</label>
+          {{ form.aadhar_no }}
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">{{ form.new_password.label }}</label>
+          {{ form.new_password }}
+          {% if form.new_password.help_text %}<div class="form-text">{{ form.new_password.help_text }}</div>{% endif %}
+          {% if form.new_password.errors %}<div class="text-danger small">{{ form.new_password.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">{{ form.new_password_confirm.label }}</label>
+          {{ form.new_password_confirm }}
+          {% if form.new_password_confirm.errors %}<div class="text-danger small">{{ form.new_password_confirm.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <div class="form-check mb-2">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+          </div>
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <div class="form-check mb-2">
+            {{ form.force_password_change }}
+            <label class="form-check-label" for="{{ form.force_password_change.id_for_label }}">{{ form.force_password_change.label }}</label>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.groups.label }}</label>
+          {{ form.groups }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.user_permissions.label }}</label>
+          {{ form.user_permissions }}
+        </div>
+      {% endif %}
+
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'user_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  {% if mode == "create" %}
+    <script>
+      (function () {
+        var sel = document.getElementById("id_user_type");
+        var labelName = document.getElementById("label_name");
+        function toggle() {
+          if (!sel) return;
+          var isClient = sel.value === "client";
+          document.querySelectorAll(".data-employee-only").forEach(function (el) {
+            el.style.display = isClient ? "none" : "";
+          });
+          document.querySelectorAll(".data-client-only").forEach(function (el) {
+            el.style.display = isClient ? "" : "none";
+          });
+          if (labelName) {
+            labelName.textContent = isClient ? "Client name (from Client Master on save)" : "Name of employee";
+          }
+        }
+        if (sel) {
+          sel.addEventListener("change", toggle);
+          toggle();
+        }
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

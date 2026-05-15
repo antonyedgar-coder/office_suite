@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Group Master — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New group{% else %}Edit group {{ group.name }}{% endif %}{% endblock %}
+
+{% block content %}
+  {% if mode == "edit" and group.group_id %}
+    <div class="alert alert-light border mb-3 mono small" role="status">
+      <strong>Group ID:</strong> {{ group.group_id }} (assigned when created; does not change when you rename the group.)
+    </div>
+  {% elif mode == "create" %}
+    <div class="alert alert-light border mb-3 small" role="status">
+      <strong>Group ID</strong> is generated on save: <code>GR</code> + first letter A–Z of the name + a 3-digit serial for that letter
+      (e.g. first group whose name starts with J → <code>GRJ001</code>, next J group → <code>GRJ002</code>).
+    </div>
+  {% endif %}
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+        <div class="form-text">Stored in uppercase; must be unique. Must include a letter A–Z for ID generation.</div>
+      </div>
+      <div class="col-12 col-md-6 d-flex align-items-end">
+        <div class="form-check">
+          {{ form.is_active }}
+          <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+        </div>
+        {% if form.is_active.errors %}<div class="text-danger small">{{ form.is_active.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+        {{ form.notes }}
+        {% if form.notes.errors %}<div class="text-danger small">{{ form.notes.errors }}</div>{% endif %}
+      </div>
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'client_group_list' %}">Back</a>
+        {% if mode == "edit" and perms.masters.delete_clientgroup %}
+          <a class="btn btn-outline-danger ms-auto" href="{% url 'client_group_delete' group.pk %}">Delete</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      var el = document.getElementById("{{ form.name.id_for_label }}");
+      if (!el) return;
+      el.addEventListener("input", function () {
+        var s = el.selectionStart, e = el.selectionEnd;
+        el.value = el.value.toUpperCase();
+        try { el.setSelectionRange(s, e); } catch {}
+      });
+    })();
+  </script>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Group Master — CA Office Suite{% endblock %}
+{% block page_title %}Group Master{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md">
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Search by Group ID / name / notes" />
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.masters.add_clientgroup %}
+          <a class="btn btn-outline-primary" href="{% url 'client_group_bulk_import' %}">Bulk upload (CSV)</a>
+          <a class="btn btn-primary" href="{% url 'client_group_create' %}">New group</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 110px">Group ID</th>
+            <th>Name</th>
+            <th style="width: 100px">Active</th>
+            <th>Notes</th>
+            <th style="width: 160px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in groups %}
+            <tr>
+              <td class="mono small">{{ g.group_id }}</td>
+              <td class="fw-medium">{{ g.name }}</td>
+              <td>{% if g.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}</td>
+              <td class="small text-secondary">{{ g.notes|default:"—"|truncatechars:80 }}</td>
+              <td class="text-end">
+                {% if perms.masters.change_clientgroup %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'client_group_edit' g.pk %}">Edit</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="text-secondary">No groups yet. Create groups here before linking clients.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

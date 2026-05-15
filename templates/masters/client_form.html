@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Client Master — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New Client{% else %}Edit Client {{ client.client_id }}{% endif %}{% endblock %}
+
+{% block content %}
+  {% if mode == "edit" and client.approval_status == "pending" %}
+    <div class="alert alert-warning mb-3" role="alert">
+      This client is <strong>pending approval</strong>. It cannot be selected in MIS, director mapping, or DIR-3 KYC until an approver accepts it.
+    </div>
+  {% endif %}
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+
+      <div class="col-12 col-md-6">
+        <label class="form-label">Client Type</label>
+        {{ form.client_type }}
+        {% if form.client_type.errors %}<div class="text-danger small">{{ form.client_type.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12 col-md-6">
+        <label class="form-label">Branch</label>
+        {{ form.branch }}
+        {% if form.branch.errors %}<div class="text-danger small">{{ form.branch.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Client Name</label>
+        {{ form.client_name }}
+        {% if form.client_name.errors %}<div class="text-danger small">{{ form.client_name.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="clientGroupSearch">{{ form.client_group.label }} (optional)</label>
+        <input
+          class="form-control"
+          id="clientGroupSearch"
+          list="clientGroupSuggestions"
+          placeholder="Type to search Group Master…"
+          autocomplete="off"
+        />
+        <datalist id="clientGroupSuggestions"></datalist>
+        {{ form.client_group }}
+        {% if form.client_group.errors %}<div class="text-danger small">{{ form.client_group.errors }}</div>{% endif %}
+        <div class="form-text">Must match a name from Group Master. Leave blank if not grouped.</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">{{ form.file_no.label }}</label>
+        {{ form.file_no }}
+        {% if form.file_no.errors %}<div class="text-danger small">{{ form.file_no.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12">
+        <div class="row g-3 align-items-start">
+          <div class="col-12 col-md-4">
+            <label class="form-label mb-1" for="{{ form.pan.id_for_label }}">PAN</label>
+            {{ form.pan }}
+            <div class="form-text small text-secondary mt-1 mb-0">Optional when client type is Foreign Citizen.</div>
+            {% if form.pan.errors %}<div class="text-danger small mt-1">{{ form.pan.errors }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label mb-1" for="{{ form.passport_no.id_for_label }}">Passport No</label>
+            {{ form.passport_no }}
+            <div class="form-text small text-secondary mt-1 mb-0">Only for Individual or Foreign Citizen (mandatory for Foreign Citizen).</div>
+            {% if form.passport_no.errors %}<div class="text-danger small mt-1">{{ form.passport_no.errors }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label mb-1" for="{{ form.aadhaar_no.id_for_label }}">Aadhaar No</label>
+            {{ form.aadhaar_no }}
+            <div class="form-text small text-secondary mt-1 mb-0">Optional; only for Individual or Foreign Citizen (12 digits).</div>
+            {% if form.aadhaar_no.errors %}<div class="text-danger small mt-1">{{ form.aadhaar_no.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label">GSTIN (optional)</label>
+        {{ form.gstin }}
+        {% if form.gstin.errors %}<div class="text-danger small">{{ form.gstin.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">{{ form.dob.label }} (optional)</label>
+        {{ form.dob }}
+        <div class="form-text small text-secondary mt-1 mb-0">Format: DD-MM-YYYY.</div>
+        {% if form.dob.errors %}<div class="text-danger small">{{ form.dob.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">LLPIN (optional)</label>
+        {{ form.llpin }}
+        {% if form.llpin.errors %}<div class="text-danger small">{{ form.llpin.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12 col-md-6">
+        <label class="form-label">CIN (optional)</label>
+        {{ form.cin }}
+        {% if form.cin.errors %}<div class="text-danger small">{{ form.cin.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12 col-md-6">
+        <div class="form-check mt-4">
+          {{ form.is_director }}
+          <label class="form-check-label">Is Director? (Individual or Foreign Citizen)</label>
+        </div>
+        <label class="form-label mt-2">DIN (8 digits)</label>
+        {{ form.din }}
+        {% if form.din.errors %}<div class="text-danger small">{{ form.din.errors }}</div>{% endif %}
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Address</label>
+        {{ form.address }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Contact Person</label>
+        {{ form.contact_person }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Mobile</label>
+        {{ form.mobile }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Email</label>
+        {{ form.email }}
+      </div>
+
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'client_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  {{ groups_opts|json_script:"group-master-opts" }}
+
+  <script>
+    (function () {
+      function wireGroupAutocomplete(searchId, listId, hiddenSelector, querysetVar) {
+        var search = document.getElementById(searchId);
+        var list = document.getElementById(listId);
+        var hidden = document.querySelector(hiddenSelector);
+        if (!search || !list || !hidden) return;
+
+        function renderSuggestions(q) {
+          list.innerHTML = "";
+          var qq = (q || "").toLowerCase().trim();
+          var shown = 0;
+          for (var i = 0; i < querysetVar.length; i++) {
+            var c = querysetVar[i];
+            var t = (c.label || "").toLowerCase();
+            if (!qq || t.indexOf(qq) !== -1) {
+              var o = document.createElement("option");
+              o.value = c.label;
+              list.appendChild(o);
+              shown++;
+              if (shown >= 50) break;
+            }
+          }
+        }
+
+        function syncHiddenFromLabel() {
+          var v = (search.value || "").trim();
+          var match = null;
+          for (var i = 0; i < querysetVar.length; i++) {
+            if (querysetVar[i].label === v) {
+              match = querysetVar[i];
+              break;
+            }
+          }
+          hidden.value = match ? match.id : "";
+        }
+
+        if (hidden.value) {
+          for (var j = 0; j < querysetVar.length; j++) {
+            if (String(querysetVar[j].id) === String(hidden.value)) {
+              search.value = querysetVar[j].label;
+              break;
+            }
+          }
+        }
+
+        renderSuggestions("");
+        search.addEventListener("input", function () {
+          hidden.value = "";
+          renderSuggestions(search.value);
+        });
+        search.addEventListener("change", syncHiddenFromLabel);
+        search.addEventListener("blur", syncHiddenFromLabel);
+      }
+
+      var el = document.getElementById("group-master-opts");
+      var groups = el ? JSON.parse(el.textContent) : [];
+      wireGroupAutocomplete(
+        "clientGroupSearch",
+        "clientGroupSuggestions",
+        "input[data-client-group-hidden='1']",
+        groups
+      );
+    })();
+
+    // Auto-uppercase specified fields on typing (UX only; server also uppercases)
+    (function () {
+      const ids = ["id_client_name", "id_pan", "id_gstin", "id_llpin", "id_cin", "id_passport_no"];
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("input", () => {
+          const s = el.selectionStart, e = el.selectionEnd;
+          el.value = el.value.toUpperCase();
+          try { el.setSelectionRange(s, e); } catch {}
+        });
+      });
+      const din = document.getElementById("id_din");
+      if (din) {
+        din.setAttribute("type", "text");
+        din.setAttribute("inputmode", "numeric");
+        din.setAttribute("autocomplete", "off");
+        din.setAttribute("maxlength", "8");
+        din.addEventListener("input", () => {
+          const s = din.selectionStart;
+          din.value = din.value.replace(/\D/g, "").slice(0, 8);
+          try {
+            din.setSelectionRange(Math.min(s, din.value.length), Math.min(s, din.value.length));
+          } catch {}
+        });
+      }
+      const aad = document.getElementById("id_aadhaar_no");
+      if (aad) {
+        aad.addEventListener("input", () => {
+          const s = aad.selectionStart;
+          aad.value = aad.value.replace(/\D/g, "").slice(0, 12);
+          try {
+            aad.setSelectionRange(Math.min(s, aad.value.length), Math.min(s, aad.value.length));
+          } catch {}
+        });
+      }
+    })();
+  </script>
+{% endblock %}
+

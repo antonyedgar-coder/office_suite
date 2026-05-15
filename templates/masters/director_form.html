@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Director Mapping — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New director mapping{% else %}Edit director mapping{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="companySearch">Company / LLP</label>
+        <input class="form-control" id="companySearch" list="companySuggestions" placeholder="Type company/LLP name, CIN, LLPIN, or client ID…" autocomplete="off" />
+        <datalist id="companySuggestions"></datalist>
+        {{ form.company }}
+        {% if form.company.errors %}<div class="text-danger small">{{ form.company.errors }}</div>{% endif %}
+        <div class="form-text">Eligible types: Private/Public Limited, Nidhi, FPO, Sec 8, LLP (including LLPs from Client Master). Use CIN or LLPIN in suggestions. Only one active appointment (no cessation) per director and company; add cessation before a new appointment to the same company.</div>
+      </div>
+
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="directorSearch">Director</label>
+        <input class="form-control" id="directorSearch" list="directorSuggestions" placeholder="Type name, DIN, or client ID…" autocomplete="off" />
+        <datalist id="directorSuggestions"></datalist>
+        {{ form.director }}
+        {% if form.director.errors %}<div class="text-danger small">{{ form.director.errors }}</div>{% endif %}
+        <div class="form-text">Individuals or Foreign Citizens marked as Director with DIN in Client Master.</div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label">Appointed date (optional)</label>
+        {{ form.appointed_date }}
+        {% if form.appointed_date.errors %}<div class="text-danger small">{{ form.appointed_date.errors }}</div>{% endif %}
+        <div class="form-text">Leave blank if unknown; you cannot enter a cessation date without an appointed date.</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Cessation date</label>
+        {{ form.cessation_date }}
+        {% if form.cessation_date.errors %}<div class="text-danger small">{{ form.cessation_date.errors }}</div>{% endif %}
+        <div class="form-text">Cannot be chosen without an appointed date.</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Reason for cessation</label>
+        {{ form.reason_for_cessation }}
+        {% if form.reason_for_cessation.errors %}<div class="text-danger small">{{ form.reason_for_cessation.errors }}</div>{% endif %}
+        <div class="form-text">Required if a cessation date is entered; leave blank otherwise.</div>
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'director_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      function wireAutocomplete(searchId, listId, hiddenSelector, querysetVar) {
+        var search = document.getElementById(searchId);
+        var list = document.getElementById(listId);
+        var hidden = document.querySelector(hiddenSelector);
+        if (!search || !list || !hidden) return;
+
+        function renderSuggestions(q) {
+          list.innerHTML = "";
+          var qq = (q || "").toLowerCase().trim();
+          var shown = 0;
+          for (var i = 0; i < querysetVar.length; i++) {
+            var c = querysetVar[i];
+            var t = (c.label || "").toLowerCase();
+            if (!qq || t.indexOf(qq) !== -1) {
+              var o = document.createElement("option");
+              o.value = c.label;
+              list.appendChild(o);
+              shown++;
+              if (shown >= 50) break;
+            }
+          }
+        }
+
+        function syncHiddenFromLabel() {
+          var v = (search.value || "").trim();
+          var match = null;
+          for (var i = 0; i < querysetVar.length; i++) {
+            if (querysetVar[i].label === v) {
+              match = querysetVar[i];
+              break;
+            }
+          }
+          hidden.value = match ? match.id : "";
+        }
+
+        if (hidden.value) {
+          for (var j = 0; j < querysetVar.length; j++) {
+            if (querysetVar[j].id === hidden.value) {
+              search.value = querysetVar[j].label;
+              break;
+            }
+          }
+        }
+
+        renderSuggestions("");
+        search.addEventListener("input", function () {
+          hidden.value = "";
+          renderSuggestions(search.value);
+        });
+        search.addEventListener("change", syncHiddenFromLabel);
+        search.addEventListener("blur", syncHiddenFromLabel);
+      }
+
+      var directors = [
+        {% for opt in form.fields.director.queryset %}
+        { id: "{{ opt.pk|escapejs }}", label: "{{ opt.client_name|escapejs }} — DIN {{ opt.din|escapejs }} — {{ opt.pk|escapejs }}" }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ];
+      var companies = [
+        {% for opt in form.fields.company.queryset %}
+        { id: "{{ opt.pk|escapejs }}", label: "{{ opt.client_name|escapejs }} — {{ opt.pk|escapejs }} ({{ opt.client_type|escapejs }}){% if opt.cin %} — CIN {{ opt.cin|escapejs }}{% endif %}{% if opt.llpin %} · LLPIN {{ opt.llpin|escapejs }}{% endif %}" }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ];
+      wireAutocomplete("directorSearch", "directorSuggestions", "input[data-dir-mapping-hidden='director']", directors);
+      wireAutocomplete("companySearch", "companySuggestions", "input[data-dir-mapping-hidden='company']", companies);
+    })();
+  </script>
+{% endblock %}

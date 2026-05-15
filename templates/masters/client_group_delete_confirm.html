@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Delete group — CA Office Suite{% endblock %}
+{% block page_title %}Delete group{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <p>Delete group <strong>{{ group.name }}</strong>? This cannot be undone.</p>
+    <p class="text-secondary small">If any client still uses this group, deletion will be blocked.</p>
+    <form method="post" class="d-flex gap-2">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Delete</button>
+      <a class="btn btn-outline-secondary" href="{% url 'client_group_edit' group.pk %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

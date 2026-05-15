@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Import Clients — CA Office Suite{% endblock %}
+{% block page_title %}Import Clients (CSV){% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <div class="mb-2 text-secondary">
+      Upload a CSV with the headers below (matched case-insensitively).
+      <strong>PASSPORT_NO</strong> and <strong>AADHAAR_NO</strong> are optional; omit them entirely if unused.
+      <strong>GROUP</strong> must match an existing name in Group Master (case-insensitive); leave blank if none.
+      Format <strong>DIN</strong> as text in Excel if it can start with <strong>0</strong> (or quote the cell); the importer pads short all-digit DINs to 8 characters when a leading zero was lost.
+    </div>
+    <div class="mb-3">
+      <code>{{ columns|join:", " }}</code>
+    </div>
+    <div class="mb-3">
+      <a class="btn btn-outline-primary" href="{% url 'client_import_template' %}">Download CSV Template</a>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="vstack gap-2">
+      {% csrf_token %}
+      <input class="form-control" type="file" name="csv_file" accept=".csv" required />
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Upload & Preview</button>
+        <a class="btn btn-outline-secondary" href="{% url 'client_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
