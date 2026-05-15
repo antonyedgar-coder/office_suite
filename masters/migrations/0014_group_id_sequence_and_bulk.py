@@ -33,7 +33,8 @@ def cleanup_partial_0014(apps, schema_editor):
         cursor.execute("DROP TABLE IF EXISTS master_groupsequence CASCADE")
 
 
-def backfill_group_ids(apps, schema_editor):    ClientGroup = apps.get_model("masters", "ClientGroup")
+def backfill_group_ids(apps, schema_editor):
+    ClientGroup = apps.get_model("masters", "ClientGroup")
     GroupSequence = apps.get_model("masters", "GroupSequence")
 
     def first_letter(n: str) -> str:
