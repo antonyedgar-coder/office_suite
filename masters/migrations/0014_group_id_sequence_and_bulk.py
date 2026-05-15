@@ -1,8 +1,39 @@
 from django.db import migrations, models
 
 
-def backfill_group_ids(apps, schema_editor):
-    ClientGroup = apps.get_model("masters", "ClientGroup")
+def cleanup_partial_0014(apps, schema_editor):
+    """
+    Remove leftover indexes/columns from a failed 0014 run on Postgres
+    (e.g. master_clientgroup_group_id_*_like already exists).
+    """
+    connection = schema_editor.connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT indexname FROM pg_indexes
+            WHERE indexname ILIKE '%clientgroup%group_id%'
+            """
+        )
+        for (indexname,) in cursor.fetchall():
+            cursor.execute(f'DROP INDEX IF EXISTS "{indexname}"')
+
+        for table in ("masters_clientgroup", "master_clientgroup"):
+            cursor.execute(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = %s AND column_name = 'group_id'
+                """,
+                [table],
+            )
+            if cursor.fetchone():
+                qtable = schema_editor.quote_name(table)
+                cursor.execute(f"ALTER TABLE {qtable} DROP COLUMN group_id CASCADE")
+
+        cursor.execute("DROP TABLE IF EXISTS masters_groupsequence CASCADE")
+        cursor.execute("DROP TABLE IF EXISTS master_groupsequence CASCADE")
+
+
+def backfill_group_ids(apps, schema_editor):    ClientGroup = apps.get_model("masters", "ClientGroup")
     GroupSequence = apps.get_model("masters", "GroupSequence")
 
     def first_letter(n: str) -> str:
@@ -29,6 +60,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(cleanup_partial_0014, migrations.RunPython.noop),
         migrations.CreateModel(
             name="GroupSequence",
             fields=[
