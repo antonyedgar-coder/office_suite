@@ -11,7 +11,8 @@ def cleanup_partial_0014(apps, schema_editor):
         cursor.execute(
             """
             SELECT indexname FROM pg_indexes
-            WHERE indexname ILIKE '%clientgroup%group_id%'
+            WHERE tablename IN ('masters_clientgroup', 'master_clientgroup')
+              AND indexname ILIKE '%group_id%'
             """
         )
         for (indexname,) in cursor.fetchall():
@@ -73,12 +74,14 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Group ID sequences",
             },
         ),
+        # db_index=False here: Postgres would create _like indexes twice if we also
+        # index on AlterField below (duplicate "…_like already exists" error).
         migrations.AddField(
             model_name="clientgroup",
             name="group_id",
             field=models.CharField(
                 blank=True,
-                db_index=True,
+                db_index=False,
                 editable=False,
                 max_length=12,
                 null=True,

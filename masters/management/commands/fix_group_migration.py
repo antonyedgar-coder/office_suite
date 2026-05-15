@@ -36,8 +36,8 @@ class Command(BaseCommand):
             cursor.execute(
                 """
                 SELECT indexname, tablename FROM pg_indexes
-                WHERE indexname ILIKE '%clientgroup%group_id%'
-                   OR (tablename LIKE '%clientgroup%' AND indexname ILIKE '%group_id%')
+                WHERE tablename IN ('masters_clientgroup', 'master_clientgroup')
+                  AND indexname ILIKE '%group_id%'
                 """
             )
             indexes = cursor.fetchall()
@@ -65,7 +65,8 @@ class Command(BaseCommand):
             cursor.execute(
                 """
                 SELECT indexname FROM pg_indexes
-                WHERE indexname ILIKE '%clientgroup%group_id%'
+                WHERE tablename IN ('masters_clientgroup', 'master_clientgroup')
+                  AND indexname ILIKE '%group_id%'
                 """
             )
             remaining = cursor.fetchall()
