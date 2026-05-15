@@ -69,20 +69,27 @@ WSGI_APPLICATION = "ca_suite.wsgi.application"
 
 
 def _db():
-    # Local dev default: SQLite when no DATABASE_URL and no PGHOST
-    url = os.getenv("DATABASE_URL", "").strip()
-    if not url and not os.getenv("PGHOST"):
-        return {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+    """
+    Prefer DATABASE_URL (postgres:// or postgresql://).
+    Fall back to PG* / POSTGRES_* env vars (common when linking Managed Postgres on App Platform).
+    Otherwise SQLite for local dev when nothing is configured.
+    """
+    original = (os.getenv("DATABASE_URL") or "").strip()
 
-    # DigitalOcean and others: postgres:// or postgresql:// URL
-    if url and (url.startswith("postgres://") or url.startswith("postgresql://")):
-        normalized = url.replace("postgres://", "postgresql://", 1)
-        parsed = urlparse(normalized)
-        name = (parsed.path or "").lstrip("/") or "postgres"
-        user = parsed.username or "postgres"
-        password = parsed.password or ""
-        host = parsed.hostname or "localhost"
-        port = str(parsed.port or 5432)
+    def _from_pg_env() -> dict | None:
+        host = (
+            (os.getenv("PGHOST") or os.getenv("POSTGRES_HOST") or os.getenv("DATABASE_HOST") or "")
+            .strip()
+        )
+        if not host:
+            return None
+        name = (
+            (os.getenv("PGDATABASE") or os.getenv("POSTGRES_DATABASE") or os.getenv("POSTGRES_DB") or "postgres")
+            .strip()
+        )
+        user = ((os.getenv("PGUSER") or os.getenv("POSTGRES_USER") or "postgres")).strip()
+        password = (os.getenv("PGPASSWORD") or os.getenv("POSTGRES_PASSWORD") or "").strip()
+        port = (os.getenv("PGPORT") or os.getenv("POSTGRES_PORT") or "5432").strip()
         cfg: dict = {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": name,
@@ -91,24 +98,64 @@ def _db():
             "HOST": host,
             "PORT": port,
         }
-        q = parse_qs(parsed.query)
-        sslmode = (q.get("sslmode") or [""])[0]
+        sslmode = (os.getenv("PGSSLMODE") or os.getenv("POSTGRES_SSLMODE") or "").strip().lower()
         if sslmode in ("require", "verify-ca", "verify-full"):
             cfg["OPTIONS"] = {"sslmode": sslmode}
         return cfg
 
-    if os.getenv("PGHOST"):
-        return {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("PGDATABASE", "ca_suite"),
-            "USER": os.getenv("PGUSER", "postgres"),
-            "PASSWORD": os.getenv("PGPASSWORD", ""),
-            "HOST": os.getenv("PGHOST", "localhost"),
-            "PORT": os.getenv("PGPORT", "5432"),
-        }
-    raise RuntimeError(
-        "Database: set DATABASE_URL (e.g. from DigitalOcean Postgres) or PGHOST/PGDATABASE/PGUSER/PGPASSWORD."
-    )
+    # DigitalOcean App Platform: DATABASE_URL may show as ${production-database.DATABASE_URL}
+    # until the database is attached to the app. Django cannot expand that — fix it in DO.
+    if original.startswith("${") and "}" in original:
+        pg = _from_pg_env()
+        if pg:
+            return pg
+        raise RuntimeError(
+            "DATABASE_URL is still a DigitalOcean placeholder (e.g. ${production-database.DATABASE_URL}). "
+            "The real connection string was never injected. In DigitalOcean: open your App → "
+            "Resources / Components and add this Postgres cluster as a Database for this app "
+            "(or delete DATABASE_URL and use Add resource → Database → Existing database). "
+            "Alternatively, replace DATABASE_URL with the full postgresql://… URI from "
+            "Databases → your cluster → Connection details (copy as single line)."
+        )
+
+    raw_url = original
+    if not raw_url or raw_url in ("None", "null", "undefined"):
+        raw_url = ""
+
+    url = raw_url if raw_url.startswith(("postgres://", "postgresql://")) else ""
+
+    if not url:
+        pg = _from_pg_env()
+        if pg:
+            return pg
+        if raw_url:
+            raise RuntimeError(
+                "DATABASE_URL is set but must start with postgres:// or postgresql:// "
+                "(copy the full URI from DigitalOcean → Databases → your cluster → Connection details). "
+                "Or remove DATABASE_URL and link the database so PGHOST/PGDATABASE are set."
+            )
+        return {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+
+    normalized = url.replace("postgres://", "postgresql://", 1)
+    parsed = urlparse(normalized)
+    name = (parsed.path or "").lstrip("/") or "postgres"
+    user = parsed.username or "postgres"
+    password = parsed.password or ""
+    host = parsed.hostname or "localhost"
+    port = str(parsed.port or 5432)
+    cfg: dict = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": name,
+        "USER": user,
+        "PASSWORD": password,
+        "HOST": host,
+        "PORT": port,
+    }
+    q = parse_qs(parsed.query)
+    sslmode = (q.get("sslmode") or [""])[0]
+    if sslmode in ("require", "verify-ca", "verify-full"):
+        cfg["OPTIONS"] = {"sslmode": sslmode}
+    return cfg
 
 
 DATABASES = {"default": _db()}
