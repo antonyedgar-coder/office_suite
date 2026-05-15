@@ -1,7 +1,9 @@
 import base64
 
 from django.db import transaction, IntegrityError
-from django.db.models import Q
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
@@ -734,6 +736,59 @@ def client_group_delete(request, pk: int):
         messages.success(request, "Group deleted.")
         return redirect("client_group_list")
     return render(request, "masters/client_group_delete_confirm.html", {"group": obj})
+
+
+@login_required
+def client_group_bulk_delete(request):
+    """Superuser only: delete multiple groups from Group Master."""
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    if request.method != "POST":
+        return redirect("client_group_list")
+
+    ids = []
+    for raw in request.POST.getlist("group_ids"):
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        messages.warning(request, "Select at least one group to delete.")
+        return redirect("client_group_list")
+
+    if request.POST.get("confirm") == "1":
+        groups = list(ClientGroup.objects.filter(pk__in=ids).order_by("name"))
+        deleted = 0
+        blocked: list[ClientGroup] = []
+        for g in groups:
+            try:
+                g.delete()
+                deleted += 1
+            except ProtectedError:
+                blocked.append(g)
+        if deleted:
+            messages.success(request, f"Deleted {deleted} group(s).")
+        if blocked:
+            sample = ", ".join(f"{g.group_id} ({g.name})" for g in blocked[:5])
+            extra = f" (+{len(blocked) - 5} more)" if len(blocked) > 5 else ""
+            messages.error(
+                request,
+                f"Could not delete {len(blocked)} group(s) still linked to clients: {sample}{extra}. "
+                "Clear or reassign those clients in Client Master first.",
+            )
+        return redirect("client_group_list")
+
+    groups = (
+        ClientGroup.objects.filter(pk__in=ids)
+        .annotate(client_count=Count("clients"))
+        .order_by("name")
+    )
+    return render(
+        request,
+        "masters/client_group_bulk_delete_confirm.html",
+        {"groups": groups},
+    )
 
 
 @require_perm("masters.add_clientgroup")

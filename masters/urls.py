@@ -17,6 +17,7 @@ urlpatterns = [
         name="client_group_bulk_import_template",
     ),
     path("groups/new/", views.client_group_create, name="client_group_create"),
+    path("groups/bulk-delete/", views.client_group_bulk_delete, name="client_group_bulk_delete"),
     path("groups/<int:pk>/delete/", views.client_group_delete, name="client_group_delete"),
     path("groups/<int:pk>/", views.client_group_edit, name="client_group_edit"),
     path("clients/<str:client_id>/approve/", views.client_approve, name="client_approve"),

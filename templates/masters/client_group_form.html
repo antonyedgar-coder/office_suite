@@ -40,8 +40,10 @@
       <div class="col-12 d-flex gap-2 flex-wrap">
         <button class="btn btn-primary" type="submit">Save</button>
         <a class="btn btn-outline-secondary" href="{% url 'client_group_list' %}">Back</a>
-        {% if mode == "edit" and perms.masters.delete_clientgroup %}
-          <a class="btn btn-outline-danger ms-auto" href="{% url 'client_group_delete' group.pk %}">Delete</a>
+        {% if mode == "edit" %}
+          {% if perms.masters.delete_clientgroup or user.is_superuser %}
+            <a class="btn btn-outline-danger ms-auto" href="{% url 'client_group_delete' group.pk %}">Delete</a>
+          {% endif %}
         {% endif %}
       </div>
     </form>

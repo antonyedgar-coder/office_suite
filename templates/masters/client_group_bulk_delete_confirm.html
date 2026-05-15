@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Delete groups — CA Office Suite{% endblock %}
+{% block page_title %}Delete selected groups{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <p class="mb-3">Delete the following groups? This cannot be undone.</p>
+    <p class="text-secondary small">Groups that still have clients linked in Client Master will be skipped.</p>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Group ID</th>
+            <th>Name</th>
+            <th class="text-end">Clients linked</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in groups %}
+            <tr>
+              <td class="mono">{{ g.group_id }}</td>
+              <td>{{ g.name }}</td>
+              <td class="text-end">{{ g.client_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <form method="post" action="{% url 'client_group_bulk_delete' %}" class="d-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <input type="hidden" name="confirm" value="1" />
+      {% for g in groups %}
+        <input type="hidden" name="group_ids" value="{{ g.pk }}" />
+      {% endfor %}
+      <button class="btn btn-danger" type="submit">Delete permanently</button>
+      <a class="btn btn-outline-secondary" href="{% url 'client_group_list' %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}
