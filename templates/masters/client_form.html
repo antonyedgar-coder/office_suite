@@ -7,6 +7,11 @@
     <div class="alert alert-warning mb-3" role="alert">
       This client is <strong>pending approval</strong>. It cannot be selected in MIS, director mapping, or DIR-3 KYC until an approver accepts it.
     </div>
+  {% elif mode == "create" %}
+    <div class="alert alert-light border mb-3 small" role="status">
+      <strong>Client ID</strong> is assigned on save: first letter of <strong>client name</strong> + first letter of <strong>branch</strong> + a 4-digit serial for that pair
+      (e.g. Antony Edgar, Nagercoil → <code>AN0001</code>; Anto, Trivandrum → <code>AT0001</code>; next Trivandrum client starting with A → <code>AT0002</code>).
+    </div>
   {% endif %}
   <div class="card p-3">
     <form method="post" class="row g-3">

@@ -130,16 +130,24 @@ def normalize_din_from_import_value(value) -> str:
     return s
 
 
-def _first_letter_for_group_id(name: str) -> str:
-    """First A–Z letter of normalized name; used in auto group IDs (GR + letter + serial)."""
-    for ch in (name or "").strip().upper():
+def _first_letter_a_to_z(text: str, *, default: str = "X") -> str:
+    """First A–Z letter in text (uppercase); used for auto client/group ID prefixes."""
+    for ch in (text or "").strip().upper():
         if "A" <= ch <= "Z":
             return ch
-    return ""
+    return default
+
+
+def _first_letter_for_group_id(name: str) -> str:
+    """First A–Z letter of normalized name; used in auto group IDs (GR + letter + serial)."""
+    letter = _first_letter_a_to_z(name, default="")
+    return letter
 
 
 class ClientSequence(models.Model):
-    prefix = models.CharField(max_length=1, primary_key=True)
+    """Per name+branch prefix counter (client_id format: {L}{B}{NNNN}, e.g. AN0001)."""
+
+    prefix = models.CharField(max_length=2, primary_key=True)
     last_value = models.PositiveIntegerField(default=0)
 
 
@@ -234,7 +242,7 @@ class Client(models.Model):
         (PENDING, "Pending approval"),
     ]
 
-    # Client ID like A00001
+    # Client ID like AN0001 (name letter + branch letter + 4-digit serial)
     client_id = models.CharField(max_length=6, primary_key=True, editable=False)
 
     approval_status = models.CharField(
@@ -481,21 +489,19 @@ class Client(models.Model):
             raise ValidationError(errors)
 
     @staticmethod
-    def _prefix_for_name(name_upper: str) -> str:
-        if not name_upper:
-            return "X"
-        ch = name_upper.strip()[:1]
-        return ch if "A" <= ch <= "Z" else "X"
+    def _client_id_prefix(name_upper: str, branch: str) -> str:
+        """First letter of client name + first letter of branch (e.g. AN, AT)."""
+        return _first_letter_a_to_z(name_upper) + _first_letter_a_to_z(branch)
 
     def save(self, *args, **kwargs):
         self.full_clean()
         if not self.client_id:
-            prefix = self._prefix_for_name(self.client_name)
+            prefix = self._client_id_prefix(self.client_name, self.branch)
             with transaction.atomic():
                 seq, _ = ClientSequence.objects.select_for_update().get_or_create(prefix=prefix)
                 seq.last_value += 1
                 seq.save(update_fields=["last_value"])
-                self.client_id = f"{prefix}{seq.last_value:05d}"
+                self.client_id = f"{prefix}{seq.last_value:04d}"
         return super().save(*args, **kwargs)
 
 

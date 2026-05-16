@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 
     from .models import User
 
-# Client Master IDs: one letter + five digits (see masters.models.Client.client_id).
-_CLIENT_ID_FULL_RE = re.compile(r"^[A-Za-z]\d{5}$")
+# Client Master IDs: two letters + four digits (AN0001) or legacy one letter + five (A00001).
+_CLIENT_ID_FULL_RE = re.compile(r"^(?:[A-Za-z]{2}\d{4}|[A-Za-z]\d{5})$")
 
 
 def client_ip(request: HttpRequest) -> str | None:

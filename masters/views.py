@@ -579,20 +579,20 @@ def director_mapping_bulk_import_template(request):
     header = DIRECTOR_MAPPING_CSV_HEADERS
     sample = [
         [
-            "A00001",
+            "AN0001",
             "01234567",
             "JOHN DIRECTOR",
-            "B00010",
+            "BT0001",
             "ABC PRIVATE LIMITED",
             "2024-04-01",
             "",
             "",
         ],
         [
-            "A00002",
+            "AT0001",
             "07654321",
             "JANE SMITH",
-            "B00011",
+            "BT0002",
             "XYZ LLP",
             "2023-01-15",
             "2025-03-31",
