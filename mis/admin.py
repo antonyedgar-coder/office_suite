@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ExpenseDetail, FeesDetail, Receipt
+from .models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
 
 
 @admin.register(FeesDetail)
@@ -24,5 +24,13 @@ class ExpenseDetailAdmin(admin.ModelAdmin):
     list_display = ("date", "client", "pan_no", "expenses_paid", "notes")
     list_select_related = ("client",)
     search_fields = ("client__client_name", "client__client_id", "pan_no", "notes")
+    list_filter = ("date",)
+
+
+@admin.register(TenderDetail)
+class TenderDetailAdmin(admin.ModelAdmin):
+    list_display = ("date", "client", "pan_no", "tender_fees", "tender_deposit")
+    list_select_related = ("client",)
+    search_fields = ("client__client_name", "client__client_id", "pan_no")
     list_filter = ("date",)
 

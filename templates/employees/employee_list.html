@@ -8,6 +8,7 @@
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div class="text-secondary small">
       Official login email is stored per user. Client-type users must match Client Master; profile fields sync from there.
+      Inactive users cannot sign in. Use <strong>Deactivate</strong> / <strong>Activate</strong> or edit the user; <strong>Delete</strong> removes the account permanently.
     </div>
     {% if perms.core.add_employee %}
       <a class="btn btn-primary btn-sm" href="{% url 'user_create' %}">New user</a>
@@ -24,8 +25,8 @@
             <th>Official email</th>
             <th>DOJ</th>
             <th>Branch access</th>
-            <th>Active</th>
-            <th></th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -47,15 +48,36 @@
               <td>
                 {% if e.user_type == 'client' %}—{% elif e.branch_access %}{{ e.branch_access }}{% else %}All{% endif %}
               </td>
-              <td>{% if e.user.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}</td>
-              <td class="text-end">
-                {% if perms.core.change_employee %}
-                  <a class="btn btn-sm btn-outline-primary" href="{% url 'user_edit' e.pk %}">Edit</a>
+              <td>
+                {% if e.user.is_active %}
+                  <span class="badge text-bg-success">Active</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Inactive</span>
                 {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                  {% if perms.core.change_employee %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'user_edit' e.pk %}">Edit</a>
+                    {% if e.user_id != user.id and not e.user.is_superuser %}
+                      <form method="post" action="{% url 'user_toggle_active' e.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        {% if e.user.is_active %}
+                          <button type="submit" class="btn btn-sm btn-outline-warning">Deactivate</button>
+                        {% else %}
+                          <button type="submit" class="btn btn-sm btn-outline-success">Activate</button>
+                        {% endif %}
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                  {% if perms.core.delete_employee and e.user_id != user.id and not e.user.is_superuser %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'user_delete' e.pk %}">Delete</a>
+                  {% endif %}
+                </div>
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="text-secondary">No users yet.</td></tr>
+            <tr><td colspan="7" class="text-secondary">No users yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

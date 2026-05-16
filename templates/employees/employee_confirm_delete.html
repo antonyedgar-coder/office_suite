@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Delete user — CA Office Suite{% endblock %}
+{% block page_title %}Delete user{% endblock %}
+
+{% block content %}
+  {% include "includes/user_management_nav.html" %}
+
+  <div class="card p-3">
+    <p>
+      Permanently delete <strong>{{ employee.full_name }}</strong>
+      (<span class="mono">{{ employee.user.email }}</span>)?
+    </p>
+    <p class="text-secondary small mb-3">
+      This removes their login and profile. They will not be able to sign in again unless you create a new user.
+    </p>
+    <form method="post" class="d-flex gap-2">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Delete user</button>
+      <a class="btn btn-outline-secondary" href="{% url 'user_list' %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

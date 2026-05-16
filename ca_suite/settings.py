@@ -45,6 +45,7 @@ MIDDLEWARE = [
     "core.middleware.ActivityLogMiddleware",
     "core.middleware.ForcePasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "core.middleware.InactiveUserMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 

@@ -1,5 +1,7 @@
 import logging
 
+from django.contrib import messages
+from django.contrib.auth import logout
 from django.shortcuts import redirect
 
 logger = logging.getLogger(__name__)
@@ -83,6 +85,24 @@ class ActivityLogMiddleware:
             "director_mapping_bulk_import_template",
             "mis_bulk_import_template",
         }
+
+
+class InactiveUserMiddleware:
+    """Sign out users whose account was deactivated while they were logged in."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and not user.is_active:
+            logout(request)
+            messages.error(
+                request,
+                "This account is inactive. Contact your administrator.",
+            )
+            return redirect("login")
+        return self.get_response(request)
 
 
 class ForcePasswordChangeMiddleware:

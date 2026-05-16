@@ -1,13 +1,36 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from .decorators import require_perm
 from .employee_forms import EmployeeCreateForm, EmployeeEditForm, FirstPasswordChangeForm
 from .models import Employee
 
 User = get_user_model()
+
+
+def _employee_edit_context(request, *, form, employee, user):
+    block = _employee_manage_block_reason(request.user, user)
+    return {
+        "form": form,
+        "mode": "edit",
+        "employee": employee,
+        "official_email": user.email,
+        "user_management_section": "users",
+        "can_delete_user": request.user.has_perm("core.delete_employee") and block is None,
+    }
+
+
+def _employee_manage_block_reason(actor, target_user: User) -> str | None:
+    """Return an error message if actor may not delete/deactivate target_user."""
+    if target_user.pk == actor.pk:
+        return "You cannot perform this action on your own account."
+    if target_user.is_superuser:
+        return "Superuser accounts cannot be deleted or deactivated here."
+    return None
 
 
 def sync_employee_from_client_master(employee: Employee) -> None:
@@ -111,8 +134,18 @@ def employee_edit(request, pk: int):
     if request.method == "POST":
         form = EmployeeEditForm(request.POST, instance=employee)
         if form.is_valid():
+            is_active = form.cleaned_data.get("is_active", True)
+            if not is_active:
+                block = _employee_manage_block_reason(request.user, user)
+                if block:
+                    form.add_error("is_active", block)
+                    return render(
+                        request,
+                        "employees/employee_form.html",
+                        _employee_edit_context(request, form=form, employee=employee, user=user),
+                    )
             form.save()
-            user.is_active = form.cleaned_data.get("is_active", True)
+            user.is_active = is_active
             user.force_password_change = form.cleaned_data.get("force_password_change", False)
             user.groups.set(form.cleaned_data["groups"])
             user.user_permissions.set(form.cleaned_data["user_permissions"])
@@ -129,14 +162,59 @@ def employee_edit(request, pk: int):
     return render(
         request,
         "employees/employee_form.html",
+        _employee_edit_context(request, form=form, employee=employee, user=user),
+    )
+
+
+@require_perm("core.delete_employee")
+def employee_delete(request, pk: int):
+    employee = get_object_or_404(
+        Employee.objects.select_related("user"),
+        pk=pk,
+    )
+    user = employee.user
+    block = _employee_manage_block_reason(request.user, user)
+    if block:
+        messages.error(request, block)
+        return redirect("user_list")
+
+    if request.method == "POST":
+        label = f"{employee.full_name} ({user.email})"
+        with transaction.atomic():
+            user.delete()
+        messages.success(request, f"User deleted: {label}.")
+        return redirect("user_list")
+
+    return render(
+        request,
+        "employees/employee_confirm_delete.html",
         {
-            "form": form,
-            "mode": "edit",
             "employee": employee,
-            "official_email": user.email,
             "user_management_section": "users",
         },
     )
+
+
+@require_perm("core.change_employee")
+@require_POST
+def employee_toggle_active(request, pk: int):
+    employee = get_object_or_404(Employee.objects.select_related("user"), pk=pk)
+    user = employee.user
+    block = _employee_manage_block_reason(request.user, user)
+    if block:
+        messages.error(request, block)
+        return redirect("user_list")
+
+    user.is_active = not user.is_active
+    user.save(update_fields=["is_active"])
+    if user.is_active:
+        messages.success(request, f"{employee.full_name} is active and can sign in again.")
+    else:
+        messages.success(
+            request,
+            f"{employee.full_name} is inactive and cannot sign in until reactivated.",
+        )
+    return redirect("user_list")
 
 
 @login_required

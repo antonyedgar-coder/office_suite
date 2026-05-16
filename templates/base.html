@@ -109,15 +109,18 @@
                 <a class="nav-link {% if request.resolver_match.url_name in 'director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %}active{% endif %}" href="{% url 'director_list' %}"><i class="bi bi-diagram-3 nav-link-icon" aria-hidden="true"></i><span>Director Mapping</span></a>
               {% endif %}
               {% if user.is_superuser or perms.core.view_employee %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'user_list user_create user_edit user_group_list user_group_create user_group_edit user_group_delete' %}active{% endif %}" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
+                <a class="nav-link {% if request.resolver_match.url_name in 'user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}active{% endif %}" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
               {% endif %}
             </div>
           {% endif %}
-          {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
+          {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_tenderdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
             <div class="nav-section">
               <div class="nav-section-title">MIS</div>
               {% if user.is_superuser or perms.mis.view_feesdetail %}
                 <a class="nav-link {% if request.resolver_match.url_name in 'mis_fees_list mis_fees_create mis_fees_edit mis_fees_delete' %}active{% endif %}" href="{% url 'mis_fees_list' %}"><i class="bi bi-currency-rupee nav-link-icon" aria-hidden="true"></i><span>Fees Details</span></a>
+              {% endif %}
+              {% if user.is_superuser or perms.mis.view_tenderdetail %}
+                <a class="nav-link {% if request.resolver_match.url_name in 'mis_tender_list mis_tender_create mis_tender_edit mis_tender_delete' %}active{% endif %}" href="{% url 'mis_tender_list' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Tender</span></a>
               {% endif %}
               {% if user.is_superuser or perms.mis.view_receipt %}
                 <a class="nav-link {% if request.resolver_match.url_name in 'mis_receipt_list mis_receipt_create mis_receipt_edit mis_receipt_delete' %}active{% endif %}" href="{% url 'mis_receipt_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Receipts</span></a>
@@ -226,11 +229,14 @@
             {% endif %}
           </div>
         {% endif %}
-        {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
+        {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_tenderdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
           <div class="nav-section mt-3">
             <div class="nav-section-title">MIS</div>
             {% if user.is_superuser or perms.mis.view_feesdetail %}
               <a class="nav-link" href="{% url 'mis_fees_list' %}"><i class="bi bi-currency-rupee nav-link-icon" aria-hidden="true"></i><span>Fees Details</span></a>
+            {% endif %}
+            {% if user.is_superuser or perms.mis.view_tenderdetail %}
+              <a class="nav-link" href="{% url 'mis_tender_list' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Tender</span></a>
             {% endif %}
             {% if user.is_superuser or perms.mis.view_receipt %}
               <a class="nav-link" href="{% url 'mis_receipt_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Receipts</span></a>

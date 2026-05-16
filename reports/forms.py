@@ -105,6 +105,8 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
     DETAILS_GST = "GST"
     DETAILS_RECEIPTS = "RECEIPTS"
     DETAILS_EXPENSES = "EXPENSES"
+    DETAILS_TENDER_FEES = "TENDER_FEES"
+    DETAILS_TENDER_DEPOSIT = "TENDER_DEPOSIT"
 
     report_view = forms.ChoiceField(
         choices=[
@@ -142,6 +144,8 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
             (DETAILS_GST, "GST"),
             (DETAILS_RECEIPTS, "Receipts"),
             (DETAILS_EXPENSES, "Expenses"),
+            (DETAILS_TENDER_FEES, "Tender fees"),
+            (DETAILS_TENDER_DEPOSIT, "Tender deposit"),
         ],
         initial=DETAILS_ALL,
         widget=forms.Select(attrs={"class": "form-select"}),
@@ -219,11 +223,19 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
         return data
 
     def selected_details(self) -> list[str]:
+        all_details = [
+            self.DETAILS_FEES,
+            self.DETAILS_GST,
+            self.DETAILS_RECEIPTS,
+            self.DETAILS_EXPENSES,
+            self.DETAILS_TENDER_FEES,
+            self.DETAILS_TENDER_DEPOSIT,
+        ]
         if not self.is_valid():
-            return [self.DETAILS_FEES, self.DETAILS_GST, self.DETAILS_RECEIPTS, self.DETAILS_EXPENSES]
+            return all_details
         v = self.cleaned_data.get("details") or self.DETAILS_ALL
         if v == self.DETAILS_ALL:
-            return [self.DETAILS_FEES, self.DETAILS_GST, self.DETAILS_RECEIPTS, self.DETAILS_EXPENSES]
+            return all_details
         return [v]
 
 

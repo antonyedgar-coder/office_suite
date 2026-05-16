@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Tender — CA Office Suite{% endblock %}
+{% block page_title %}Tender{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md">
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Search by client name / Client ID / PAN" />
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.mis.add_tenderdetail %}
+          <a class="btn btn-primary" href="{% url 'mis_tender_create' %}">New tender entry</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Client name</th>
+            <th>Branch</th>
+            <th class="text-end">Tender fees</th>
+            <th class="text-end">Tender deposit</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.date }}</td>
+              <td>{{ r.client.client_name }}</td>
+              <td>{{ r.client.branch }}</td>
+              <td class="text-end mono">{{ r.tender_fees }}</td>
+              <td class="text-end mono">{{ r.tender_deposit }}</td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                  {% if perms.mis.change_tenderdetail %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_tender_edit' r.pk %}">Edit</a>
+                  {% endif %}
+                  {% if perms.mis.delete_tenderdetail %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'mis_tender_delete' r.pk %}">Delete</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="text-secondary">No tender entries.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="text-secondary small mt-2">Showing up to 500 latest rows.</div>
+  </div>
+{% endblock %}

@@ -35,8 +35,8 @@ class EmployeeCreateForm(forms.ModelForm):
     is_active = forms.BooleanField(
         required=False,
         initial=True,
-        label="User active",
-        help_text="If unchecked, this person cannot log in.",
+        label="Active (can sign in)",
+        help_text="Uncheck to mark inactive — they cannot log in until reactivated.",
     )
     groups = forms.ModelMultipleChoiceField(
         queryset=Group.objects.all(),
@@ -160,8 +160,8 @@ class EmployeeCreateForm(forms.ModelForm):
 class EmployeeEditForm(forms.ModelForm):
     is_active = forms.BooleanField(
         required=False,
-        label="User active",
-        help_text="If unchecked, this person cannot log in.",
+        label="Active (can sign in)",
+        help_text="Uncheck to mark inactive — they cannot log in until reactivated.",
     )
     force_password_change = forms.BooleanField(
         required=False,

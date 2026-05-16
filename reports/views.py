@@ -13,7 +13,7 @@ from django.shortcuts import redirect, render
 from dirkyc.fy import fy_label_to_date_range
 from dirkyc.models import Dir3Kyc
 from masters.models import DIRECTOR_COMPANY_TYPES, DIRECTOR_ELIGIBLE_CLIENT_TYPES, Client, DirectorMapping
-from mis.models import ExpenseDetail, FeesDetail, Receipt
+from mis.models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
 
 from .dir3_compliance import build_director_dir3_compliance_rows
 from .forms import (
@@ -299,8 +299,19 @@ MIS_MONTH_LABELS = [
     "March",
 ]
 
-MIS_DETAIL_ORDER = ("FEES", "GST", "RECEIPTS", "EXPENSES")
-_MIS_DETAIL_FIELD = {"FEES": "fees", "GST": "gst", "RECEIPTS": "receipts", "EXPENSES": "expenses"}
+MIS_DETAIL_ORDER = ("FEES", "GST", "RECEIPTS", "EXPENSES", "TENDER_FEES", "TENDER_DEPOSIT")
+_MIS_DETAIL_FIELD = {
+    "FEES": "fees",
+    "GST": "gst",
+    "RECEIPTS": "receipts",
+    "EXPENSES": "expenses",
+    "TENDER_FEES": "tender_fees",
+    "TENDER_DEPOSIT": "tender_deposit",
+}
+
+
+def _mis_empty_totals() -> dict:
+    return {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0, "tender_fees": 0, "tender_deposit": 0}
 
 
 def _mis_metric_float(block: dict | None, dk: str) -> float:
@@ -349,7 +360,7 @@ def _mis_sparse_metric_table(rows: list[dict], detail_order: list[str]) -> tuple
     Drop rows where all selected metrics are zero, and metrics that are zero for all remaining rows.
     Returns filtered rows, visible detail keys (order preserved), and totals over visible columns only.
     """
-    empty_totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+    empty_totals = _mis_empty_totals()
     if not rows or not detail_order:
         return [], [], empty_totals
     fields = [_MIS_DETAIL_FIELD[dk] for dk in detail_order]
@@ -357,7 +368,7 @@ def _mis_sparse_metric_table(rows: list[dict], detail_order: list[str]) -> tuple
     row_keep, col_keep = _mis_prune_row_col_bool(matrix)
     visible_detail_order = [detail_order[c] for c in range(len(detail_order)) if col_keep[c]]
     sparse_rows = [rows[i] for i in range(len(rows)) if row_keep[i]]
-    totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+    totals = _mis_empty_totals()
     for r in sparse_rows:
         for dk in visible_detail_order:
             totals[_MIS_DETAIL_FIELD[dk]] += float(r.get(_MIS_DETAIL_FIELD[dk]) or 0)
@@ -434,28 +445,47 @@ def _calendar_date_to_fy_month_index(d: date) -> int:
     return d.month + 8
 
 
-def _mis_apply_client_filters_to_qs(fees_q, rec_q, exp_q, *, client_id: str, client_name: str, pan: str, client_type: str, branch: str):
+def _mis_apply_client_filters_to_qs(
+    fees_q,
+    rec_q,
+    exp_q,
+    ten_q,
+    *,
+    client_id: str,
+    client_name: str,
+    pan: str,
+    client_type: str,
+    branch: str,
+):
     if client_id:
-        fees_q = fees_q.filter(client__client_id__icontains=client_id.strip().upper())
-        rec_q = rec_q.filter(client__client_id__icontains=client_id.strip().upper())
-        exp_q = exp_q.filter(client__client_id__icontains=client_id.strip().upper())
+        cid = client_id.strip().upper()
+        fees_q = fees_q.filter(client__client_id__icontains=cid)
+        rec_q = rec_q.filter(client__client_id__icontains=cid)
+        exp_q = exp_q.filter(client__client_id__icontains=cid)
+        ten_q = ten_q.filter(client__client_id__icontains=cid)
     if client_name:
-        fees_q = fees_q.filter(client__client_name__icontains=client_name.strip().upper())
-        rec_q = rec_q.filter(client__client_name__icontains=client_name.strip().upper())
-        exp_q = exp_q.filter(client__client_name__icontains=client_name.strip().upper())
+        name = client_name.strip().upper()
+        fees_q = fees_q.filter(client__client_name__icontains=name)
+        rec_q = rec_q.filter(client__client_name__icontains=name)
+        exp_q = exp_q.filter(client__client_name__icontains=name)
+        ten_q = ten_q.filter(client__client_name__icontains=name)
     if pan:
-        fees_q = fees_q.filter(client__pan__icontains=pan.strip().upper())
-        rec_q = rec_q.filter(client__pan__icontains=pan.strip().upper())
-        exp_q = exp_q.filter(client__pan__icontains=pan.strip().upper())
+        pan_v = pan.strip().upper()
+        fees_q = fees_q.filter(client__pan__icontains=pan_v)
+        rec_q = rec_q.filter(client__pan__icontains=pan_v)
+        exp_q = exp_q.filter(client__pan__icontains=pan_v)
+        ten_q = ten_q.filter(client__pan__icontains=pan_v)
     if client_type:
         fees_q = fees_q.filter(client__client_type=client_type)
         rec_q = rec_q.filter(client__client_type=client_type)
         exp_q = exp_q.filter(client__client_type=client_type)
+        ten_q = ten_q.filter(client__client_type=client_type)
     if branch:
         fees_q = fees_q.filter(client__branch=branch)
         rec_q = rec_q.filter(client__branch=branch)
         exp_q = exp_q.filter(client__branch=branch)
-    return fees_q, rec_q, exp_q
+        ten_q = ten_q.filter(client__branch=branch)
+    return fees_q, rec_q, exp_q, ten_q
 
 
 def _mis_month_slots_for_fy(
@@ -475,10 +505,12 @@ def _mis_month_slots_for_fy(
     fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=start, date__lte=end)
     rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=start, date__lte=end)
     exp_q = ExpenseDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=start, date__lte=end)
-    fees_q, rec_q, exp_q = _mis_apply_client_filters_to_qs(
+    ten_q = TenderDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=start, date__lte=end)
+    fees_q, rec_q, exp_q, ten_q = _mis_apply_client_filters_to_qs(
         fees_q,
         rec_q,
         exp_q,
+        ten_q,
         client_id=client_id,
         client_name=client_name,
         pan=pan,
@@ -486,7 +518,7 @@ def _mis_month_slots_for_fy(
         branch=branch,
     )
 
-    slots: list[dict] = [{"fees": 0, "gst": 0, "receipts": 0, "expenses": 0} for _ in range(12)]
+    slots: list[dict] = [_mis_empty_totals() for _ in range(12)]
 
     fees_rows = fees_q.annotate(m=TruncMonth("date")).values("m").annotate(fees=Sum("fees_amount"), gst=Sum("gst_amount"))
     for r in fees_rows:
@@ -518,6 +550,20 @@ def _mis_month_slots_for_fy(
         idx = _calendar_date_to_fy_month_index(d)
         if 0 <= idx < 12:
             slots[idx]["expenses"] = r["expenses"] or 0
+
+    ten_rows = ten_q.annotate(m=TruncMonth("date")).values("m").annotate(
+        tender_fees=Sum("tender_fees"),
+        tender_deposit=Sum("tender_deposit"),
+    )
+    for r in ten_rows:
+        dt = r["m"]
+        if dt is None:
+            continue
+        d = dt.date() if hasattr(dt, "date") else dt
+        idx = _calendar_date_to_fy_month_index(d)
+        if 0 <= idx < 12:
+            slots[idx]["tender_fees"] = r["tender_fees"] or 0
+            slots[idx]["tender_deposit"] = r["tender_deposit"] or 0
 
     return slots
 
@@ -568,11 +614,24 @@ def _mis_merge_period(
         )
         .annotate(expenses=Sum("expenses_paid"))
     )
+    ten_q = (
+        TenderDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=from_date, date__lte=to_date)
+        .values(
+            "date",
+            "client__client_id",
+            "client__client_name",
+            "client__pan",
+            "client__client_type",
+            "client__branch",
+        )
+        .annotate(tender_fees=Sum("tender_fees"), tender_deposit=Sum("tender_deposit"))
+    )
 
-    fees_q, rec_q, exp_q = _mis_apply_client_filters_to_qs(
+    fees_q, rec_q, exp_q, ten_q = _mis_apply_client_filters_to_qs(
         fees_q,
         rec_q,
         exp_q,
+        ten_q,
         client_id=client_id,
         client_name=client_name,
         pan=pan,
@@ -581,19 +640,20 @@ def _mis_merge_period(
     )
 
     merged = {}
+
     def _base(r):
-        return {
-            "date": r["date"],
-            "client_id": r["client__client_id"],
-            "client_name": r["client__client_name"],
-            "pan": r.get("client__pan") or "",
-            "client_type": r.get("client__client_type") or "",
-            "branch": r.get("client__branch") or "",
-            "fees": 0,
-            "gst": 0,
-            "receipts": 0,
-            "expenses": 0,
-        }
+        row = _mis_empty_totals()
+        row.update(
+            {
+                "date": r["date"],
+                "client_id": r["client__client_id"],
+                "client_name": r["client__client_name"],
+                "pan": r.get("client__pan") or "",
+                "client_type": r.get("client__client_type") or "",
+                "branch": r.get("client__branch") or "",
+            }
+        )
+        return row
 
     for r in fees_q:
         k = (r["date"], r["client__client_id"])
@@ -607,14 +667,17 @@ def _mis_merge_period(
     for r in exp_q:
         k = (r["date"], r["client__client_id"])
         merged.setdefault(k, _base(r))["expenses"] = r["expenses"] or 0
+    for r in ten_q:
+        k = (r["date"], r["client__client_id"])
+        row = merged.setdefault(k, _base(r))
+        row["tender_fees"] = r["tender_fees"] or 0
+        row["tender_deposit"] = r["tender_deposit"] or 0
 
     rows = sorted(merged.values(), key=lambda x: (x["date"], x["client_id"]))
-    totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+    totals = _mis_empty_totals()
     for r in rows:
-        totals["fees"] += r["fees"]
-        totals["gst"] += r["gst"]
-        totals["receipts"] += r["receipts"]
-        totals["expenses"] += r["expenses"]
+        for key in totals:
+            totals[key] += r[key]
     return rows, totals
 
 
@@ -626,8 +689,8 @@ def mis_report(request):
     """
     form = MISFlexibleReportForm(request.GET or None, user=request.user)
     rows = []
-    totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
-    details = ["FEES", "GST", "RECEIPTS", "EXPENSES"]
+    totals = _mis_empty_totals()
+    details = list(MIS_DETAIL_ORDER)
 
     report_view = MISFlexibleReportForm.VIEW_TRANSACTIONS
     mis_month_mode = False
@@ -676,12 +739,10 @@ def mis_report(request):
                 slots_one = month_slots_by_fy.get(fy_one)
                 if slots_one:
                     mis_month_rows = [{**slots_one[i], "month_label": MIS_MONTH_LABELS[i]} for i in range(12)]
-                    totals = {
-                        "fees": sum(slots_one[i]["fees"] for i in range(12)),
-                        "gst": sum(slots_one[i]["gst"] for i in range(12)),
-                        "receipts": sum(slots_one[i]["receipts"] for i in range(12)),
-                        "expenses": sum(slots_one[i]["expenses"] for i in range(12)),
-                    }
+                    totals = _mis_empty_totals()
+                    for i in range(12):
+                        for key in totals:
+                            totals[key] += slots_one[i][key]
                     mis_month_rows, mis_metric_columns, totals = _mis_sparse_metric_table(mis_month_rows, detail_order)
             elif len(fy_list) > 1:
                 mis_month_multi_fy = True
@@ -694,14 +755,7 @@ def mis_report(request):
                         if not s:
                             blocks.append(None)
                         else:
-                            blocks.append(
-                                {
-                                    "fees": s[i]["fees"],
-                                    "gst": s[i]["gst"],
-                                    "receipts": s[i]["receipts"],
-                                    "expenses": s[i]["expenses"],
-                                }
-                            )
+                            blocks.append(dict(s[i]))
                     pivot_rows.append({"month_label": MIS_MONTH_LABELS[i], "by_fy": blocks})
                 mis_month_pivot_rows = pivot_rows
                 (
@@ -720,47 +774,66 @@ def mis_report(request):
             fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             exp_q = ExpenseDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
+            ten_q = TenderDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             if ct:
                 fees_q = fees_q.filter(client__client_type=ct)
                 rec_q = rec_q.filter(client__client_type=ct)
                 exp_q = exp_q.filter(client__client_type=ct)
+                ten_q = ten_q.filter(client__client_type=ct)
             if br:
                 fees_q = fees_q.filter(client__branch=br)
                 rec_q = rec_q.filter(client__branch=br)
                 exp_q = exp_q.filter(client__branch=br)
+                ten_q = ten_q.filter(client__branch=br)
 
             fees_a = fees_q.values("client__client_type").annotate(fees=Sum("fees_amount"), gst=Sum("gst_amount"))
             rec_a = rec_q.values("client__client_type").annotate(receipts=Sum("amount_received"))
             exp_a = exp_q.values("client__client_type").annotate(expenses=Sum("expenses_paid"))
+            ten_a = ten_q.values("client__client_type").annotate(
+                tender_fees=Sum("tender_fees"),
+                tender_deposit=Sum("tender_deposit"),
+            )
 
             rec_map = {r["client__client_type"] or "": r["receipts"] or 0 for r in rec_a}
             exp_map = {r["client__client_type"] or "": r["expenses"] or 0 for r in exp_a}
+            ten_fees_map = {r["client__client_type"] or "": r["tender_fees"] or 0 for r in ten_a}
+            ten_dep_map = {r["client__client_type"] or "": r["tender_deposit"] or 0 for r in ten_a}
 
             rows = []
             for r in fees_a:
                 k = r["client__client_type"] or ""
-                rows.append(
+                row = _mis_empty_totals()
+                row.update(
                     {
                         "client_type": k,
                         "fees": r["fees"] or 0,
                         "gst": r["gst"] or 0,
                         "receipts": rec_map.get(k, 0),
                         "expenses": exp_map.get(k, 0),
+                        "tender_fees": ten_fees_map.get(k, 0),
+                        "tender_deposit": ten_dep_map.get(k, 0),
                     }
                 )
+                rows.append(row)
             existing = {r["client_type"] for r in rows}
-            only_types = set(rec_map.keys()) | set(exp_map.keys())
+            only_types = set(rec_map.keys()) | set(exp_map.keys()) | set(ten_fees_map.keys()) | set(ten_dep_map.keys())
             for k in sorted([x for x in only_types if x not in existing]):
-                rows.append(
-                    {"client_type": k, "fees": 0, "gst": 0, "receipts": rec_map.get(k, 0), "expenses": exp_map.get(k, 0)}
+                row = _mis_empty_totals()
+                row.update(
+                    {
+                        "client_type": k,
+                        "receipts": rec_map.get(k, 0),
+                        "expenses": exp_map.get(k, 0),
+                        "tender_fees": ten_fees_map.get(k, 0),
+                        "tender_deposit": ten_dep_map.get(k, 0),
+                    }
                 )
+                rows.append(row)
             rows.sort(key=lambda x: x["client_type"])
-            totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+            totals = _mis_empty_totals()
             for r in rows:
-                totals["fees"] += r["fees"]
-                totals["gst"] += r["gst"]
-                totals["receipts"] += r["receipts"]
-                totals["expenses"] += r["expenses"]
+                for key in totals:
+                    totals[key] += r[key]
             rows, mis_metric_columns, totals = _mis_sparse_metric_table(rows, detail_order)
 
         elif report_view == MISFlexibleReportForm.VIEW_CLIENT_WISE:
@@ -775,27 +848,33 @@ def mis_report(request):
             fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             exp_q = ExpenseDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
+            ten_q = TenderDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
 
             if cid_f:
                 fees_q = fees_q.filter(client__client_id__icontains=cid_f)
                 rec_q = rec_q.filter(client__client_id__icontains=cid_f)
                 exp_q = exp_q.filter(client__client_id__icontains=cid_f)
+                ten_q = ten_q.filter(client__client_id__icontains=cid_f)
             if name_f:
                 fees_q = fees_q.filter(client__client_name__icontains=name_f)
                 rec_q = rec_q.filter(client__client_name__icontains=name_f)
                 exp_q = exp_q.filter(client__client_name__icontains=name_f)
+                ten_q = ten_q.filter(client__client_name__icontains=name_f)
             if pan_f:
                 fees_q = fees_q.filter(client__pan__icontains=pan_f)
                 rec_q = rec_q.filter(client__pan__icontains=pan_f)
                 exp_q = exp_q.filter(client__pan__icontains=pan_f)
+                ten_q = ten_q.filter(client__pan__icontains=pan_f)
             if ct_f:
                 fees_q = fees_q.filter(client__client_type=ct_f)
                 rec_q = rec_q.filter(client__client_type=ct_f)
                 exp_q = exp_q.filter(client__client_type=ct_f)
+                ten_q = ten_q.filter(client__client_type=ct_f)
             if br_f:
                 fees_q = fees_q.filter(client__branch=br_f)
                 rec_q = rec_q.filter(client__branch=br_f)
                 exp_q = exp_q.filter(client__branch=br_f)
+                ten_q = ten_q.filter(client__branch=br_f)
 
             fees_a = (
                 fees_q.values(
@@ -810,32 +889,41 @@ def mis_report(request):
             )
             rec_a = rec_q.values("client__client_id").annotate(receipts=Sum("amount_received"))
             exp_a = exp_q.values("client__client_id").annotate(expenses=Sum("expenses_paid"))
+            ten_a = ten_q.values("client__client_id").annotate(
+                tender_fees=Sum("tender_fees"),
+                tender_deposit=Sum("tender_deposit"),
+            )
             rec_map = {r["client__client_id"]: r["receipts"] or 0 for r in rec_a}
             exp_map = {r["client__client_id"]: r["expenses"] or 0 for r in exp_a}
+            ten_fees_map = {r["client__client_id"]: r["tender_fees"] or 0 for r in ten_a}
+            ten_dep_map = {r["client__client_id"]: r["tender_deposit"] or 0 for r in ten_a}
 
             rows = []
-            totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+            totals = _mis_empty_totals()
             for r in fees_a:
                 cid = r["client__client_id"]
-                row = {
-                    "client_id": cid,
-                    "client_name": r["client__client_name"],
-                    "pan": r.get("client__pan") or "",
-                    "client_type": r.get("client__client_type") or "",
-                    "branch": r.get("client__branch") or "",
-                    "fees": r["fees"] or 0,
-                    "gst": r["gst"] or 0,
-                    "receipts": rec_map.get(cid, 0),
-                    "expenses": exp_map.get(cid, 0),
-                }
+                row = _mis_empty_totals()
+                row.update(
+                    {
+                        "client_id": cid,
+                        "client_name": r["client__client_name"],
+                        "pan": r.get("client__pan") or "",
+                        "client_type": r.get("client__client_type") or "",
+                        "branch": r.get("client__branch") or "",
+                        "fees": r["fees"] or 0,
+                        "gst": r["gst"] or 0,
+                        "receipts": rec_map.get(cid, 0),
+                        "expenses": exp_map.get(cid, 0),
+                        "tender_fees": ten_fees_map.get(cid, 0),
+                        "tender_deposit": ten_dep_map.get(cid, 0),
+                    }
+                )
                 rows.append(row)
-                totals["fees"] += row["fees"]
-                totals["gst"] += row["gst"]
-                totals["receipts"] += row["receipts"]
-                totals["expenses"] += row["expenses"]
+                for key in totals:
+                    totals[key] += row[key]
 
             existing = {r["client_id"] for r in rows}
-            only_ids = set(rec_map.keys()) | set(exp_map.keys())
+            only_ids = set(rec_map.keys()) | set(exp_map.keys()) | set(ten_fees_map.keys()) | set(ten_dep_map.keys())
             missing = sorted([x for x in only_ids if x not in existing])
             if missing:
                 name_map = {
@@ -844,20 +932,25 @@ def mis_report(request):
                 }
                 for cid in missing:
                     nm, panv, ctv, brv = name_map.get(cid, (cid, "", "", ""))
-                    row = {
-                        "client_id": cid,
-                        "client_name": nm,
-                        "pan": panv or "",
-                        "client_type": ctv or "",
-                        "branch": brv or "",
-                        "fees": 0,
-                        "gst": 0,
-                        "receipts": rec_map.get(cid, 0),
-                        "expenses": exp_map.get(cid, 0),
-                    }
+                    row = _mis_empty_totals()
+                    row.update(
+                        {
+                            "client_id": cid,
+                            "client_name": nm,
+                            "pan": panv or "",
+                            "client_type": ctv or "",
+                            "branch": brv or "",
+                            "receipts": rec_map.get(cid, 0),
+                            "expenses": exp_map.get(cid, 0),
+                            "tender_fees": ten_fees_map.get(cid, 0),
+                            "tender_deposit": ten_dep_map.get(cid, 0),
+                        }
+                    )
                     rows.append(row)
                     totals["receipts"] += row["receipts"]
                     totals["expenses"] += row["expenses"]
+                    totals["tender_fees"] += row["tender_fees"]
+                    totals["tender_deposit"] += row["tender_deposit"]
                 rows.sort(key=lambda x: x["client_name"])
             rows, mis_metric_columns, totals = _mis_sparse_metric_table(rows, detail_order)
         else:
@@ -937,14 +1030,28 @@ def mis_report_csv(request):
 
         buf = StringIO()
         w = csv.writer(buf)
-        csv_hdr_detail = {"FEES": "FEES_AMOUNT", "GST": "GST_AMOUNT", "RECEIPTS": "RECEIPTS_AMOUNT", "EXPENSES": "EXPENSES_AMOUNT"}
-        csv_lbl_detail = {"FEES": "Fees", "GST": "GST", "RECEIPTS": "Receipts", "EXPENSES": "Expenses"}
+        csv_hdr_detail = {
+            "FEES": "FEES_AMOUNT",
+            "GST": "GST_AMOUNT",
+            "RECEIPTS": "RECEIPTS_AMOUNT",
+            "EXPENSES": "EXPENSES_AMOUNT",
+            "TENDER_FEES": "TENDER_FEES",
+            "TENDER_DEPOSIT": "TENDER_DEPOSIT",
+        }
+        csv_lbl_detail = {
+            "FEES": "Fees",
+            "GST": "GST",
+            "RECEIPTS": "Receipts",
+            "EXPENSES": "Expenses",
+            "TENDER_FEES": "Tender fees",
+            "TENDER_DEPOSIT": "Tender deposit",
+        }
 
         if len(fy_list) == 1:
             fy_one = fy_list[0]
             slots_one = month_slots_by_fy.get(fy_one)
             if not slots_one:
-                slots_one = [{"fees": 0, "gst": 0, "receipts": 0, "expenses": 0} for _ in range(12)]
+                slots_one = [_mis_empty_totals() for _ in range(12)]
             mis_month_rows = [{**slots_one[i], "month_label": MIS_MONTH_LABELS[i]} for i in range(12)]
             sparse_rows, vis_detail, tot_sparse = _mis_sparse_metric_table(mis_month_rows, detail_order)
             header = ["MONTH"] + [csv_hdr_detail[dk] for dk in vis_detail]
@@ -963,14 +1070,7 @@ def mis_report_csv(request):
                     if not s:
                         blocks.append(None)
                     else:
-                        blocks.append(
-                            {
-                                "fees": s[i]["fees"],
-                                "gst": s[i]["gst"],
-                                "receipts": s[i]["receipts"],
-                                "expenses": s[i]["expenses"],
-                            }
-                        )
+                        blocks.append(dict(s[i]))
                 pivot_rows.append({"month_label": MIS_MONTH_LABELS[i], "by_fy": blocks})
             body_rows, column_specs, footer_cells, _fy_g = _mis_sparse_month_multi_pivot(pivot_rows, fy_list, detail_order)
             header = ["MONTH"] + [f"{s['fy']} {csv_lbl_detail[s['dk']]}" for s in column_specs]
@@ -992,44 +1092,79 @@ def mis_report_csv(request):
         fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
         rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
         exp_q = ExpenseDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
+        ten_q = TenderDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
         if ct:
             fees_q = fees_q.filter(client__client_type=ct)
             rec_q = rec_q.filter(client__client_type=ct)
             exp_q = exp_q.filter(client__client_type=ct)
+            ten_q = ten_q.filter(client__client_type=ct)
         if br:
             fees_q = fees_q.filter(client__branch=br)
             rec_q = rec_q.filter(client__branch=br)
             exp_q = exp_q.filter(client__branch=br)
+            ten_q = ten_q.filter(client__branch=br)
 
         fees_a = fees_q.values("client__client_type").annotate(fees=Sum("fees_amount"), gst=Sum("gst_amount"))
         rec_a = rec_q.values("client__client_type").annotate(receipts=Sum("amount_received"))
         exp_a = exp_q.values("client__client_type").annotate(expenses=Sum("expenses_paid"))
+        ten_a = ten_q.values("client__client_type").annotate(
+            tender_fees=Sum("tender_fees"),
+            tender_deposit=Sum("tender_deposit"),
+        )
         rec_map = {r["client__client_type"] or "": r["receipts"] or 0 for r in rec_a}
         exp_map = {r["client__client_type"] or "": r["expenses"] or 0 for r in exp_a}
+        ten_fees_map = {r["client__client_type"] or "": r["tender_fees"] or 0 for r in ten_a}
+        ten_dep_map = {r["client__client_type"] or "": r["tender_deposit"] or 0 for r in ten_a}
 
         rows = []
-        totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+        totals = _mis_empty_totals()
         for r in fees_a:
             k = r["client__client_type"] or ""
-            row = {"client_type": k, "fees": r["fees"] or 0, "gst": r["gst"] or 0, "receipts": rec_map.get(k, 0), "expenses": exp_map.get(k, 0)}
+            row = _mis_empty_totals()
+            row.update(
+                {
+                    "client_type": k,
+                    "fees": r["fees"] or 0,
+                    "gst": r["gst"] or 0,
+                    "receipts": rec_map.get(k, 0),
+                    "expenses": exp_map.get(k, 0),
+                    "tender_fees": ten_fees_map.get(k, 0),
+                    "tender_deposit": ten_dep_map.get(k, 0),
+                }
+            )
             rows.append(row)
         existing = {r["client_type"] for r in rows}
-        only_types = set(rec_map.keys()) | set(exp_map.keys())
+        only_types = set(rec_map.keys()) | set(exp_map.keys()) | set(ten_fees_map.keys()) | set(ten_dep_map.keys())
         for k in sorted([x for x in only_types if x not in existing]):
-            rows.append({"client_type": k, "fees": 0, "gst": 0, "receipts": rec_map.get(k, 0), "expenses": exp_map.get(k, 0)})
+            row = _mis_empty_totals()
+            row.update(
+                {
+                    "client_type": k,
+                    "receipts": rec_map.get(k, 0),
+                    "expenses": exp_map.get(k, 0),
+                    "tender_fees": ten_fees_map.get(k, 0),
+                    "tender_deposit": ten_dep_map.get(k, 0),
+                }
+            )
+            rows.append(row)
         rows.sort(key=lambda x: x["client_type"])
         for r in rows:
-            totals["fees"] += r["fees"]
-            totals["gst"] += r["gst"]
-            totals["receipts"] += r["receipts"]
-            totals["expenses"] += r["expenses"]
+            for key in totals:
+                totals[key] += r[key]
 
         rows, vis_detail, totals = _mis_sparse_metric_table(rows, detail_order)
 
         buf = StringIO()
         w = csv.writer(buf)
         header = ["CLIENT_TYPE"]
-        hdr_map = {"FEES": "FEES_AMOUNT", "GST": "GST_AMOUNT", "RECEIPTS": "RECEIPTS_AMOUNT", "EXPENSES": "EXPENSES_AMOUNT"}
+        hdr_map = {
+            "FEES": "FEES_AMOUNT",
+            "GST": "GST_AMOUNT",
+            "RECEIPTS": "RECEIPTS_AMOUNT",
+            "EXPENSES": "EXPENSES_AMOUNT",
+            "TENDER_FEES": "TENDER_FEES",
+            "TENDER_DEPOSIT": "TENDER_DEPOSIT",
+        }
         header.extend(hdr_map[dk] for dk in vis_detail)
         w.writerow(header)
         for r in rows:
@@ -1054,26 +1189,32 @@ def mis_report_csv(request):
         fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
         rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
         exp_q = ExpenseDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
+        ten_q = TenderDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
         if cid_f:
             fees_q = fees_q.filter(client__client_id__icontains=cid_f)
             rec_q = rec_q.filter(client__client_id__icontains=cid_f)
             exp_q = exp_q.filter(client__client_id__icontains=cid_f)
+            ten_q = ten_q.filter(client__client_id__icontains=cid_f)
         if name_f:
             fees_q = fees_q.filter(client__client_name__icontains=name_f)
             rec_q = rec_q.filter(client__client_name__icontains=name_f)
             exp_q = exp_q.filter(client__client_name__icontains=name_f)
+            ten_q = ten_q.filter(client__client_name__icontains=name_f)
         if pan_f:
             fees_q = fees_q.filter(client__pan__icontains=pan_f)
             rec_q = rec_q.filter(client__pan__icontains=pan_f)
             exp_q = exp_q.filter(client__pan__icontains=pan_f)
+            ten_q = ten_q.filter(client__pan__icontains=pan_f)
         if ct_f:
             fees_q = fees_q.filter(client__client_type=ct_f)
             rec_q = rec_q.filter(client__client_type=ct_f)
             exp_q = exp_q.filter(client__client_type=ct_f)
+            ten_q = ten_q.filter(client__client_type=ct_f)
         if br_f:
             fees_q = fees_q.filter(client__branch=br_f)
             rec_q = rec_q.filter(client__branch=br_f)
             exp_q = exp_q.filter(client__branch=br_f)
+            ten_q = ten_q.filter(client__branch=br_f)
 
         fees_a = fees_q.values(
             "client__client_id",
@@ -1084,36 +1225,52 @@ def mis_report_csv(request):
         ).annotate(fees=Sum("fees_amount"), gst=Sum("gst_amount"))
         rec_a = rec_q.values("client__client_id").annotate(receipts=Sum("amount_received"))
         exp_a = exp_q.values("client__client_id").annotate(expenses=Sum("expenses_paid"))
+        ten_a = ten_q.values("client__client_id").annotate(
+            tender_fees=Sum("tender_fees"),
+            tender_deposit=Sum("tender_deposit"),
+        )
         rec_map = {r["client__client_id"]: r["receipts"] or 0 for r in rec_a}
         exp_map = {r["client__client_id"]: r["expenses"] or 0 for r in exp_a}
+        ten_fees_map = {r["client__client_id"]: r["tender_fees"] or 0 for r in ten_a}
+        ten_dep_map = {r["client__client_id"]: r["tender_deposit"] or 0 for r in ten_a}
 
         rows = []
-        totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
+        totals = _mis_empty_totals()
         for r in fees_a:
             cid = r["client__client_id"]
-            row = {
-                "client_id": cid,
-                "client_name": r["client__client_name"],
-                "pan": r.get("client__pan") or "",
-                "client_type": r.get("client__client_type") or "",
-                "branch": r.get("client__branch") or "",
-                "fees": r["fees"] or 0,
-                "gst": r["gst"] or 0,
-                "receipts": rec_map.get(cid, 0),
-                "expenses": exp_map.get(cid, 0),
-            }
+            row = _mis_empty_totals()
+            row.update(
+                {
+                    "client_id": cid,
+                    "client_name": r["client__client_name"],
+                    "pan": r.get("client__pan") or "",
+                    "client_type": r.get("client__client_type") or "",
+                    "branch": r.get("client__branch") or "",
+                    "fees": r["fees"] or 0,
+                    "gst": r["gst"] or 0,
+                    "receipts": rec_map.get(cid, 0),
+                    "expenses": exp_map.get(cid, 0),
+                    "tender_fees": ten_fees_map.get(cid, 0),
+                    "tender_deposit": ten_dep_map.get(cid, 0),
+                }
+            )
             rows.append(row)
-            totals["fees"] += row["fees"]
-            totals["gst"] += row["gst"]
-            totals["receipts"] += row["receipts"]
-            totals["expenses"] += row["expenses"]
+            for key in totals:
+                totals[key] += row[key]
 
         rows, vis_detail, totals = _mis_sparse_metric_table(rows, detail_order)
 
         buf = StringIO()
         w = csv.writer(buf)
         header = ["CLIENT_ID", "CLIENT_NAME", "PAN_NO", "CLIENT_TYPE", "BRANCH"]
-        hdr_map = {"FEES": "FEES_AMOUNT", "GST": "GST_AMOUNT", "RECEIPTS": "RECEIPTS_AMOUNT", "EXPENSES": "EXPENSES_AMOUNT"}
+        hdr_map = {
+            "FEES": "FEES_AMOUNT",
+            "GST": "GST_AMOUNT",
+            "RECEIPTS": "RECEIPTS_AMOUNT",
+            "EXPENSES": "EXPENSES_AMOUNT",
+            "TENDER_FEES": "TENDER_FEES",
+            "TENDER_DEPOSIT": "TENDER_DEPOSIT",
+        }
         header.extend(hdr_map[dk] for dk in vis_detail)
         w.writerow(header)
         for r in rows:
@@ -1141,7 +1298,14 @@ def mis_report_csv(request):
     buf = StringIO()
     w = csv.writer(buf)
     header = ["DATE", "CLIENT_ID", "CLIENT_NAME", "PAN_NO", "CLIENT_TYPE", "BRANCH"]
-    hdr_map = {"FEES": "FEES_AMOUNT", "GST": "GST_AMOUNT", "RECEIPTS": "RECEIPTS_AMOUNT", "EXPENSES": "EXPENSES_AMOUNT"}
+    hdr_map = {
+        "FEES": "FEES_AMOUNT",
+        "GST": "GST_AMOUNT",
+        "RECEIPTS": "RECEIPTS_AMOUNT",
+        "EXPENSES": "EXPENSES_AMOUNT",
+        "TENDER_FEES": "TENDER_FEES",
+        "TENDER_DEPOSIT": "TENDER_DEPOSIT",
+    }
     header.extend(hdr_map[dk] for dk in vis_detail)
     w.writerow(header)
 

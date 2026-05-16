@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Tender — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New tender entry{% else %}Edit tender entry{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      {% include "mis/includes/client_autocomplete_fields.html" %}
+      <div class="col-12 col-md-6">
+        <label class="form-label">Tender fees</label>
+        {{ form.tender_fees }}
+        {% if form.tender_fees.errors %}<div class="text-danger small">{{ form.tender_fees.errors }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Tender deposit</label>
+        {{ form.tender_deposit }}
+        {% if form.tender_deposit.errors %}<div class="text-danger small">{{ form.tender_deposit.errors }}</div>{% endif %}
+      </div>
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'mis_tender_list' %}">Back</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

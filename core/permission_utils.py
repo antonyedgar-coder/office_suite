@@ -13,6 +13,7 @@ _MANAGED_MODELS: tuple[tuple[str, str], ...] = (
     ("mis", "feesdetail"),
     ("mis", "receipt"),
     ("mis", "expensedetail"),
+    ("mis", "tenderdetail"),
     ("dirkyc", "dir3kyc"),
 )
 

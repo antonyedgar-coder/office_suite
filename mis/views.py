@@ -10,8 +10,8 @@ from core.branch_access import approved_clients_for_user, filter_mis_qs
 from core.decorators import require_perm
 from masters.models import Client
 
-from .forms import ExpenseDetailForm, FeesDetailForm, ReceiptForm
-from .models import ExpenseDetail, FeesDetail, Receipt
+from .forms import ExpenseDetailForm, FeesDetailForm, ReceiptForm, TenderDetailForm
+from .models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
 from .xlsx_import import (
     parse_expenses_csv,
     parse_expenses_xlsx,
@@ -77,6 +77,58 @@ def fees_delete(request, pk: int):
         messages.success(request, f"Fees entry deleted: {label}.")
         return redirect("mis_fees_list")
     return render(request, "mis/fees_confirm_delete.html", {"obj": obj})
+
+
+@require_perm("mis.view_tenderdetail")
+def tender_list(request):
+    q = _client_search_q(request)
+    qs = filter_mis_qs(TenderDetail.objects.select_related("client").all(), request.user)
+    if q:
+        qs = qs.filter(
+            Q(client__client_name__icontains=q)
+            | Q(client__client_id__icontains=q)
+            | Q(pan_no__icontains=q)
+        )
+    qs = qs.order_by("-date", "-id")[:500]
+    return render(request, "mis/tender_list.html", {"rows": qs, "q": q})
+
+
+@require_perm("mis.add_tenderdetail")
+def tender_create(request):
+    if request.method == "POST":
+        form = TenderDetailForm(request.POST, user=request.user)
+        if form.is_valid():
+            obj = form.save()
+            messages.success(request, f"Tender entry saved for {obj.client.client_name}.")
+            return redirect("mis_tender_list")
+    else:
+        form = TenderDetailForm(user=request.user)
+    return render(request, "mis/tender_form.html", {"form": form, "mode": "create"})
+
+
+@require_perm("mis.change_tenderdetail")
+def tender_edit(request, pk: int):
+    obj = get_object_or_404(filter_mis_qs(TenderDetail.objects.all(), request.user), pk=pk)
+    if request.method == "POST":
+        form = TenderDetailForm(request.POST, instance=obj, user=request.user)
+        if form.is_valid():
+            obj = form.save()
+            messages.success(request, f"Tender entry updated for {obj.client.client_name}.")
+            return redirect("mis_tender_list")
+    else:
+        form = TenderDetailForm(instance=obj, user=request.user)
+    return render(request, "mis/tender_form.html", {"form": form, "mode": "edit", "obj": obj})
+
+
+@require_perm("mis.delete_tenderdetail")
+def tender_delete(request, pk: int):
+    obj = get_object_or_404(filter_mis_qs(TenderDetail.objects.all(), request.user), pk=pk)
+    if request.method == "POST":
+        label = f"{obj.client.client_name} ({obj.date})"
+        obj.delete()
+        messages.success(request, f"Tender entry deleted: {label}.")
+        return redirect("mis_tender_list")
+    return render(request, "mis/tender_confirm_delete.html", {"obj": obj})
 
 
 @require_perm("mis.view_receipt")

@@ -189,9 +189,12 @@
         <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
       {% endif %}
 
-      <div class="col-12 d-flex gap-2">
+      <div class="col-12 d-flex gap-2 flex-wrap align-items-center">
         <button type="submit" class="btn btn-primary">Save</button>
         <a class="btn btn-outline-secondary" href="{% url 'user_list' %}">Back</a>
+        {% if mode == "edit" and can_delete_user %}
+          <a class="btn btn-outline-danger ms-auto" href="{% url 'user_delete' employee.pk %}">Delete user</a>
+        {% endif %}
       </div>
     </form>
   </div>

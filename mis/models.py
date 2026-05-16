@@ -107,3 +107,37 @@ class ExpenseDetail(models.Model):
     def __str__(self) -> str:
         return f"Expense {self.client_id} {self.date} ({self.expenses_paid})"
 
+
+class TenderDetail(models.Model):
+    """MIS capture of tender fees and deposit for a client."""
+
+    date = models.DateField()
+    client = models.ForeignKey("masters.Client", on_delete=models.PROTECT, related_name="mis_tenders")
+    pan_no = models.CharField(max_length=10, blank=True)
+    tender_fees = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+    tender_deposit = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.client_id:
+            self.pan_no = (self.client.pan or "").strip().upper()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"Tender {self.client_id} {self.date} ({self.tender_fees}/{self.tender_deposit})"
+
