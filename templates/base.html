@@ -52,22 +52,57 @@
       .nav-link.active .nav-link-icon {
         opacity: 1;
       }
-      .nav-section {
-        border-radius: 14px;
-        padding: 10px;
+      .nav-accordion {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .nav-accordion-item {
+        border-radius: 12px;
         border: 1px solid #e8eaf1;
         background: #ffffff;
+        overflow: hidden;
       }
-      .nav-section .nav-link {
-        border-radius: 10px;
+      .nav-accordion-toggle {
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: #334155;
+        border-radius: 12px;
+        padding: 0.55rem 0.65rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-align: left;
+        cursor: pointer;
       }
-      .nav-section-title {
+      .nav-accordion-toggle:hover {
+        background: #e8eef5;
+      }
+      .nav-accordion-item.is-open .nav-accordion-toggle {
+        background: #e0f2fe;
+        color: #075985;
+      }
+      .nav-accordion-toggle .nav-chevron {
         font-size: 0.75rem;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        font-weight: 700;
-        color: #475569;
-        margin: 2px 0 6px;
+        opacity: 0.7;
+        transition: transform 0.2s ease;
+      }
+      .nav-accordion-item.is-open .nav-chevron {
+        transform: rotate(180deg);
+        opacity: 1;
+      }
+      .nav-accordion-panel {
+        padding: 0 0.35rem 0.4rem;
+      }
+      .nav-accordion-panel .nav-link {
+        padding: 0.4rem 0.55rem;
+        font-size: 0.875rem;
+      }
+      .nav-accordion-panel[hidden] {
+        display: none !important;
       }
       .topbar {
         background: #ffffff;
@@ -93,69 +128,9 @@
         </div>
         <nav class="nav flex-column gap-2 flex-grow-1">
           <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 nav-link-icon" aria-hidden="true"></i><span>Dashboard</span></a>
-          {% if user.is_superuser or perms.masters.view_client or perms.masters.view_clientgroup or perms.masters.approve_client or perms.masters.view_directormapping or perms.core.view_employee %}
-            <div class="nav-section">
-              <div class="nav-section-title">Masters</div>
-              {% if user.is_superuser or perms.masters.view_client %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'client_list client_create client_edit client_delete client_import' %}active{% endif %}" href="{% url 'client_list' %}"><i class="bi bi-people nav-link-icon" aria-hidden="true"></i><span>Client Master</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.masters.view_clientgroup %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template' %}active{% endif %}" href="{% url 'client_group_list' %}"><i class="bi bi-collection nav-link-icon" aria-hidden="true"></i><span>Group Master</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.masters.approve_client %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'client_pending_list client_approve' %}active{% endif %}" href="{% url 'client_pending_list' %}"><i class="bi bi-patch-check nav-link-icon" aria-hidden="true"></i><span>Client approvals</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.masters.view_directormapping %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %}active{% endif %}" href="{% url 'director_list' %}"><i class="bi bi-diagram-3 nav-link-icon" aria-hidden="true"></i><span>Director Mapping</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.core.view_employee %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}active{% endif %}" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
-              {% endif %}
-            </div>
-          {% endif %}
-          {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_tenderdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
-            <div class="nav-section">
-              <div class="nav-section-title">MIS</div>
-              {% if user.is_superuser or perms.mis.view_feesdetail %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'mis_fees_list mis_fees_create mis_fees_edit mis_fees_delete' %}active{% endif %}" href="{% url 'mis_fees_list' %}"><i class="bi bi-currency-rupee nav-link-icon" aria-hidden="true"></i><span>Fees Details</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.mis.view_tenderdetail %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'mis_tender_list mis_tender_create mis_tender_edit mis_tender_delete' %}active{% endif %}" href="{% url 'mis_tender_list' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Tender</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.mis.view_receipt %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'mis_receipt_list mis_receipt_create mis_receipt_edit mis_receipt_delete' %}active{% endif %}" href="{% url 'mis_receipt_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Receipts</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.mis.view_expensedetail %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'mis_expense_list mis_expense_create mis_expense_edit mis_expense_delete' %}active{% endif %}" href="{% url 'mis_expense_list' %}"><i class="bi bi-wallet2 nav-link-icon" aria-hidden="true"></i><span>Expenses Details</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.mis.add_feesdetail %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'mis_bulk_import' %}active{% endif %}" href="{% url 'mis_bulk_import' %}"><i class="bi bi-cloud-upload nav-link-icon" aria-hidden="true"></i><span>Bulk upload</span></a>
-              {% endif %}
-            </div>
-          {% endif %}
-          {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
-            <div class="nav-section">
-              <div class="nav-section-title">DIR-3 eKYC</div>
-              <a class="nav-link {% if request.resolver_match.url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
-            </div>
-          {% endif %}
-          {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
-            <div class="nav-section">
-              <div class="nav-section-title">Reports</div>
-              {% if user.is_superuser or perms.reports.view_client_master_report or perms.reports.export_client_master_report %}
-                <a class="nav-link {% if request.resolver_match.url_name == 'reports_client_master' %}active{% endif %}" href="{% url 'reports_client_master' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Client Master Report</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.reports.access_reports_menu %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise' %}active{% endif %}" href="{% url 'reports_mis' %}"><i class="bi bi-table nav-link-icon" aria-hidden="true"></i><span>MIS Report</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'reports_director_mapping reports_director_mapping_csv' %}active{% endif %}" href="{% url 'reports_director_mapping' %}"><i class="bi bi-link-45deg nav-link-icon" aria-hidden="true"></i><span>Director Mapping Report</span></a>
-              {% endif %}
-              {% if user.is_superuser or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
-                <a class="nav-link {% if request.resolver_match.url_name in 'reports_dir3kyc reports_dir3kyc_csv' %}active{% endif %}" href="{% url 'reports_dir3kyc' %}"><i class="bi bi-clipboard-data nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC Report</span></a>
-              {% endif %}
-            </div>
-          {% endif %}
+          <div class="nav-accordion" data-sidebar-accordion>
+            {% include "includes/app_sidebar_nav.html" with nav_id_prefix="desktop" %}
+          </div>
         </nav>
         {% if user.is_superuser %}
           <div class="border-top pt-2 mt-3 flex-shrink-0">
@@ -208,70 +183,10 @@
       </div>
       <div class="offcanvas-body d-flex flex-column">
         <div class="flex-grow-1">
-        <a class="nav-link" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 nav-link-icon" aria-hidden="true"></i><span>Dashboard</span></a>
-        {% if user.is_superuser or perms.masters.view_client or perms.masters.view_clientgroup or perms.masters.approve_client or perms.masters.view_directormapping or perms.core.view_employee %}
-          <div class="nav-section mt-3">
-            <div class="nav-section-title">Masters</div>
-            {% if user.is_superuser or perms.masters.view_client %}
-              <a class="nav-link" href="{% url 'client_list' %}"><i class="bi bi-people nav-link-icon" aria-hidden="true"></i><span>Client Master</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.masters.view_clientgroup %}
-              <a class="nav-link" href="{% url 'client_group_list' %}"><i class="bi bi-collection nav-link-icon" aria-hidden="true"></i><span>Group Master</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.masters.approve_client %}
-              <a class="nav-link" href="{% url 'client_pending_list' %}"><i class="bi bi-patch-check nav-link-icon" aria-hidden="true"></i><span>Client approvals</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.masters.view_directormapping %}
-              <a class="nav-link" href="{% url 'director_list' %}"><i class="bi bi-diagram-3 nav-link-icon" aria-hidden="true"></i><span>Director Mapping</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.core.view_employee %}
-              <a class="nav-link" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
-            {% endif %}
+          <a class="nav-link" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 nav-link-icon" aria-hidden="true"></i><span>Dashboard</span></a>
+          <div class="nav-accordion mt-2" data-sidebar-accordion>
+            {% include "includes/app_sidebar_nav.html" with nav_id_prefix="mobile" %}
           </div>
-        {% endif %}
-        {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_tenderdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
-          <div class="nav-section mt-3">
-            <div class="nav-section-title">MIS</div>
-            {% if user.is_superuser or perms.mis.view_feesdetail %}
-              <a class="nav-link" href="{% url 'mis_fees_list' %}"><i class="bi bi-currency-rupee nav-link-icon" aria-hidden="true"></i><span>Fees Details</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.mis.view_tenderdetail %}
-              <a class="nav-link" href="{% url 'mis_tender_list' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Tender</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.mis.view_receipt %}
-              <a class="nav-link" href="{% url 'mis_receipt_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Receipts</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.mis.view_expensedetail %}
-              <a class="nav-link" href="{% url 'mis_expense_list' %}"><i class="bi bi-wallet2 nav-link-icon" aria-hidden="true"></i><span>Expenses Details</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.mis.add_feesdetail %}
-              <a class="nav-link" href="{% url 'mis_bulk_import' %}"><i class="bi bi-cloud-upload nav-link-icon" aria-hidden="true"></i><span>Bulk upload</span></a>
-            {% endif %}
-          </div>
-        {% endif %}
-        {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
-          <div class="nav-section mt-3">
-            <div class="nav-section-title">DIR-3 eKYC</div>
-            <a class="nav-link" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
-          </div>
-        {% endif %}
-        {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
-          <div class="nav-section mt-3">
-            <div class="nav-section-title">Reports</div>
-            {% if user.is_superuser or perms.reports.view_client_master_report or perms.reports.export_client_master_report %}
-              <a class="nav-link" href="{% url 'reports_client_master' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Client Master Report</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.reports.access_reports_menu %}
-              <a class="nav-link" href="{% url 'reports_mis' %}"><i class="bi bi-table nav-link-icon" aria-hidden="true"></i><span>MIS Report</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report %}
-              <a class="nav-link" href="{% url 'reports_director_mapping' %}"><i class="bi bi-link-45deg nav-link-icon" aria-hidden="true"></i><span>Director Mapping Report</span></a>
-            {% endif %}
-            {% if user.is_superuser or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
-              <a class="nav-link" href="{% url 'reports_dir3kyc' %}"><i class="bi bi-clipboard-data nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC Report</span></a>
-            {% endif %}
-          </div>
-        {% endif %}
         </div>
         {% if user.is_superuser %}
           <div class="border-top pt-2 mt-3 flex-shrink-0">
@@ -286,7 +201,31 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      (function () {
+        function bindSidebarAccordion(root) {
+          if (!root) return;
+          root.querySelectorAll(".nav-accordion-toggle").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              var item = btn.closest(".nav-accordion-item");
+              var panel = item && item.querySelector(".nav-accordion-panel");
+              if (!item || !panel) return;
+              var open = item.classList.contains("is-open");
+              if (open) {
+                item.classList.remove("is-open");
+                btn.setAttribute("aria-expanded", "false");
+                panel.hidden = true;
+              } else {
+                item.classList.add("is-open");
+                btn.setAttribute("aria-expanded", "true");
+                panel.hidden = false;
+              }
+            });
+          });
+        }
+        document.querySelectorAll("[data-sidebar-accordion]").forEach(bindSidebarAccordion);
+      })();
+    </script>
     {% block extra_js %}{% endblock %}
   </body>
 </html>
-

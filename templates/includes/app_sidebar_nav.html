@@ -1,0 +1,125 @@
+{# Collapsible sidebar sections: Masters, MIS, DIR-3 eKYC, Reports #}
+{% with url_name=request.resolver_match.url_name|default:"" nav_prefix=nav_id_prefix|default:"main" %}
+  {% if user.is_superuser or perms.masters.view_client or perms.masters.view_clientgroup or perms.masters.approve_client or perms.masters.view_directormapping or perms.core.view_employee %}
+    <div
+      class="nav-accordion-item{% if url_name in 'client_list client_create client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %} is-open{% endif %}"
+      data-nav-section="masters"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'client_list client_create client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-masters"
+      >
+        <i class="bi bi-database nav-link-icon" aria-hidden="true"></i>
+        <span>Masters</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %} hidden{% endif %}>
+        {% if user.is_superuser or perms.masters.view_client %}
+          <a class="nav-link {% if url_name in 'client_list client_create client_edit client_delete client_import' %}active{% endif %}" href="{% url 'client_list' %}"><i class="bi bi-people nav-link-icon" aria-hidden="true"></i><span>Client Master</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.masters.view_clientgroup %}
+          <a class="nav-link {% if url_name in 'client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template' %}active{% endif %}" href="{% url 'client_group_list' %}"><i class="bi bi-collection nav-link-icon" aria-hidden="true"></i><span>Group Master</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.masters.approve_client %}
+          <a class="nav-link {% if url_name in 'client_pending_list client_approve' %}active{% endif %}" href="{% url 'client_pending_list' %}"><i class="bi bi-patch-check nav-link-icon" aria-hidden="true"></i><span>Client approvals</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.masters.view_directormapping %}
+          <a class="nav-link {% if url_name in 'director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %}active{% endif %}" href="{% url 'director_list' %}"><i class="bi bi-diagram-3 nav-link-icon" aria-hidden="true"></i><span>Director Mapping</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.core.view_employee %}
+          <a class="nav-link {% if url_name in 'user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}active{% endif %}" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if user.is_superuser or perms.mis.view_feesdetail or perms.mis.view_tenderdetail or perms.mis.view_receipt or perms.mis.view_expensedetail %}
+    <div
+      class="nav-accordion-item{% if url_name in 'mis_fees_list mis_fees_create mis_fees_edit mis_fees_delete mis_tender_list mis_tender_create mis_tender_edit mis_tender_delete mis_receipt_list mis_receipt_create mis_receipt_edit mis_receipt_delete mis_expense_list mis_expense_create mis_expense_edit mis_expense_delete mis_bulk_import' %} is-open{% endif %}"
+      data-nav-section="mis"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'mis_fees_list mis_fees_create mis_fees_edit mis_fees_delete mis_tender_list mis_tender_create mis_tender_edit mis_tender_delete mis_receipt_list mis_receipt_create mis_receipt_edit mis_receipt_delete mis_expense_list mis_expense_create mis_expense_edit mis_expense_delete mis_bulk_import' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-mis"
+      >
+        <i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i>
+        <span>MIS</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div id="nav-panel-{{ nav_prefix }}-mis" class="nav-accordion-panel"{% if url_name not in 'mis_fees_list mis_fees_create mis_fees_edit mis_fees_delete mis_tender_list mis_tender_create mis_tender_edit mis_tender_delete mis_receipt_list mis_receipt_create mis_receipt_edit mis_receipt_delete mis_expense_list mis_expense_create mis_expense_edit mis_expense_delete mis_bulk_import' %} hidden{% endif %}>
+        {% if user.is_superuser or perms.mis.view_feesdetail %}
+          <a class="nav-link {% if url_name in 'mis_fees_list mis_fees_create mis_fees_edit mis_fees_delete' %}active{% endif %}" href="{% url 'mis_fees_list' %}"><i class="bi bi-currency-rupee nav-link-icon" aria-hidden="true"></i><span>Fees Details</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.mis.view_tenderdetail %}
+          <a class="nav-link {% if url_name in 'mis_tender_list mis_tender_create mis_tender_edit mis_tender_delete' %}active{% endif %}" href="{% url 'mis_tender_list' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Tender</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.mis.view_receipt %}
+          <a class="nav-link {% if url_name in 'mis_receipt_list mis_receipt_create mis_receipt_edit mis_receipt_delete' %}active{% endif %}" href="{% url 'mis_receipt_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Receipts</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.mis.view_expensedetail %}
+          <a class="nav-link {% if url_name in 'mis_expense_list mis_expense_create mis_expense_edit mis_expense_delete' %}active{% endif %}" href="{% url 'mis_expense_list' %}"><i class="bi bi-wallet2 nav-link-icon" aria-hidden="true"></i><span>Expenses Details</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.mis.add_feesdetail %}
+          <a class="nav-link {% if url_name == 'mis_bulk_import' %}active{% endif %}" href="{% url 'mis_bulk_import' %}"><i class="bi bi-cloud-upload nav-link-icon" aria-hidden="true"></i><span>Bulk upload</span></a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
+    <div
+      class="nav-accordion-item{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} is-open{% endif %}"
+      data-nav-section="dirkyc"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-dirkyc"
+      >
+        <i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i>
+        <span>DIR-3 eKYC</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div id="nav-panel-{{ nav_prefix }}-dirkyc" class="nav-accordion-panel"{% if url_name not in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} hidden{% endif %}>
+        <a class="nav-link {% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
+    <div
+      class="nav-accordion-item{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_index' %} is-open{% endif %}"
+      data-nav-section="reports"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_index' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-reports"
+      >
+        <i class="bi bi-bar-chart nav-link-icon" aria-hidden="true"></i>
+        <span>Reports</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div id="nav-panel-{{ nav_prefix }}-reports" class="nav-accordion-panel"{% if url_name not in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_index' %} hidden{% endif %}>
+        {% if user.is_superuser or perms.reports.view_client_master_report or perms.reports.export_client_master_report %}
+          <a class="nav-link {% if url_name == 'reports_client_master' %}active{% endif %}" href="{% url 'reports_client_master' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Client Master Report</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.reports.access_reports_menu %}
+          <a class="nav-link {% if url_name in 'reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise' %}active{% endif %}" href="{% url 'reports_mis' %}"><i class="bi bi-table nav-link-icon" aria-hidden="true"></i><span>MIS Report</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report %}
+          <a class="nav-link {% if url_name in 'reports_director_mapping reports_director_mapping_csv' %}active{% endif %}" href="{% url 'reports_director_mapping' %}"><i class="bi bi-link-45deg nav-link-icon" aria-hidden="true"></i><span>Director Mapping Report</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
+          <a class="nav-link {% if url_name in 'reports_dir3kyc reports_dir3kyc_csv' %}active{% endif %}" href="{% url 'reports_dir3kyc' %}"><i class="bi bi-clipboard-data nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC Report</span></a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endwith %}
