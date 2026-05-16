@@ -6,7 +6,9 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
+from core.branch_access import approved_clients_for_user, filter_mis_qs
 from core.decorators import require_perm
+from masters.models import Client
 
 from .forms import ExpenseDetailForm, FeesDetailForm, ReceiptForm
 from .models import ExpenseDetail, FeesDetail, Receipt
@@ -28,7 +30,7 @@ def _client_search_q(request):
 @require_perm("mis.view_feesdetail")
 def fees_list(request):
     q = _client_search_q(request)
-    qs = FeesDetail.objects.select_related("client").all()
+    qs = filter_mis_qs(FeesDetail.objects.select_related("client").all(), request.user)
     if q:
         qs = qs.filter(
             Q(client__client_name__icontains=q)
@@ -42,33 +44,33 @@ def fees_list(request):
 @require_perm("mis.add_feesdetail")
 def fees_create(request):
     if request.method == "POST":
-        form = FeesDetailForm(request.POST)
+        form = FeesDetailForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
             messages.success(request, f"Fees saved for {obj.client.client_name}.")
             return redirect("mis_fees_list")
     else:
-        form = FeesDetailForm()
+        form = FeesDetailForm(user=request.user)
     return render(request, "mis/fees_form.html", {"form": form, "mode": "create"})
 
 
 @require_perm("mis.change_feesdetail")
 def fees_edit(request, pk: int):
-    obj = get_object_or_404(FeesDetail, pk=pk)
+    obj = get_object_or_404(filter_mis_qs(FeesDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
-        form = FeesDetailForm(request.POST, instance=obj)
+        form = FeesDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
             messages.success(request, f"Fees updated for {obj.client.client_name}.")
             return redirect("mis_fees_list")
     else:
-        form = FeesDetailForm(instance=obj)
+        form = FeesDetailForm(instance=obj, user=request.user)
     return render(request, "mis/fees_form.html", {"form": form, "mode": "edit", "obj": obj})
 
 
 @require_perm("mis.delete_feesdetail")
 def fees_delete(request, pk: int):
-    obj = get_object_or_404(FeesDetail, pk=pk)
+    obj = get_object_or_404(filter_mis_qs(FeesDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         obj.delete()
@@ -80,7 +82,7 @@ def fees_delete(request, pk: int):
 @require_perm("mis.view_receipt")
 def receipt_list(request):
     q = _client_search_q(request)
-    qs = Receipt.objects.select_related("client").all()
+    qs = filter_mis_qs(Receipt.objects.select_related("client").all(), request.user)
     if q:
         qs = qs.filter(
             Q(client__client_name__icontains=q)
@@ -94,33 +96,33 @@ def receipt_list(request):
 @require_perm("mis.add_receipt")
 def receipt_create(request):
     if request.method == "POST":
-        form = ReceiptForm(request.POST)
+        form = ReceiptForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
             messages.success(request, f"Receipt saved for {obj.client.client_name}.")
             return redirect("mis_receipt_list")
     else:
-        form = ReceiptForm()
+        form = ReceiptForm(user=request.user)
     return render(request, "mis/receipt_form.html", {"form": form, "mode": "create"})
 
 
 @require_perm("mis.change_receipt")
 def receipt_edit(request, pk: int):
-    obj = get_object_or_404(Receipt, pk=pk)
+    obj = get_object_or_404(filter_mis_qs(Receipt.objects.all(), request.user), pk=pk)
     if request.method == "POST":
-        form = ReceiptForm(request.POST, instance=obj)
+        form = ReceiptForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
             messages.success(request, f"Receipt updated for {obj.client.client_name}.")
             return redirect("mis_receipt_list")
     else:
-        form = ReceiptForm(instance=obj)
+        form = ReceiptForm(instance=obj, user=request.user)
     return render(request, "mis/receipt_form.html", {"form": form, "mode": "edit", "obj": obj})
 
 
 @require_perm("mis.delete_receipt")
 def receipt_delete(request, pk: int):
-    obj = get_object_or_404(Receipt, pk=pk)
+    obj = get_object_or_404(filter_mis_qs(Receipt.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         obj.delete()
@@ -132,7 +134,7 @@ def receipt_delete(request, pk: int):
 @require_perm("mis.view_expensedetail")
 def expense_list(request):
     q = _client_search_q(request)
-    qs = ExpenseDetail.objects.select_related("client").all()
+    qs = filter_mis_qs(ExpenseDetail.objects.select_related("client").all(), request.user)
     if q:
         qs = qs.filter(
             Q(client__client_name__icontains=q)
@@ -146,33 +148,33 @@ def expense_list(request):
 @require_perm("mis.add_expensedetail")
 def expense_create(request):
     if request.method == "POST":
-        form = ExpenseDetailForm(request.POST)
+        form = ExpenseDetailForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
             messages.success(request, f"Expense saved for {obj.client.client_name}.")
             return redirect("mis_expense_list")
     else:
-        form = ExpenseDetailForm()
+        form = ExpenseDetailForm(user=request.user)
     return render(request, "mis/expense_form.html", {"form": form, "mode": "create"})
 
 
 @require_perm("mis.change_expensedetail")
 def expense_edit(request, pk: int):
-    obj = get_object_or_404(ExpenseDetail, pk=pk)
+    obj = get_object_or_404(filter_mis_qs(ExpenseDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
-        form = ExpenseDetailForm(request.POST, instance=obj)
+        form = ExpenseDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
             messages.success(request, f"Expense updated for {obj.client.client_name}.")
             return redirect("mis_expense_list")
     else:
-        form = ExpenseDetailForm(instance=obj)
+        form = ExpenseDetailForm(instance=obj, user=request.user)
     return render(request, "mis/expense_form.html", {"form": form, "mode": "edit", "obj": obj})
 
 
 @require_perm("mis.delete_expensedetail")
 def expense_delete(request, pk: int):
-    obj = get_object_or_404(ExpenseDetail, pk=pk)
+    obj = get_object_or_404(filter_mis_qs(ExpenseDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         obj.delete()
@@ -228,10 +230,8 @@ def expenses_import_template(request):
     return fees_import_template(request)
 
 
-def _client_by_id(client_id: str):
-    from masters.models import Client
-
-    return Client.approved_objects().filter(client_id__iexact=client_id.strip()).first()
+def _client_by_id(client_id: str, user=None):
+    return approved_clients_for_user(user).filter(client_id__iexact=client_id.strip()).first()
 
 
 @require_perm("mis.add_feesdetail")
@@ -268,7 +268,7 @@ def mis_bulk_import(request):
 
         with transaction.atomic():
             for r in rows:
-                c = _client_by_id(r.data["client_id"])
+                c = _client_by_id(r.data["client_id"], request.user)
                 if not c:
                     raise ValueError(f"Client not found for Client ID {r.data['client_id']}")
                 if (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -310,7 +310,7 @@ def mis_bulk_import(request):
         rows, file_errors = parse_mis_combined_csv(raw)
         for r in rows:
             cid = (r.data.get("client_id") or "").strip()
-            c = _client_by_id(cid) if cid else None
+            c = _client_by_id(cid, request.user) if cid else None
             if cid and not c:
                 r.errors.append("CLIENT_ID not found in Client Master.")
             elif c and (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -347,7 +347,7 @@ def fees_import(request):
             )
         with transaction.atomic():
             for r in rows:
-                c = _client_by_id(r.data["client_id"])
+                c = _client_by_id(r.data["client_id"], request.user)
                 if not c:
                     raise ValueError(f"Client not found for Client ID {r.data['client_id']}")
                 if (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -375,7 +375,7 @@ def fees_import(request):
         rows, file_errors = (parse_fees_xlsx(raw) if kind == "xlsx" else parse_fees_csv(raw))
         for r in rows:
             cid = (r.data.get("client_id") or "").strip()
-            c = _client_by_id(cid) if cid else None
+            c = _client_by_id(cid, request.user) if cid else None
             if cid and not c:
                 r.errors.append("CLIENT_ID not found in Client Master.")
             elif c and (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -412,7 +412,7 @@ def receipts_import(request):
             )
         with transaction.atomic():
             for r in rows:
-                c = _client_by_id(r.data["client_id"])
+                c = _client_by_id(r.data["client_id"], request.user)
                 if not c:
                     raise ValueError(f"Client not found for Client ID {r.data['client_id']}")
                 if (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -435,7 +435,7 @@ def receipts_import(request):
         rows, file_errors = (parse_receipts_xlsx(raw) if kind == "xlsx" else parse_receipts_csv(raw))
         for r in rows:
             cid = (r.data.get("client_id") or "").strip()
-            c = _client_by_id(cid) if cid else None
+            c = _client_by_id(cid, request.user) if cid else None
             if cid and not c:
                 r.errors.append("CLIENT_ID not found in Client Master.")
             elif c and (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -472,7 +472,7 @@ def expenses_import(request):
             )
         with transaction.atomic():
             for r in rows:
-                c = _client_by_id(r.data["client_id"])
+                c = _client_by_id(r.data["client_id"], request.user)
                 if not c:
                     raise ValueError(f"Client not found for Client ID {r.data['client_id']}")
                 if (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
@@ -504,7 +504,7 @@ def expenses_import(request):
         rows, file_errors = (parse_expenses_xlsx(raw) if kind == "xlsx" else parse_expenses_csv(raw))
         for r in rows:
             cid = (r.data.get("client_id") or "").strip()
-            c = _client_by_id(cid) if cid else None
+            c = _client_by_id(cid, request.user) if cid else None
             if cid and not c:
                 r.errors.append("CLIENT_ID not found in Client Master.")
             elif c and (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():

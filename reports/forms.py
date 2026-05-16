@@ -2,6 +2,7 @@ from datetime import date
 
 from django import forms
 
+from core.branch_access import branch_access_for_user
 from dirkyc.fy import fy_start_year, mis_report_financial_year_choices
 from masters.models import BRANCH_CHOICES, CLIENT_TYPES, Client
 
@@ -127,7 +128,7 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
     )
 
     branch = forms.ChoiceField(
-        choices=[("", "ALL")] + list(BRANCH_CHOICES),
+        choices=[("", "All")] + list(BRANCH_CHOICES),
         required=False,
         label="Branch",
         widget=forms.Select(attrs={"class": "form-select"}),
@@ -191,11 +192,17 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["from_date"].required = False
         self.fields["to_date"].required = False
         self.fields["financial_years"].choices = mis_report_financial_year_choices(today=date.today())
+        scope = branch_access_for_user(user)
+        if scope:
+            self.fields["branch"].choices = [(scope, scope)]
+            if not self.data:
+                self.fields["branch"].initial = scope
+            self.fields["branch"].help_text = "Your user account is limited to this branch."
 
     def clean(self):
         data = super().clean()

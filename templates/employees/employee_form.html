@@ -59,6 +59,12 @@
           <label class="form-label">Aadhar no.</label>
           {{ form.aadhar_no }}
         </div>
+        <div class="col-12 col-md-6 data-employee-only">
+          <label class="form-label">{{ form.branch_access.label }}</label>
+          {{ form.branch_access }}
+          {% if form.branch_access.help_text %}<div class="form-text">{{ form.branch_access.help_text }}</div>{% endif %}
+          {% if form.branch_access.errors %}<div class="text-danger small">{{ form.branch_access.errors }}</div>{% endif %}
+        </div>
 
         <div class="col-12 col-md-4">
           <label class="form-label">{{ form.password.label }}</label>
@@ -136,6 +142,14 @@
           <label class="form-label">Aadhar no.</label>
           {{ form.aadhar_no }}
         </div>
+        {% if employee.user_type != 'client' %}
+        <div class="col-12 col-md-6">
+          <label class="form-label">{{ form.branch_access.label }}</label>
+          {{ form.branch_access }}
+          {% if form.branch_access.help_text %}<div class="form-text">{{ form.branch_access.help_text }}</div>{% endif %}
+          {% if form.branch_access.errors %}<div class="text-danger small">{{ form.branch_access.errors }}</div>{% endif %}
+        </div>
+        {% endif %}
 
         <div class="col-12 col-md-4">
           <label class="form-label">{{ form.new_password.label }}</label>

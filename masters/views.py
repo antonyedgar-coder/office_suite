@@ -22,18 +22,21 @@ from .models import DIRECTOR_COMPANY_TYPES, DIRECTOR_ELIGIBLE_CLIENT_TYPES, Clie
 from .csv_import import parse_clients_csv, CSV_COLUMNS
 from .group_csv_import import GROUP_CSV_COLUMNS, parse_client_groups_csv
 
+from core.branch_access import filter_clients_by_branch
 from core.decorators import require_perm
 
 
 def client_master_queryset_for_user(user):
     """List / edit / delete visibility: all for superuser & approvers; others see approved + own pending."""
     if user.is_superuser or user.has_perm("masters.approve_client"):
-        return Client.objects.select_related("client_group").all().order_by("client_name")
-    return (
-        Client.objects.select_related("client_group")
-        .filter(Q(approval_status=Client.APPROVED) | Q(approval_status=Client.PENDING, created_by=user))
-        .order_by("client_name")
-    )
+        qs = Client.objects.select_related("client_group").all().order_by("client_name")
+    else:
+        qs = (
+            Client.objects.select_related("client_group")
+            .filter(Q(approval_status=Client.APPROVED) | Q(approval_status=Client.PENDING, created_by=user))
+            .order_by("client_name")
+        )
+    return filter_clients_by_branch(qs, user)
 
 
 def _apply_new_client_approval(client, user):
@@ -386,7 +389,12 @@ def client_import_template(request):
 @require_perm("masters.view_directormapping")
 def director_list(request):
     q = (request.GET.get("q") or "").strip().upper()
-    qs = DirectorMapping.objects.select_related("director", "company").all()
+    from core.branch_access import filter_director_mapping_qs
+
+    qs = filter_director_mapping_qs(
+        DirectorMapping.objects.select_related("director", "company").all(),
+        request.user,
+    )
     if q:
         qs = qs.filter(
             Q(director__client_name__icontains=q)
@@ -400,17 +408,21 @@ def director_list(request):
     return render(request, "masters/director_list.html", {"mappings": qs, "q": q})
 
 
-def _dm_director_queryset():
+def _dm_director_queryset(user=None):
+    from core.branch_access import approved_clients_for_user
+
     return (
-        Client.approved_objects()
+        approved_clients_for_user(user)
         .filter(client_type__in=sorted(DIRECTOR_ELIGIBLE_CLIENT_TYPES), is_director=True)
         .exclude(din="")
         .order_by("client_name")
     )
 
 
-def _dm_company_queryset():
-    return Client.approved_objects().filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
+def _dm_company_queryset(user=None):
+    from core.branch_access import approved_clients_for_user
+
+    return approved_clients_for_user(user).filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
 
 
 def _dm_client_options_json(qs, *, kind: str) -> list[dict[str, str]]:
@@ -431,13 +443,13 @@ def _dm_client_options_json(qs, *, kind: str) -> list[dict[str, str]]:
 
 @require_perm("masters.add_directormapping")
 def director_create(request):
-    dir_qs = _dm_director_queryset()
-    comp_qs = _dm_company_queryset()
+    dir_qs = _dm_director_queryset(request.user)
+    comp_qs = _dm_company_queryset(request.user)
     directors_opts = _dm_client_options_json(dir_qs, kind="director")
     companies_opts = _dm_client_options_json(comp_qs, kind="company")
 
     if request.method == "POST":
-        company_form = DirectorCompanyPickForm(request.POST, prefix="co")
+        company_form = DirectorCompanyPickForm(request.POST, prefix="co", user=request.user)
         formset = DirectorMappingRowFormSet(
             request.POST,
             prefix="lines",
@@ -503,7 +515,7 @@ def director_create(request):
             messages.success(request, f"Saved {created} director mapping(s) for {company.client_name}.")
             return redirect("director_list")
     else:
-        company_form = DirectorCompanyPickForm(prefix="co")
+        company_form = DirectorCompanyPickForm(prefix="co", user=request.user)
         formset = DirectorMappingRowFormSet(
             prefix="lines",
             form_kwargs={"director_queryset": dir_qs},
@@ -524,21 +536,25 @@ def director_create(request):
 
 @require_perm("masters.change_directormapping")
 def director_edit(request, pk: int):
-    director = get_object_or_404(DirectorMapping, pk=pk)
+    from core.branch_access import filter_director_mapping_qs
+
+    director = get_object_or_404(filter_director_mapping_qs(DirectorMapping.objects.all(), request.user), pk=pk)
     if request.method == "POST":
-        form = DirectorForm(request.POST, instance=director)
+        form = DirectorForm(request.POST, instance=director, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Director mapping updated.")
             return redirect("director_list")
     else:
-        form = DirectorForm(instance=director)
+        form = DirectorForm(instance=director, user=request.user)
     return render(request, "masters/director_form.html", {"form": form, "mode": "edit", "mapping": director})
 
 
 @require_perm("masters.delete_directormapping")
 def director_delete(request, pk: int):
-    mapping = get_object_or_404(DirectorMapping, pk=pk)
+    from core.branch_access import filter_director_mapping_qs
+
+    mapping = get_object_or_404(filter_director_mapping_qs(DirectorMapping.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         mapping.delete()
         messages.success(request, "Director mapping deleted.")

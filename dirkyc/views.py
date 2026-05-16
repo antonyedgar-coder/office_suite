@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
+from core.branch_access import filter_mis_qs
 from core.decorators import require_perm
 
 from .forms import Dir3KycForm
@@ -15,7 +16,7 @@ def _search_q(request) -> str:
 @require_perm("dirkyc.view_dir3kyc")
 def dir3kyc_list(request):
     q = _search_q(request)
-    qs = Dir3Kyc.objects.select_related("director").all()
+    qs = filter_mis_qs(Dir3Kyc.objects.select_related("director").all(), request.user, client_field="director")
     if q:
         qs = qs.filter(
             Q(director__client_name__icontains=q)
@@ -30,33 +31,39 @@ def dir3kyc_list(request):
 @require_perm("dirkyc.add_dir3kyc")
 def dir3kyc_create(request):
     if request.method == "POST":
-        form = Dir3KycForm(request.POST)
+        form = Dir3KycForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "DIR-3 KYC record saved.")
             return redirect("dirkyc_list")
     else:
-        form = Dir3KycForm()
+        form = Dir3KycForm(user=request.user)
     return render(request, "dirkyc/dir3kyc_form.html", {"form": form, "mode": "create"})
 
 
 @require_perm("dirkyc.change_dir3kyc")
 def dir3kyc_edit(request, pk: int):
-    obj = get_object_or_404(Dir3Kyc, pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(Dir3Kyc.objects.all(), request.user, client_field="director"),
+        pk=pk,
+    )
     if request.method == "POST":
-        form = Dir3KycForm(request.POST, instance=obj)
+        form = Dir3KycForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "DIR-3 KYC record updated.")
             return redirect("dirkyc_list")
     else:
-        form = Dir3KycForm(instance=obj)
+        form = Dir3KycForm(instance=obj, user=request.user)
     return render(request, "dirkyc/dir3kyc_form.html", {"form": form, "mode": "edit", "obj": obj})
 
 
 @require_perm("dirkyc.delete_dir3kyc")
 def dir3kyc_delete(request, pk: int):
-    obj = get_object_or_404(Dir3Kyc, pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(Dir3Kyc.objects.all(), request.user, client_field="director"),
+        pk=pk,
+    )
     if request.method == "POST":
         obj.delete()
         messages.success(request, "DIR-3 KYC record deleted.")

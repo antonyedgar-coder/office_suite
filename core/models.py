@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from .branch_access import EMPLOYEE_BRANCH_ACCESS_CHOICES
+
 
 class UserManager(BaseUserManager):
     use_in_migrations = True
@@ -91,6 +93,14 @@ class Employee(models.Model):
         help_text="Emergency / alternate contact name",
     )
     aadhar_no = models.CharField(max_length=12, blank=True)
+    branch_access = models.CharField(
+        "Branch access",
+        max_length=32,
+        choices=EMPLOYEE_BRANCH_ACCESS_CHOICES,
+        blank=True,
+        default="",
+        help_text="All branches, or restrict to Trivandrum or Nagercoil only.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

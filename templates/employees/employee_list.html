@@ -23,6 +23,7 @@
             <th>Type</th>
             <th>Official email</th>
             <th>DOJ</th>
+            <th>Branch access</th>
             <th>Active</th>
             <th></th>
           </tr>
@@ -43,6 +44,9 @@
               </td>
               <td class="mono">{{ e.user.email }}</td>
               <td>{{ e.date_of_joining|default:"—" }}</td>
+              <td>
+                {% if e.user_type == 'client' %}—{% elif e.branch_access %}{{ e.branch_access }}{% else %}All{% endif %}
+              </td>
               <td>{% if e.user.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}</td>
               <td class="text-end">
                 {% if perms.core.change_employee %}

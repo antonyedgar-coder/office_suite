@@ -1,0 +1,92 @@
+<div class="col-12 col-md-4">
+  <label class="form-label">Date</label>
+  {{ form.date }}
+  {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+</div>
+<div class="col-12 col-md-5">
+  <label class="form-label">Client name</label>
+  <input class="form-control" id="clientSearch" list="clientSuggestions" placeholder="Type client name or PAN…" autocomplete="off" />
+  <datalist id="clientSuggestions"></datalist>
+  {{ form.client }}
+  {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
+  {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
+  <div class="form-text">Start typing (name/PAN) and select the suggestion.</div>
+</div>
+<div class="col-12 col-md-3">
+  <label class="form-label">Branch</label>
+  <input class="form-control" id="clientBranch" readonly disabled placeholder="Select a client" />
+  <div class="form-text">Filled automatically from Client Master.</div>
+</div>
+
+<script>
+  (function () {
+    var search = document.getElementById("clientSearch");
+    var hidden = document.querySelector("input[data-mis-client-hidden='1']");
+    var branchEl = document.getElementById("clientBranch");
+    var list = document.getElementById("clientSuggestions");
+    if (!search || !hidden || !list) return;
+
+    var clients = [];
+    {% for opt in form.fields.client.queryset %}
+      clients.push({
+        id: "{{ opt.pk }}",
+        label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}",
+        branch: "{{ opt.branch|escapejs }}"
+      });
+    {% endfor %}
+
+    function setBranchFromMatch(match) {
+      if (!branchEl) return;
+      branchEl.value = match && match.branch ? match.branch : "";
+    }
+
+    function renderSuggestions(q) {
+      list.innerHTML = "";
+      var qq = (q || "").toLowerCase().trim();
+      var shown = 0;
+      for (var i = 0; i < clients.length; i++) {
+        var c = clients[i];
+        var t = (c.label || "").toLowerCase();
+        if (!qq || t.indexOf(qq) !== -1) {
+          var o = document.createElement("option");
+          o.value = c.label;
+          list.appendChild(o);
+          shown++;
+          if (shown >= 50) break;
+        }
+      }
+    }
+
+    function syncHiddenFromLabel() {
+      var v = (search.value || "").trim();
+      var match = null;
+      for (var i = 0; i < clients.length; i++) {
+        if (clients[i].label === v) {
+          match = clients[i];
+          break;
+        }
+      }
+      hidden.value = match ? match.id : "";
+      setBranchFromMatch(match);
+    }
+
+    if (hidden.value) {
+      for (var i = 0; i < clients.length; i++) {
+        if (clients[i].id === hidden.value) {
+          search.value = clients[i].label;
+          setBranchFromMatch(clients[i]);
+          break;
+        }
+      }
+    }
+
+    renderSuggestions("");
+    search.addEventListener("input", function () {
+      hidden.value = "";
+      setBranchFromMatch(null);
+      renderSuggestions(search.value);
+    });
+    search.addEventListener("change", syncHiddenFromLabel);
+    search.addEventListener("blur", syncHiddenFromLabel);
+  })();
+</script>

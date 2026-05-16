@@ -160,16 +160,18 @@ class DirectorForm(forms.ModelForm):
             self.add_error("reason_for_cessation", "Reason for cessation should be blank unless a cessation date is entered.")
         return data
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
 
+        from core.branch_access import approved_clients_for_user
+
         dir_qs = (
-            Client.approved_objects()
+            approved_clients_for_user(user)
             .filter(client_type__in=sorted(DIRECTOR_ELIGIBLE_CLIENT_TYPES), is_director=True)
             .exclude(din="")
             .order_by("client_name")
         )
-        comp_qs = Client.approved_objects().filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
+        comp_qs = approved_clients_for_user(user).filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
         self.fields["director"].queryset = dir_qs
         self.fields["company"].queryset = comp_qs
         self.fields["appointed_date"].required = False
@@ -197,9 +199,11 @@ class DirectorCompanyPickForm(forms.Form):
         widget=forms.HiddenInput(attrs={"data-dir-mapping-hidden": "company"}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        comp_qs = Client.approved_objects().filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
+        from core.branch_access import approved_clients_for_user
+
+        comp_qs = approved_clients_for_user(user).filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
         self.fields["company"].queryset = comp_qs
 
 

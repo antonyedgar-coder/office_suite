@@ -6,21 +6,7 @@
   <div class="card p-3">
     <form method="post" class="row g-3">
       {% csrf_token %}
-
-      <div class="col-12 col-md-4">
-        <label class="form-label">Date</label>
-        {{ form.date }}
-        {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
-      </div>
-      <div class="col-12 col-md-8">
-        <label class="form-label">Client name</label>
-        <input class="form-control" id="clientSearch" list="clientSuggestions" placeholder="Type client name or PAN…" autocomplete="off" />
-        <datalist id="clientSuggestions"></datalist>
-        {{ form.client }}
-        {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
-        {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
-        <div class="form-text">Start typing (e.g. <strong>AN</strong> / <strong>ANT</strong> / PAN). Select the suggestion to lock the client.</div>
-      </div>
+      {% include "mis/includes/client_autocomplete_fields.html" %}
 
       <div class="col-12 col-md-4">
         <label class="form-label">Fees amount</label>
@@ -48,69 +34,4 @@
       </div>
     </form>
   </div>
-
-  <script>
-    (function () {
-      var search = document.getElementById("clientSearch");
-      var hidden = document.querySelector("input[data-mis-client-hidden='1']");
-      var list = document.getElementById("clientSuggestions");
-      if (!search || !hidden || !list) return;
-
-      // Build suggestions from a pre-rendered client list (name — PAN).
-      // We can’t query the server from here (no API yet), so we embed from DOM once.
-      // The hidden field stores the actual Client PK (client_id like A00001).
-      var clients = [];
-      {% for opt in form.fields.client.queryset %}
-        clients.push({ id: "{{ opt.pk }}", label: "{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}" });
-      {% endfor %}
-
-      function renderSuggestions(q) {
-        list.innerHTML = "";
-        var qq = (q || "").toLowerCase().trim();
-        var shown = 0;
-        for (var i = 0; i < clients.length; i++) {
-          var c = clients[i];
-          var t = (c.label || "").toLowerCase();
-          if (!qq || t.indexOf(qq) !== -1) {
-            var o = document.createElement("option");
-            o.value = c.label;
-            list.appendChild(o);
-            shown++;
-            if (shown >= 50) break; // keep it snappy
-          }
-        }
-      }
-
-      function syncHiddenFromLabel() {
-        var v = (search.value || "").trim();
-        var match = null;
-        for (var i = 0; i < clients.length; i++) {
-          if (clients[i].label === v) {
-            match = clients[i];
-            break;
-          }
-        }
-        hidden.value = match ? match.id : "";
-      }
-
-      // On load, if hidden already set (edit), fill the visible label.
-      if (hidden.value) {
-        for (var i = 0; i < clients.length; i++) {
-          if (clients[i].id === hidden.value) {
-            search.value = clients[i].label;
-            break;
-          }
-        }
-      }
-
-      renderSuggestions("");
-      search.addEventListener("input", function () {
-        hidden.value = "";
-        renderSuggestions(search.value);
-      });
-      search.addEventListener("change", syncHiddenFromLabel);
-      search.addEventListener("blur", syncHiddenFromLabel);
-    })();
-  </script>
 {% endblock %}
-

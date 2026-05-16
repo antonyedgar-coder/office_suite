@@ -26,6 +26,7 @@ from .forms import (
     MISTypeWiseFilterForm,
 )
 
+from core.branch_access import approved_clients_for_user, filter_clients_by_branch, report_branch_filter
 from core.decorators import require_perm
 
 
@@ -207,7 +208,7 @@ def report_index(request):
 @require_perm("reports.view_client_master_report")
 def client_master_report(request):
     form = ClientMasterReportFilterForm(request.GET or None)
-    base = Client.approved_objects().select_related("client_group")
+    base = filter_clients_by_branch(Client.approved_objects().select_related("client_group"), request.user)
     qs = base.all()
     count = 0
     clients = []
@@ -234,7 +235,7 @@ def client_master_report(request):
 
 @require_perm("reports.export_client_master_report")
 def client_master_report_csv(request):
-    base = Client.approved_objects().select_related("client_group")
+    base = filter_clients_by_branch(Client.approved_objects().select_related("client_group"), request.user)
     if not request.GET:
         qs = base.order_by("client_name")
     else:
@@ -623,7 +624,7 @@ def mis_report(request):
     Single MIS report page with flexible details selection.
     Columns: Date, Client ID, Client Name, PAN, Type + selected details columns.
     """
-    form = MISFlexibleReportForm(request.GET or None)
+    form = MISFlexibleReportForm(request.GET or None, user=request.user)
     rows = []
     totals = {"fees": 0, "gst": 0, "receipts": 0, "expenses": 0}
     details = ["FEES", "GST", "RECEIPTS", "EXPENSES"]
@@ -655,7 +656,7 @@ def mis_report(request):
             name_m = form.cleaned_data.get("client_name") or ""
             pan_m = form.cleaned_data.get("pan") or ""
             ct_m = form.cleaned_data.get("client_type") or ""
-            br_m = form.cleaned_data.get("branch") or ""
+            br_m = report_branch_filter(request.user, form.cleaned_data.get("branch") or "")
 
             month_slots_by_fy: dict[str, list[dict]] = {}
             for fy in fy_list:
@@ -715,7 +716,7 @@ def mis_report(request):
             f, t = _dt_range(form)
             # consolidated type-wise totals for period (ignore client id/name/pan filters)
             ct = (form.cleaned_data.get("client_type") or "").strip()
-            br = (form.cleaned_data.get("branch") or "").strip()
+            br = report_branch_filter(request.user, form.cleaned_data.get("branch") or "")
             fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             exp_q = ExpenseDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
@@ -769,7 +770,7 @@ def mis_report(request):
             name_f = (form.cleaned_data.get("client_name") or "").strip().upper()
             pan_f = (form.cleaned_data.get("pan") or "").strip().upper()
             ct_f = (form.cleaned_data.get("client_type") or "").strip()
-            br_f = (form.cleaned_data.get("branch") or "").strip()
+            br_f = report_branch_filter(request.user, form.cleaned_data.get("branch") or "")
 
             fees_q = FeesDetail.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
             rec_q = Receipt.objects.filter(client__approval_status=Client.APPROVED, date__gte=f, date__lte=t)
@@ -868,12 +869,12 @@ def mis_report(request):
                 client_name=form.cleaned_data.get("client_name") or "",
                 pan=form.cleaned_data.get("pan") or "",
                 client_type=form.cleaned_data.get("client_type") or "",
-                branch=form.cleaned_data.get("branch") or "",
+                branch=report_branch_filter(request.user, form.cleaned_data.get("branch") or ""),
             )
             rows, mis_metric_columns, totals = _mis_sparse_metric_table(rows, detail_order)
 
     client_suggestions = list(
-        Client.approved_objects().only("client_id", "client_name", "pan").order_by("client_name")[:3000]
+        approved_clients_for_user(request.user).only("client_id", "client_name", "pan").order_by("client_name")[:3000]
     )
     return render(
         request,
@@ -904,7 +905,7 @@ def mis_report(request):
 
 @require_perm("reports.export_mis_report")
 def mis_report_csv(request):
-    form = MISFlexibleReportForm(request.GET or None)
+    form = MISFlexibleReportForm(request.GET or None, user=request.user)
     if not request.GET or not form.is_valid():
         return HttpResponse("Invalid filters.", status=400)
     details = form.selected_details()
@@ -920,7 +921,7 @@ def mis_report_csv(request):
         name_m = form.cleaned_data.get("client_name") or ""
         pan_m = form.cleaned_data.get("pan") or ""
         ct_m = form.cleaned_data.get("client_type") or ""
-        br_m = form.cleaned_data.get("branch") or ""
+        br_m = report_branch_filter(request.user, form.cleaned_data.get("branch") or "")
         month_slots_by_fy: dict[str, list[dict]] = {}
         for fy in fy_list:
             slots = _mis_month_slots_for_fy(

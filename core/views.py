@@ -89,8 +89,10 @@ def dashboard_view(request):
     today = date.today()
 
     # Clients by type
+    from core.branch_access import approved_clients_for_user, filter_mis_qs
+
     client_type_counts_qs = (
-        Client.approved_objects().values("client_type")
+        approved_clients_for_user(request.user).values("client_type")
         .annotate(count=Count("client_id"))
         .order_by("client_type")
     )
@@ -109,15 +111,27 @@ def dashboard_view(request):
         date__lte=fy_through,
     )
 
-    def _dec_sum(v):
+    def _dec_sum(qs, field: str):
+        v = qs.aggregate(t=Sum(field))["t"]
         if v is None:
             return Decimal("0.00")
         return Decimal(v)
 
-    mis_fy_fees = _dec_sum(FeesDetail.objects.filter(**fy_mis_filter).aggregate(t=Sum("total_amount"))["t"])
-    mis_fy_receipts = _dec_sum(Receipt.objects.filter(**fy_mis_filter).aggregate(t=Sum("amount_received"))["t"])
-    mis_fy_expenses = _dec_sum(ExpenseDetail.objects.filter(**fy_mis_filter).aggregate(t=Sum("expenses_paid"))["t"])
-    director_mapping_count = DirectorMapping.objects.count()
+    mis_fy_fees = _dec_sum(
+        filter_mis_qs(FeesDetail.objects.filter(**fy_mis_filter), request.user),
+        "total_amount",
+    )
+    mis_fy_receipts = _dec_sum(
+        filter_mis_qs(Receipt.objects.filter(**fy_mis_filter), request.user),
+        "amount_received",
+    )
+    mis_fy_expenses = _dec_sum(
+        filter_mis_qs(ExpenseDetail.objects.filter(**fy_mis_filter), request.user),
+        "expenses_paid",
+    )
+    from core.branch_access import filter_director_mapping_qs
+
+    director_mapping_count = filter_director_mapping_qs(DirectorMapping.objects.all(), request.user).count()
 
     # DIR-3 KYC pending count as on date:
     # pending if never filed OR as_of >= earliest_next_allowed_from(last filing)
@@ -127,7 +141,7 @@ def dashboard_view(request):
         .values("date_done")[:1]
     )
     directors = (
-        Client.approved_objects()
+        approved_clients_for_user(request.user)
         .filter(client_type__in=sorted(DIRECTOR_ELIGIBLE_CLIENT_TYPES), is_director=True)
         .exclude(din="")
         .annotate(last_kyc_date=Subquery(last_sq))

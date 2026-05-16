@@ -63,6 +63,7 @@ class EmployeeCreateForm(forms.ModelForm):
             "date_of_joining",
             "contact_person",
             "aadhar_no",
+            "branch_access",
         ]
         widgets = {
             "user_type": forms.Select(attrs={"class": "form-select", "id": "id_user_type"}),
@@ -75,6 +76,11 @@ class EmployeeCreateForm(forms.ModelForm):
         self.fields["date_of_joining"].required = False
         self.fields["full_name"].label = "Name of employee"
         self.fields["full_name"].help_text = "Required when type is Employee."
+        self.fields["branch_access"].widget.attrs.setdefault("class", "form-select")
+        self.fields["branch_access"].help_text = (
+            "All branches: full access. Trivandrum or Nagercoil: user sees only that branch "
+            "in Client Master, MIS, directors, and DIR-3 KYC."
+        )
 
         for name, field in self.fields.items():
             if name in (
@@ -195,6 +201,7 @@ class EmployeeEditForm(forms.ModelForm):
             "date_of_joining",
             "contact_person",
             "aadhar_no",
+            "branch_access",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -209,9 +216,19 @@ class EmployeeEditForm(forms.ModelForm):
                 pk__in=manageable_permissions().values_list("pk", flat=True)
             )
 
+        self.fields["branch_access"].widget.attrs.setdefault("class", "form-select")
+
         if self.instance.pk and self.instance.user_type == Employee.USER_TYPE_CLIENT:
             self.fields["full_name"].label = "Client name (from Client Master)"
-            for name in ("full_name", "contact_no", "address", "date_of_joining", "contact_person", "aadhar_no"):
+            for name in (
+                "full_name",
+                "contact_no",
+                "address",
+                "date_of_joining",
+                "contact_person",
+                "aadhar_no",
+                "branch_access",
+            ):
                 if name in self.fields:
                     self.fields[name].disabled = True
         else:
