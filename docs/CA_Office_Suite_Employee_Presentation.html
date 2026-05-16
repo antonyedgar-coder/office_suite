@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CA Office Suite — Employee Training</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent2: #a78bfa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+    }
+    .deck { height: 100vh; position: relative; }
+    .slide {
+      display: none;
+      height: 100vh;
+      padding: 3rem 4rem 5rem;
+      flex-direction: column;
+      justify-content: center;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .slide.active { display: flex; }
+    .slide h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+    .slide h2 {
+      font-size: 1.35rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+    }
+    .slide p, .slide li {
+      font-size: 1.2rem;
+      line-height: 1.55;
+      color: #e2e8f0;
+    }
+    .slide ul { margin: 0.5rem 0 0 1.5rem; }
+    .slide li { margin-bottom: 0.55rem; }
+    .slide .subtitle { color: var(--muted); font-size: 1.15rem; margin-bottom: 2rem; }
+    .slide table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+      font-size: 1.05rem;
+    }
+    .slide th, .slide td {
+      border: 1px solid #334155;
+      padding: 0.6rem 0.85rem;
+      text-align: left;
+    }
+    .slide th { background: var(--card); color: var(--accent); }
+    .highlight {
+      background: linear-gradient(90deg, #0ea5e933, #8b5cf633);
+      border-left: 4px solid var(--accent);
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+      font-size: 1.1rem;
+    }
+    .title-slide {
+      text-align: center;
+      justify-content: center;
+      align-items: center;
+    }
+    .title-slide h1 { font-size: 2.8rem; }
+    .title-slide .brand { color: var(--accent2); font-size: 1rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 1rem; }
+    .controls {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 0.75rem 1.5rem;
+      background: rgba(15, 23, 42, 0.92);
+      border-top: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .controls button {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .controls button:hover { border-color: var(--accent); color: var(--accent); }
+    .progress { color: var(--accent); font-weight: 600; }
+    @media print {
+      .controls { display: none; }
+      .slide { display: flex !important; page-break-after: always; height: auto; min-height: 100vh; }
+      body { overflow: visible; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <section class="slide title-slide active">
+      <p class="brand">CA Office Suite</p>
+      <h1>Business Rules &amp; Logic</h1>
+      <p class="subtitle">Training for office staff — how the system applies rules</p>
+      <p class="subtitle" style="margin-top: 2rem; font-size: 0.95rem;">← → arrow keys &nbsp;|&nbsp; F11 fullscreen &nbsp;|&nbsp; Ctrl+P for PDF</p>
+    </section>
+
+    <section class="slide">
+      <h2>What we cover</h2>
+      <ul>
+        <li>Indian Financial Year (FY)</li>
+        <li>Client Master &amp; approval</li>
+        <li>MIS, Tender &amp; dashboard totals</li>
+        <li>Director Mapping</li>
+        <li>DIR-3 eKYC cadence</li>
+        <li>Reports &amp; permissions</li>
+        <li>User accounts &amp; branch access</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Four main areas</h2>
+      <table>
+        <tr><th>Area</th><th>Contents</th></tr>
+        <tr><td><strong>Masters</strong></td><td>Clients, Groups, Director Mapping, Users</td></tr>
+        <tr><td><strong>MIS</strong></td><td>Fees, Receipts, Expenses, Tender, Bulk upload</td></tr>
+        <tr><td><strong>DIR-3 eKYC</strong></td><td>Director KYC filings</td></tr>
+        <tr><td><strong>Reports</strong></td><td>Master, MIS, Mapping, DIR-3 (with export)</td></tr>
+      </table>
+      <p class="highlight" style="margin-top: 1.5rem;">Menu items depend on your <strong>permissions</strong> — ask a superuser if something is missing.</p>
+    </section>
+
+    <section class="slide">
+      <h2>Indian Financial Year</h2>
+      <ul>
+        <li>FY runs <strong>1 April → 31 March</strong></li>
+        <li>Label example: 1 Apr 2026 – 31 Mar 2027 = <strong>2026-27</strong></li>
+        <li>Used on dashboard MIS totals, MIS Report, DIR-3 next-filing rules</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Client Master — Approval</h2>
+      <table>
+        <tr><th>Status</th><th>Meaning</th></tr>
+        <tr><td><strong>Pending</strong></td><td>Not usable in MIS, Mapping, or DIR-3</td></tr>
+        <tr><td><strong>Approved</strong></td><td>Full use everywhere</td></tr>
+      </table>
+      <ul style="margin-top: 1.25rem;">
+        <li>New client by staff → <strong>pending</strong> until approver accepts</li>
+        <li>Edit approved client by staff → <strong>pending again</strong></li>
+        <li>Superuser → approved immediately</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Client Master — Key rules</h2>
+      <ul>
+        <li><strong>Director + DIN:</strong> only Individual / Foreign Citizen; not Branch</li>
+        <li>PAN, name, and client type must be consistent (system validates)</li>
+        <li>Auto <strong>Client ID</strong> (e.g. AN0001) by name + branch</li>
+        <li><strong>Delete</strong> blocked if MIS, mapping, or DIR-3 still linked</li>
+        <li>Bulk import: preview first; imports may be pending until approved</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Director Mapping</h2>
+      <ul>
+        <li>Director: approved Individual/Foreign Citizen, Is Director, with DIN</li>
+        <li>Company: Pvt/Public Ltd, LLP, Nidhi, FPO, Sec 8 Co</li>
+        <li>Only <strong>one active</strong> appointment per director–company (end old before new)</li>
+        <li>Cessation needs a reason; dates must be logical</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>MIS — Who &amp; what</h2>
+      <ul>
+        <li>Only <strong>approved</strong> clients (from suggestions)</li>
+        <li>Branch-restricted users: their branch only</li>
+        <li><strong>Fees + GST = Total</strong> (auto-calculated)</li>
+        <li>No negative amounts; <strong>no GST when fees = 0</strong></li>
+        <li>Tender: enter fees and/or deposit (non-negative)</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>MIS — Dashboard FY card</h2>
+      <ul>
+        <li>Period: <strong>1 April (current FY) → today</strong></li>
+        <li>Clients: <strong>approved only</strong></li>
+        <li>Totals: fees (incl. GST), receipts, expenses</li>
+        <li>Tender is <strong>not</strong> in this dashboard card (use MIS Report for tender)</li>
+        <li>Same approved-client rule as <strong>Reports → MIS Report</strong></li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>MIS — Bulk upload</h2>
+      <ul>
+        <li>CLIENT_ID must exist, be approved, name must match file</li>
+        <li>Same GST rule: no GST if fees are zero/blank</li>
+        <li>Preview → confirm (all-or-nothing)</li>
+        <li>Your permissions control which types you can add (fees/receipts/expenses)</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>DIR-3 eKYC — Cadence</h2>
+      <p>Based on <strong>financial year</strong> of last filing, not calendar years from the date:</p>
+      <div class="highlight">
+        Filing anywhere in <strong>FY 2026-27</strong><br />
+        → next filing allowed from <strong>1 April 2029</strong> (FY 2029-30)
+      </div>
+      <p style="margin-top: 1rem;">System blocks earlier dates and shows the earliest allowed date.</p>
+    </section>
+
+    <section class="slide">
+      <h2>DIR-3 — Dashboard “pending”</h2>
+      <ul>
+        <li><strong>Never filed</strong>, or</li>
+        <li><strong>Today ≥ next allowed date</strong> from last filing</li>
+        <li>Only approved directors (with DIN, director flag, eligible type)</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Reports — Overview</h2>
+      <ul>
+        <li>MIS figures: <strong>approved clients only</strong></li>
+        <li>Branch filter follows your access</li>
+        <li><strong>CSV export</strong> needs separate export permission</li>
+        <li>MIS Report: transactions, client-wise, type-wise, month-wise (from FY 2026-27)</li>
+        <li>Director report: active appointments <strong>as on</strong> a date</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Permissions &amp; branches</h2>
+      <ul>
+        <li>Superuser: full access</li>
+        <li>Others: menus/actions per assigned permissions (access groups)</li>
+        <li>Employee <strong>branch access</strong>: blank = all; else Trivandrum or Nagercoil only</li>
+        <li>Activity log: superusers only</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>User accounts</h2>
+      <ul>
+        <li><strong>Inactive</strong> users cannot sign in</li>
+        <li>Cannot deactivate/delete yourself or superusers</li>
+        <li>May be forced to change password on first login</li>
+        <li>Client-user email must match one Client Master record</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Quick troubleshooting</h2>
+      <table>
+        <tr><th>Problem</th><th>Likely cause</th></tr>
+        <tr><td>Client not in MIS</td><td>Pending or wrong branch</td></tr>
+        <tr><td>Totals don’t match entries</td><td>Pending clients excluded; FY YTD only</td></tr>
+        <tr><td>DIR-3 rejected</td><td>Before next allowed FY date</td></tr>
+        <tr><td>Can’t delete client</td><td>Still in MIS / mapping / DIR-3</td></tr>
+        <tr><td>Missing menu</td><td>No permission</td></tr>
+      </table>
+    </section>
+
+    <section class="slide title-slide">
+      <h1>Questions?</h1>
+      <p class="subtitle" style="margin-top: 1.5rem;">Full reference: <strong>CA_Office_Suite_Business_Rules.md</strong></p>
+      <p class="subtitle">Contact your system administrator for permissions and approvals.</p>
+    </section>
+
+  </div>
+
+  <div class="controls">
+    <button type="button" id="prev">← Previous</button>
+    <span class="progress" id="progress">1 / 16</span>
+    <button type="button" id="next">Next →</button>
+  </div>
+
+  <script>
+    const slides = [...document.querySelectorAll(".slide")];
+    let i = 0;
+    const progress = document.getElementById("progress");
+    function show(n) {
+      i = Math.max(0, Math.min(n, slides.length - 1));
+      slides.forEach((s, j) => s.classList.toggle("active", j === i));
+      progress.textContent = (i + 1) + " / " + slides.length;
+    }
+    document.getElementById("prev").onclick = () => show(i - 1);
+    document.getElementById("next").onclick = () => show(i + 1);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); show(i + 1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); show(i - 1); }
+      if (e.key === "Home") show(0);
+      if (e.key === "End") show(slides.length - 1);
+    });
+    show(0);
+  </script>
+</body>
+</html>
