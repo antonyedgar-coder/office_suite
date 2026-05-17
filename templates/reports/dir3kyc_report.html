@@ -2,6 +2,10 @@
 {% block title %}DIR-3 KYC Report — CA Office Suite{% endblock %}
 {% block page_title %}DIR-3 KYC Report{% endblock %}
 
+{% block extra_head %}
+  {% include "reports/includes/report_filter_styles.html" %}
+{% endblock %}
+
 {% block content %}
   <div class="card p-3 mb-3">
     <div class="fw-semibold mb-2">Filters</div>
@@ -10,30 +14,30 @@
       Director DIN and name fields suggest matches from Client Master as you type.
     </div>
 
-    <form method="get" class="row g-2" id="dir3ReportForm">
-      <div class="col-12 col-md-6">
+    <form method="get" class="report-filter-form" id="dir3ReportForm">
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">{{ form.view_mode.label }}</label>
         {{ form.view_mode }}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.director_scope.label }}</label>
         {{ form.director_scope }}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.as_of_date.label }}</label>
         {{ form.as_of_date }}
         {% if form.as_of_date.help_text %}<div class="form-text">{{ form.as_of_date.help_text }}</div>{% endif %}
       </div>
 
-      <div class="col-12"><div class="text-secondary small fw-semibold mt-1">Director search</div></div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-section-title">Director search</div>
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.director_din.label }}</label>
         <div class="position-relative">
           {{ form.director_din }}
           <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_din" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
         </div>
       </div>
-      <div class="col-12 col-md-9">
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">{{ form.director_name.label }}</label>
         <div class="position-relative">
           {{ form.director_name }}
@@ -41,33 +45,33 @@
         </div>
       </div>
 
-      <div class="col-12"><div class="text-secondary small fw-semibold mt-1">Filings view</div></div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-section-title">Filings view</div>
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.date_done_from.label }}</label>
         {{ form.date_done_from }}
         {% if form.date_done_from.errors %}<div class="text-danger small">{{ form.date_done_from.errors }}</div>{% endif %}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.date_done_to.label }}</label>
         {{ form.date_done_to }}
         {% if form.date_done_to.errors %}<div class="text-danger small">{{ form.date_done_to.errors }}</div>{% endif %}
       </div>
 
-      <div class="col-12"><div class="text-secondary small fw-semibold mt-1">Compliance view</div></div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-section-title">Compliance view</div>
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.last_kyc_fy.label }}</label>
         {{ form.last_kyc_fy }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.date_last_kyc_from.label }}</label>
         {{ form.date_last_kyc_from }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.date_last_kyc_to.label }}</label>
         {{ form.date_last_kyc_to }}
         {% if form.date_last_kyc_to.errors %}<div class="text-danger small">{{ form.date_last_kyc_to.errors }}</div>{% endif %}
       </div>
-      <div class="col-12">
+      <div class="report-filter-field--full">
         <div class="form-check mt-1">
           {{ form.din_not_done_3fy }}
           <label class="form-check-label small" for="{{ form.din_not_done_3fy.id_for_label }}">{{ form.din_not_done_3fy.label }}</label>
@@ -75,9 +79,9 @@
       </div>
 
       {% if form.non_field_errors %}
-        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+        <div class="report-filter-field--full"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
       {% endif %}
-      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+      <div class="report-filter-field--actions">
         <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_dir3kyc' %}">Clear</a>
         {% if perms.reports.export_dir3kyc_report %}

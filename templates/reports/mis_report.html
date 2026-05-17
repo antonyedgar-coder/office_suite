@@ -2,28 +2,24 @@
 {% block title %}MIS Report — CA Office Suite{% endblock %}
 {% block page_title %}MIS Report{% endblock %}
 
+{% block extra_head %}
+  {% include "reports/includes/report_filter_styles.html" %}
+  {% include "reports/includes/mis_date_range_assets.html" %}
+{% endblock %}
+
 {% block content %}
   <div class="card p-3 mb-3">
     <p class="text-secondary small mb-2">
       All figures include only MIS rows linked to <strong>approved</strong> Client Master clients (same rule as MIS entry screens).
     </p>
-    <form method="get" class="row g-2 align-items-start" id="misReportForm">
-      <div class="col-12 col-md-2" id="misDateFromWrap">
-        <label class="form-label small text-secondary mb-0">From date</label>
-        {{ form.from_date }}
-        {% if form.from_date.errors %}<div class="text-danger small">{{ form.from_date.errors }}</div>{% endif %}
-      </div>
-      <div class="col-12 col-md-2" id="misDateToWrap">
-        <label class="form-label small text-secondary mb-0">To date</label>
-        {{ form.to_date }}
-        {% if form.to_date.errors %}<div class="text-danger small">{{ form.to_date.errors }}</div>{% endif %}
-      </div>
-      <div class="col-12 col-md-3">
+    <form method="get" class="report-filter-form" id="misReportForm">
+      {% include "reports/includes/mis_date_range_field.html" with wrap_id="misDateRangeWrap" %}
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.report_view.label }}</label>
         {{ form.report_view }}
         {% if form.report_view.errors %}<div class="text-danger small">{{ form.report_view.errors }}</div>{% endif %}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0" for="misFyDropdown">{{ form.financial_years.label }}</label>
         <div class="dropdown w-100">
           <button
@@ -55,16 +51,16 @@
         </div>
         {% if form.financial_years.errors %}<div class="text-danger small">{{ form.financial_years.errors }}</div>{% endif %}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.branch.label }}</label>
         {{ form.branch }}
       </div>
-      <div class="col-12 col-md-2">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">Details</label>
         {{ form.details }}
       </div>
 
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.client_id.label }}</label>
         {{ form.client_id }}
         <datalist id="clientIdList">
@@ -73,7 +69,7 @@
           {% endfor %}
         </datalist>
       </div>
-      <div class="col-12 col-md-5">
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">{{ form.client_name.label }}</label>
         {{ form.client_name }}
         <datalist id="clientNameList">
@@ -82,7 +78,7 @@
           {% endfor %}
         </datalist>
       </div>
-      <div class="col-12 col-md-2">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.pan.label }}</label>
         {{ form.pan }}
         <datalist id="panList">
@@ -91,12 +87,12 @@
           {% endfor %}
         </datalist>
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.client_type.label }}</label>
         {{ form.client_type }}
       </div>
 
-      <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+      <div class="report-filter-field--actions">
         <button class="btn btn-primary btn-sm" type="submit">Run report</button>
         {% if perms.reports.export_mis_report %}
           {% if request.GET %}
@@ -114,21 +110,24 @@
     <script>
       (function () {
         const rv = document.getElementById("id_report_view");
-        const fromWrap = document.getElementById("misDateFromWrap");
-        const toWrap = document.getElementById("misDateToWrap");
+        const dateWrap = document.getElementById("misDateRangeWrap");
         function sync() {
           const monthWise = rv && rv.value === "month_wise";
-          [fromWrap, toWrap].forEach(function (el) {
-            if (!el) return;
-            el.classList.toggle("opacity-50", monthWise);
-            el.title = monthWise
+          if (dateWrap) {
+            dateWrap.title = monthWise
               ? "Not used for Month wise report (period comes from FY)."
               : "";
-          });
+          }
+          if (window.setMisDateRangeDisabled) {
+            window.setMisDateRangeDisabled(dateWrap, monthWise);
+          }
         }
         if (rv) {
           rv.addEventListener("change", sync);
           sync();
+        }
+        if (dateWrap && window.initMisDateRange) {
+          window.initMisDateRange(dateWrap);
         }
       })();
       (function () {

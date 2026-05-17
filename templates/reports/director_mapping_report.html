@@ -2,6 +2,10 @@
 {% block title %}Director Mapping Report — CA Office Suite{% endblock %}
 {% block page_title %}Director Mapping Report{% endblock %}
 
+{% block extra_head %}
+  {% include "reports/includes/report_filter_styles.html" %}
+{% endblock %}
+
 {% block content %}
   <div class="card p-3 mb-3">
     <div class="fw-semibold mb-2">Filters</div>
@@ -11,42 +15,42 @@
       Flat multi-filter view keeps the full detail grid. CSV repeats company or director identifiers on each data row (no merged cells).
     </div>
 
-    <form method="get" class="row g-2" id="dmReportForm">
-      <div class="col-12 col-md-3">
+    <form method="get" class="report-filter-form" id="dmReportForm">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.as_of_date.label }}</label>
         {{ form.as_of_date }}
         {% if form.as_of_date.errors %}<div class="text-danger small">{{ form.as_of_date.errors }}</div>{% endif %}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.director_scope.label }}</label>
         {{ form.director_scope }}
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.director_din.label }}</label>
         <div class="position-relative">
           {{ form.director_din }}
           <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_din" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
         </div>
       </div>
-      <div class="col-12 col-md-3">
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">{{ form.director_name.label }}</label>
         <div class="position-relative">
           {{ form.director_name }}
           <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="director_name" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
         </div>
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.company_scope.label }}</label>
         {{ form.company_scope }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">{{ form.company_name.label }}</label>
         <div class="position-relative">
           {{ form.company_name }}
           <ul class="list-group position-absolute shadow-sm d-none js-suggest-list" data-for="company_name" style="z-index:1050;max-height:220px;overflow:auto;width:100%;"></ul>
         </div>
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.company_cin.label }}</label>
         <div class="position-relative">
           {{ form.company_cin }}
@@ -54,9 +58,9 @@
         </div>
       </div>
       {% if form.non_field_errors %}
-        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+        <div class="report-filter-field--full"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
       {% endif %}
-      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+      <div class="report-filter-field--actions">
         <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_director_mapping' %}">Clear</a>
         {% if perms.reports.export_director_mapping_report %}

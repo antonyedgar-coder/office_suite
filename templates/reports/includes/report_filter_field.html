@@ -1,0 +1,7 @@
+{# label, field_html or use with block; optional wide=1, full=1 #}
+<div class="report-filter-field{% if wide %} report-filter-field--wide{% endif %}{% if full %} report-filter-field--full{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}"{% if field_id %} id="{{ field_id }}"{% endif %}>
+  {% if label %}<label class="form-label small text-secondary mb-0"{% if label_for %} for="{{ label_for }}"{% endif %}>{{ label }}</label>{% endif %}
+  {{ contents }}
+  {% if errors %}<div class="text-danger small">{{ errors }}</div>{% endif %}
+  {% if help_text %}<div class="form-text">{{ help_text }}</div>{% endif %}
+</div>

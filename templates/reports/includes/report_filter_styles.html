@@ -1,0 +1,58 @@
+<style>
+  /* Report query filters: 4 equal columns; wide fields span 2. */
+  .report-filter-form {
+    display: grid;
+    gap: 0.65rem 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+  }
+  @media (max-width: 991.98px) {
+    .report-filter-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 575.98px) {
+    .report-filter-form {
+      grid-template-columns: 1fr;
+    }
+    .report-filter-field--wide {
+      grid-column: span 1;
+    }
+  }
+  .report-filter-field {
+    min-width: 0;
+  }
+  .report-filter-field--wide {
+    grid-column: span 2;
+  }
+  .report-filter-field--full {
+    grid-column: 1 / -1;
+  }
+  .report-filter-field--actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding-top: 0.15rem;
+  }
+  .report-filter-form .form-label {
+    display: flex;
+    align-items: flex-end;
+    min-height: 2.125rem;
+    margin-bottom: 0.2rem;
+    line-height: 1.25;
+  }
+  .report-filter-form .form-control,
+  .report-filter-form .form-select {
+    width: 100%;
+  }
+  .report-filter-section-title {
+    grid-column: 1 / -1;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+    margin-top: 0.25rem;
+    margin-bottom: -0.15rem;
+  }
+</style>

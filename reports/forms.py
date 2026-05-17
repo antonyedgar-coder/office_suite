@@ -63,15 +63,15 @@ class ClientMasterReportFilterForm(forms.Form):
 
 
 class MISPeriodFilterForm(forms.Form):
-    from_date = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
-    to_date = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    from_date = forms.DateField(widget=forms.HiddenInput())
+    to_date = forms.DateField(widget=forms.HiddenInput())
 
     def clean(self):
         data = super().clean()
         f = data.get("from_date")
         t = data.get("to_date")
         if f and t and f > t:
-            self.add_error("to_date", "To Date must be on/after From Date.")
+            self.add_error("to_date", "End date must be on or after start date.")
         return data
 
 
@@ -216,10 +216,8 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
             if not fys:
                 self.add_error("financial_years", "Select at least one financial year for month wise report.")
         else:
-            if not data.get("from_date"):
-                self.add_error("from_date", "Enter From date (or choose Month wise report).")
-            if not data.get("to_date"):
-                self.add_error("to_date", "Enter To date (or choose Month wise report).")
+            if not data.get("from_date") or not data.get("to_date"):
+                self.add_error("from_date", "Select a date range (start and end), or choose Month wise report.")
         return data
 
     def selected_details(self) -> list[str]:

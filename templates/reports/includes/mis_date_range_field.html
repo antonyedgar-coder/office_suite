@@ -1,0 +1,25 @@
+{# Single calendar range picker; syncs to hidden from_date / to_date. #}
+<div
+  class="report-filter-field{% if wide %} report-filter-field--wide{% endif %}"
+  id="{{ wrap_id|default:'misDateRangeWrap' }}"
+  data-mis-date-range
+>
+  <label class="form-label small text-secondary mb-0" for="misDateRangeDisplay">Date</label>
+  <input
+    type="text"
+    id="misDateRangeDisplay"
+    class="form-control"
+    placeholder="Select start date, then end date"
+    autocomplete="off"
+    readonly
+  />
+  {{ form.from_date }}
+  {{ form.to_date }}
+  {% if form.from_date.errors or form.to_date.errors %}
+    <div class="text-danger small mt-1">
+      {% for e in form.from_date.errors %}{{ e }}{% endfor %}
+      {% for e in form.to_date.errors %}{{ e }}{% endfor %}
+    </div>
+  {% endif %}
+  <div class="form-text">Click the first date (from), then the second date (to).</div>
+</div>

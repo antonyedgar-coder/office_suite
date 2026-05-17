@@ -2,25 +2,21 @@
 {% block title %}MIS Client Wise Report — CA Office Suite{% endblock %}
 {% block page_title %}MIS Client Wise Report{% endblock %}
 
+{% block extra_head %}
+  {% include "reports/includes/report_filter_styles.html" %}
+  {% include "reports/includes/mis_date_range_assets.html" %}
+{% endblock %}
+
 {% block content %}
   <div class="card p-3 mb-3">
-    <form method="get" class="row g-2 align-items-end">
-      <div class="col-12 col-md-3">
-        <label class="form-label small text-secondary mb-0">From date</label>
-        {{ form.from_date }}
-        {% if form.from_date.errors %}<div class="text-danger small">{{ form.from_date.errors }}</div>{% endif %}
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label small text-secondary mb-0">To date</label>
-        {{ form.to_date }}
-        {% if form.to_date.errors %}<div class="text-danger small">{{ form.to_date.errors }}</div>{% endif %}
-      </div>
-      <div class="col-12 col-md-6">
+    <form method="get" class="report-filter-form">
+      {% include "reports/includes/mis_date_range_field.html" %}
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">{{ form.clients.label }}</label>
         {{ form.clients }}
         {% if form.clients.help_text %}<div class="form-text">{{ form.clients.help_text }}</div>{% endif %}
       </div>
-      <div class="col-12 d-flex gap-2 mt-2">
+      <div class="report-filter-field--actions">
         <button class="btn btn-primary btn-sm" type="submit">Run report</button>
         {% if perms.reports.export_mis_client_wise_report and request.GET %}
           <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_mis_client_wise_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
@@ -75,4 +71,3 @@
     <div class="card p-3 text-secondary small">Select filters and click <strong>Run report</strong>.</div>
   {% endif %}
 {% endblock %}
-

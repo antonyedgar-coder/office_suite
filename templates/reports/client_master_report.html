@@ -2,6 +2,10 @@
 {% block title %}Client Master Report — CA Office Suite{% endblock %}
 {% block page_title %}Client Master Report{% endblock %}
 
+{% block extra_head %}
+  {% include "reports/includes/report_filter_styles.html" %}
+{% endblock %}
+
 {% block content %}
   <div class="card p-3 mb-3">
     <div class="fw-semibold mb-2">Filters</div>
@@ -11,44 +15,44 @@
       Use <strong>Directors only</strong> to list clients marked as director in Client Master.
     </div>
 
-    <form method="get" class="row g-2">
-      <div class="col-12 col-md-4">
+    <form method="get" class="report-filter-form">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">Type of Client</label>
         {{ form.client_type }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.branch.label }}</label>
         {{ form.branch }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">{{ form.is_director.label }}</label>
         {{ form.is_director }}
       </div>
-      <div class="col-12 col-md-8">
+      <div class="report-filter-field report-filter-field--wide">
         <label class="form-label small text-secondary mb-0">Client Name</label>
         {{ form.client_name }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">DIN</label>
         {{ form.din }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">PAN</label>
         {{ form.pan }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">GSTIN</label>
         {{ form.gstin }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">CIN</label>
         {{ form.cin }}
       </div>
-      <div class="col-12 col-md-4">
+      <div class="report-filter-field">
         <label class="form-label small text-secondary mb-0">LLPIN</label>
         {{ form.llpin }}
       </div>
-      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+      <div class="report-filter-field--actions">
         <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_client_master' %}">Clear filters</a>
         {% if perms.reports.export_client_master_report %}

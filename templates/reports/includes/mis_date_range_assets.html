@@ -1,0 +1,77 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+  (function () {
+    if (window.__misDateRangeBound) return;
+    window.__misDateRangeBound = true;
+
+    function formatIso(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return y + "-" + m + "-" + day;
+    }
+
+    function initMisDateRange(wrap) {
+      if (!wrap || wrap.dataset.misFpInit === "1") return;
+      const display = wrap.querySelector("#misDateRangeDisplay");
+      const fromInput = wrap.querySelector("#id_from_date");
+      const toInput = wrap.querySelector("#id_to_date");
+      if (!display || !fromInput || !toInput || typeof flatpickr === "undefined") return;
+
+      wrap.dataset.misFpInit = "1";
+      const defaults = [];
+      if (fromInput.value) defaults.push(fromInput.value);
+      if (toInput.value) defaults.push(toInput.value);
+
+      const fp = flatpickr(display, {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d M Y",
+        allowInput: false,
+        defaultDate: defaults.length ? defaults : undefined,
+        onChange: function (selectedDates) {
+          if (selectedDates.length >= 1) {
+            fromInput.value = formatIso(selectedDates[0]);
+          } else {
+            fromInput.value = "";
+          }
+          if (selectedDates.length >= 2) {
+            toInput.value = formatIso(selectedDates[1]);
+          } else {
+            toInput.value = "";
+          }
+        },
+      });
+
+      wrap._misFlatpickr = fp;
+      return fp;
+    }
+
+    window.initMisDateRange = initMisDateRange;
+
+    window.setMisDateRangeDisabled = function (wrap, disabled) {
+      if (!wrap) return;
+      const fp = wrap._misFlatpickr;
+      if (fp) {
+        fp.set("clickOpens", !disabled);
+        if (disabled) {
+          fp.close();
+        }
+        if (fp.altInput) {
+          fp.altInput.disabled = disabled;
+        }
+      }
+      wrap.classList.toggle("opacity-50", disabled);
+      const display = wrap.querySelector("#misDateRangeDisplay");
+      if (display) {
+        display.disabled = disabled;
+      }
+    };
+
+    document.addEventListener("DOMContentLoaded", function () {
+      document.querySelectorAll("[data-mis-date-range]").forEach(initMisDateRange);
+    });
+  })();
+</script>
