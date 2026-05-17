@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ list_title }} — CA Office Suite{% endblock %}
+{% block page_title %}{{ list_title }}{% endblock %}
+{% block extra_head %}
+  {% include "tasks/includes/task_date_range_assets.html" %}
+  <style>
+    .task-list-filters .form-label { font-size: 0.75rem; }
+  </style>
+{% endblock %}
+{% block extra_js %}
+  {% include "tasks/includes/task_date_range_init.html" %}
+{% endblock %}
+{% block content %}
+  <div class="card p-3 mb-3 task-list-filters">
+    {% include "tasks/includes/task_list_filters.html" %}
+  </div>
+  <div class="card p-3">
+    {% include "tasks/includes/task_list_table.html" %}
+  </div>
+{% endblock %}

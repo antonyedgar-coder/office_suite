@@ -4,6 +4,8 @@ from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
+from core.feature_flags import task_module_enabled
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,6 +37,9 @@ INSTALLED_APPS = [
     "dirkyc",
 ]
 
+if task_module_enabled():
+    INSTALLED_APPS.append("tasks.apps.TasksConfig")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -61,6 +66,8 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context_processors.enable_task_module",
+                "core.context_processors.task_nav_counts",
             ],
         },
     },

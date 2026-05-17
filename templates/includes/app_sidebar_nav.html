@@ -91,6 +91,8 @@
     </div>
   {% endif %}
 
+  {% include "includes/app_sidebar_tasks_nav.html" %}
+
   {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
     <div
       class="nav-accordion-item{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_index' %} is-open{% endif %}"

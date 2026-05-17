@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.urls import path, include
 
 from core import views as core_views
+from core.feature_flags import task_module_enabled
 
 
 handler403 = core_views.permission_denied_view  # noqa: E501
@@ -19,6 +20,9 @@ urlpatterns = [
     path("reports/", include("reports.urls")),
     path("", include("core.urls")),
 ]
+
+if task_module_enabled():
+    urlpatterns.insert(-1, path("tasks/", include("tasks.urls")))
 
 
 def _build_business_rules_docx_on_reload() -> None:
@@ -43,4 +47,3 @@ def _build_business_rules_docx_on_reload() -> None:
 
 
 _build_business_rules_docx_on_reload()
-

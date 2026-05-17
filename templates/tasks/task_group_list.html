@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Task groups — CA Office Suite{% endblock %}
+{% block page_title %}Task groups{% endblock %}
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-12 col-md"><input class="form-control" name="q" value="{{ q }}" placeholder="Search by name" /></div>
+      <div class="col-12 col-md-auto d-flex gap-2">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        {% if perms.tasks.add_taskgroup %}<a class="btn btn-primary" href="{% url 'task_group_create' %}">New group</a>{% endif %}
+      </div>
+    </form>
+  </div>
+  <div class="card p-3">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Name</th><th>Sort</th><th>Active</th><th></th></tr></thead>
+      <tbody>
+        {% for g in groups %}
+          <tr>
+            <td class="fw-medium">{{ g.name }}</td>
+            <td>{{ g.sort_order }}</td>
+            <td>{% if g.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}</td>
+            <td class="text-end">{% if perms.tasks.change_taskgroup %}<a class="btn btn-sm btn-outline-primary" href="{% url 'task_group_edit' g.pk %}">Edit</a>{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-secondary">No task groups yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

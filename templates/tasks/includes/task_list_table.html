@@ -1,0 +1,48 @@
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8125rem;">
+    <thead class="table-light">
+      <tr>
+        <th>Created</th>
+        <th>Client name</th>
+        <th>Task</th>
+        <th>Month</th>
+        <th>Qtr</th>
+        <th>Half</th>
+        <th>Yearly</th>
+        <th>3 years</th>
+        <th>5 years</th>
+        <th>Next period</th>
+        <th>Status</th>
+        <th>Due</th>
+        <th>Submitted</th>
+        <th>By</th>
+        <th>Verified</th>
+        <th>By</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in task_rows %}
+        <tr>
+          <td class="text-nowrap">{{ row.created_date|default:"—" }}</td>
+          <td>{{ row.task.client.client_name }}</td>
+          <td><a href="{% url 'task_detail' row.task.pk %}">{{ row.task.title }}</a></td>
+          <td>{{ row.period.month|default:"—" }}</td>
+          <td>{{ row.period.quarter|default:"—" }}</td>
+          <td>{{ row.period.half|default:"—" }}</td>
+          <td>{{ row.period.yearly|default:"—" }}</td>
+          <td>{{ row.period.span_3y|default:"—" }}</td>
+          <td>{{ row.period.span_5y|default:"—" }}</td>
+          <td>{{ row.period.next_period|default:"—" }}</td>
+          <td><span class="badge text-bg-secondary">{{ row.task.get_status_display }}</span></td>
+          <td class="text-nowrap">{{ row.task.due_date|date:"d-M-Y" }}</td>
+          <td class="text-nowrap">{{ row.submitted_date|default:"—" }}</td>
+          <td class="mono">{{ row.submitted_by|default:"—" }}</td>
+          <td class="text-nowrap">{{ row.verified_date|default:"—" }}</td>
+          <td class="mono">{{ row.verified_by|default:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="16" class="text-secondary">No tasks match your filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

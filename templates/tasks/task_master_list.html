@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Task masters — CA Office Suite{% endblock %}
+{% block page_title %}Task masters{% endblock %}
+{% block content %}
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2">
+      <div class="col-md-4"><input class="form-control" name="q" value="{{ q }}" placeholder="Search" /></div>
+      <div class="col-md-3">
+        <select class="form-select" name="group">
+          <option value="">All groups</option>
+          {% for g in groups %}<option value="{{ g.pk }}" {% if group_id == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-auto d-flex gap-2">
+        <button class="btn btn-outline-secondary" type="submit">Filter</button>
+        {% if perms.tasks.add_taskmaster %}<a class="btn btn-primary" href="{% url 'task_master_create' %}">New master</a>{% endif %}
+      </div>
+    </form>
+  </div>
+  <div class="card p-3">
+    <table class="table table-sm">
+      <thead><tr><th>Group</th><th>Name</th><th>Recurring</th><th>Active</th><th></th></tr></thead>
+      <tbody>
+        {% for m in masters %}
+          <tr>
+            <td>{{ m.task_group.name }}</td>
+            <td>{{ m.name }}</td>
+            <td>{% if m.is_recurring %}{{ m.get_frequency_display }}{% else %}—{% endif %}</td>
+            <td>{% if m.is_active %}Yes{% else %}No{% endif %}</td>
+            <td class="text-end">{% if perms.tasks.change_taskmaster %}<a href="{% url 'task_master_edit' m.pk %}" class="btn btn-sm btn-outline-primary">Edit</a>{% endif %}</td>
+          </tr>
+        {% empty %}<tr><td colspan="5" class="text-secondary">No task masters.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

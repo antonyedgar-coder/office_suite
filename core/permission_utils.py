@@ -2,10 +2,12 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
+from core.feature_flags import task_module_enabled
+
 
 def _managed_models() -> tuple[tuple[str, str], ...]:
     """Models whose Django permissions are exposed in Group / User access UI."""
-    models: tuple[tuple[str, str], ...] = (
+    models: list[tuple[str, str]] = [
         ("masters", "client"),
         ("masters", "clientgroup"),
         ("masters", "directormapping"),
@@ -16,8 +18,16 @@ def _managed_models() -> tuple[tuple[str, str], ...]:
         ("mis", "expensedetail"),
         ("mis", "tenderdetail"),
         ("dirkyc", "dir3kyc"),
-    )
-    return models
+    ]
+    if task_module_enabled():
+        models.extend(
+            [
+                ("tasks", "taskgroup"),
+                ("tasks", "taskmaster"),
+                ("tasks", "task"),
+            ]
+        )
+    return tuple(models)
 
 
 def manageable_permissions():

@@ -1,0 +1,50 @@
+{% if enable_task_module and user.is_authenticated %}
+  <div
+    class="nav-accordion-item{% if url_name in 'task_dashboard task_list task_report task_create task_detail task_my_list task_verify_queue task_verify_approve task_verify_rework task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit notification_list notification_mark_read' %} is-open{% endif %}"
+    data-nav-section="tasks"
+  >
+    <button
+      type="button"
+      class="nav-accordion-toggle"
+      aria-expanded="{% if url_name in 'task_dashboard task_list task_report task_create task_detail task_my_list task_verify_queue task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit notification_list' %}true{% else %}false{% endif %}"
+      aria-controls="nav-panel-{{ nav_prefix }}-tasks"
+    >
+      <i class="bi bi-check2-square nav-link-icon" aria-hidden="true"></i>
+      <span>Tasks</span>
+      <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+    </button>
+    <div id="nav-panel-{{ nav_prefix }}-tasks" class="nav-accordion-panel"{% if url_name not in 'task_dashboard task_list task_report task_create task_detail task_my_list task_verify_queue task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit notification_list' %} hidden{% endif %}>
+      {% if user.is_superuser or perms.tasks.view_task %}
+        <a class="nav-link {% if url_name == 'task_dashboard' %}active{% endif %}" href="{% url 'task_dashboard' %}"><i class="bi bi-speedometer nav-link-icon" aria-hidden="true"></i><span>Dashboard</span></a>
+        <a class="nav-link {% if url_name in 'task_list task_create task_detail' %}active{% endif %}" href="{% url 'task_list' %}"><i class="bi bi-list-task nav-link-icon" aria-hidden="true"></i><span>All tasks</span></a>
+        <a class="nav-link {% if url_name in 'task_report task_report_csv' %}active{% endif %}" href="{% url 'task_report' %}"><i class="bi bi-file-earmark-spreadsheet nav-link-icon" aria-hidden="true"></i><span>Task report</span></a>
+      {% endif %}
+      <a class="nav-link {% if url_name == 'task_my_list' %}active{% endif %}" href="{% url 'task_my_list' %}">
+        <i class="bi bi-person-workspace nav-link-icon" aria-hidden="true"></i>
+        <span>My tasks</span>
+        {% if task_nav_my_count %}<span class="badge rounded-pill text-bg-primary ms-auto">{{ task_nav_my_count }}</span>{% endif %}
+      </a>
+      {% if user.is_superuser or perms.tasks.verify_task %}
+        <a class="nav-link {% if url_name in 'task_verify_queue task_verify_approve task_verify_rework' %}active{% endif %}" href="{% url 'task_verify_queue' %}">
+          <i class="bi bi-patch-check nav-link-icon" aria-hidden="true"></i>
+          <span>Verify queue</span>
+          {% if task_nav_verify_count %}<span class="badge rounded-pill text-bg-warning ms-auto">{{ task_nav_verify_count }}</span>{% endif %}
+        </a>
+      {% endif %}
+      {% if user.is_superuser or perms.tasks.view_taskgroup %}
+        <a class="nav-link {% if url_name in 'task_group_list task_group_create task_group_edit' %}active{% endif %}" href="{% url 'task_group_list' %}"><i class="bi bi-folder nav-link-icon" aria-hidden="true"></i><span>Task groups</span></a>
+      {% endif %}
+      {% if user.is_superuser or perms.tasks.view_taskmaster %}
+        <a class="nav-link {% if url_name in 'task_master_list task_master_create task_master_edit' %}active{% endif %}" href="{% url 'task_master_list' %}"><i class="bi bi-bookmark nav-link-icon" aria-hidden="true"></i><span>Task masters</span></a>
+      {% endif %}
+      {% if user.is_superuser or perms.tasks.add_task %}
+        <a class="nav-link {% if url_name == 'task_create' %}active{% endif %}" href="{% url 'task_create' %}"><i class="bi bi-plus-circle nav-link-icon" aria-hidden="true"></i><span>New task</span></a>
+      {% endif %}
+      <a class="nav-link {% if url_name in 'notification_list notification_mark_read' %}active{% endif %}" href="{% url 'notification_list' %}">
+        <i class="bi bi-bell nav-link-icon" aria-hidden="true"></i>
+        <span>Notifications</span>
+        {% if task_nav_notification_count %}<span class="badge rounded-pill text-bg-danger ms-auto">{{ task_nav_notification_count }}</span>{% endif %}
+      </a>
+    </div>
+  </div>
+{% endif %}

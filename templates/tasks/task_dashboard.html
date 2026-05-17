@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Task dashboard{% endblock %}
+{% block page_title %}Task dashboard{% endblock %}
+{% block content %}
+  <section class="row g-3">
+    <article class="col-md-3"><section class="card p-3"><p class="text-secondary small mb-1">Open tasks</p><p class="fs-3 fw-bold mb-0">{{ counts.total_open }}</p></section></article>
+    <article class="col-md-3"><section class="card p-3"><p class="text-secondary small mb-1">My open</p><p class="fs-3 fw-bold mb-0">{{ counts.my_open }}</p></section></article>
+    <article class="col-md-3"><section class="card p-3"><p class="text-secondary small mb-1">Submitted</p><p class="fs-3 fw-bold mb-0">{{ counts.submitted }}</p></section></article>
+    <article class="col-md-3"><section class="card p-3"><p class="text-secondary small mb-1">My verify queue</p><p class="fs-3 fw-bold mb-0">{{ counts.verify_queue }}</p></section></article>
+  </section>
+{% endblock %}

@@ -6,8 +6,8 @@
   <div class="card p-3 mb-3">
     <div class="fw-semibold mb-1">Danger zone</div>
     <div class="text-secondary small">
-      This screen is for clearing <strong>test</strong> data in one click so you can upload again.
-      It does <strong>not</strong> delete Client Master.
+      Clear <strong>local test data</strong> before cloud deploy. Use
+      <strong>Delete everything (keep my login)</strong> to wipe clients, MIS, tasks, users, and related rows in a safe order.
     </div>
   </div>
 
@@ -15,48 +15,102 @@
     <div class="fw-semibold mb-2">Current rows</div>
     <div class="row g-2 small mb-3">
       <div class="col-6 col-md-4"><span class="text-secondary">Client Master</span><div class="mono fw-semibold">{{ counts.clients }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Client groups</span><div class="mono fw-semibold">{{ counts.client_groups }}</div></div>
       <div class="col-6 col-md-4"><span class="text-secondary">MIS Fees</span><div class="mono fw-semibold">{{ counts.fees }}</div></div>
       <div class="col-6 col-md-4"><span class="text-secondary">MIS Receipts</span><div class="mono fw-semibold">{{ counts.receipts }}</div></div>
       <div class="col-6 col-md-4"><span class="text-secondary">MIS Expenses</span><div class="mono fw-semibold">{{ counts.expenses }}</div></div>
       <div class="col-6 col-md-4"><span class="text-secondary">Director mappings</span><div class="mono fw-semibold">{{ counts.director_mappings }}</div></div>
       <div class="col-6 col-md-4"><span class="text-secondary">DIR-3 KYC</span><div class="mono fw-semibold">{{ counts.dir3kyc }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Users</span><div class="mono fw-semibold">{{ counts.users }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Employees</span><div class="mono fw-semibold">{{ counts.employees }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Activity log</span><div class="mono fw-semibold">{{ counts.activity_log }}</div></div>
+      {% if enable_task_module %}
+        <div class="col-6 col-md-4"><span class="text-secondary">Tasks</span><div class="mono fw-semibold">{{ counts.tasks }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Task masters</span><div class="mono fw-semibold">{{ counts.task_masters }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Task groups</span><div class="mono fw-semibold">{{ counts.task_groups }}</div></div>
+      {% endif %}
     </div>
 
-    <form method="post" class="row g-3">
+    <form method="post" class="row g-3" id="resetForm">
       {% csrf_token %}
       <input type="hidden" name="confirm" value="1" />
 
       <div class="col-12">
-        <div class="fw-semibold mb-2">What to delete</div>
+        <div class="form-check border border-danger rounded p-3 bg-danger-subtle">
+          <input class="form-check-input" type="checkbox" id="delAll" name="delete_all" value="1" />
+          <label class="form-check-label fw-semibold text-danger" for="delAll">
+            Delete everything (keep my login only)
+          </label>
+          <div class="form-text">
+            Clients, client groups, MIS, director mapping, DIR-3 KYC, tasks (if enabled), activity log, and all other users.
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="fw-semibold mb-2">Or choose datasets</div>
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="delMis" name="delete_mis" value="1" checked />
+          <input class="form-check-input reset-opt" type="checkbox" id="delMis" name="delete_mis" value="1" />
           <label class="form-check-label" for="delMis">MIS data (Fees + Receipts + Expenses)</label>
         </div>
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="delDm" name="delete_director_mapping" value="1" checked />
+          <input class="form-check-input reset-opt" type="checkbox" id="delDm" name="delete_director_mapping" value="1" />
           <label class="form-check-label" for="delDm">Director Mapping data</label>
         </div>
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="delKyc" name="delete_dir3kyc" value="1" checked />
+          <input class="form-check-input reset-opt" type="checkbox" id="delKyc" name="delete_dir3kyc" value="1" />
           <label class="form-check-label" for="delKyc">DIR-3 KYC data</label>
+        </div>
+        {% if enable_task_module %}
+          <div class="form-check">
+            <input class="form-check-input reset-opt" type="checkbox" id="delTasks" name="delete_tasks" value="1" />
+            <label class="form-check-label" for="delTasks">Task module (tasks, masters, groups, enrollments)</label>
+          </div>
+        {% endif %}
+        <div class="form-check">
+          <input class="form-check-input reset-opt" type="checkbox" id="delGroups" name="delete_client_groups" value="1" />
+          <label class="form-check-label" for="delGroups">Client groups</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input reset-opt" type="checkbox" id="delLog" name="delete_activity_log" value="1" />
+          <label class="form-check-label" for="delLog">Activity log</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input reset-opt" type="checkbox" id="delUsers" name="delete_users" value="1" />
+          <label class="form-check-label" for="delUsers">All users except me</label>
         </div>
         <hr class="my-3" />
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="delClients" name="delete_clients" value="1" />
+          <input class="form-check-input reset-opt" type="checkbox" id="delClients" name="delete_clients" value="1" />
           <label class="form-check-label" for="delClients">
             <strong>Client Master (ALL clients)</strong>
           </label>
           <div class="form-text text-danger">
-            This will also wipe MIS + Director Mapping + DIR-3 KYC automatically to avoid dependency errors, and it will reset Client ID sequences.
+            Also wipes MIS, director mapping, DIR-3 KYC, and tasks automatically to avoid dependency errors.
           </div>
         </div>
       </div>
 
       <div class="col-12 d-flex gap-2 flex-wrap">
-        <button type="submit" class="btn btn-danger">Delete selected test data</button>
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Permanently delete the selected data?');">
+          Delete selected data
+        </button>
         <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Cancel</a>
       </div>
     </form>
   </div>
-{% endblock %}
 
+  <script>
+    (function () {
+      var delAll = document.getElementById("delAll");
+      var opts = document.querySelectorAll(".reset-opt");
+      if (!delAll) return;
+      delAll.addEventListener("change", function () {
+        opts.forEach(function (el) {
+          el.disabled = delAll.checked;
+          if (delAll.checked) el.checked = false;
+        });
+      });
+    })();
+  </script>
+{% endblock %}

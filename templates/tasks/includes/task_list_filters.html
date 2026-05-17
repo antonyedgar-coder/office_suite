@@ -1,0 +1,62 @@
+<form method="get" class="row g-2 align-items-end">
+  <div class="col-12 col-md-6 col-lg-3">
+    <label class="form-label small text-secondary mb-0">Status</label>
+    <select name="status" class="form-select form-select-sm">
+      <option value="">All statuses</option>
+      {% for val, label in status_choices %}
+        <option value="{{ val }}" {% if filters.status == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12 col-md-6 col-lg-3">
+    <label class="form-label small text-secondary mb-0">Client</label>
+    <select name="client" class="form-select form-select-sm">
+      <option value="">All clients</option>
+      {% for c in clients %}
+        <option value="{{ c.client_id }}" {% if filters.client_id == c.client_id %}selected{% endif %}>{{ c.client_name }}{% if c.pan %} — {{ c.pan }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12 col-md-6 col-lg-3">
+    <label class="form-label small text-secondary mb-0">Type of task</label>
+    <select name="master" class="form-select form-select-sm">
+      <option value="">All task types</option>
+      {% for m in masters %}
+        <option value="{{ m.pk }}" {% if filters.master_id == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.task_group.name }} — {{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12 col-md-6 col-lg-3">
+    <label class="form-label small text-secondary mb-0">Users</label>
+    <select name="assignee" class="form-select form-select-sm">
+      <option value="">All users</option>
+      {% for u in staff_users %}
+        <option value="{{ u.pk }}" {% if filters.assignee_id == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.employee_profile.full_name|default:u.email }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12 col-md-6 col-lg-3">
+    <label class="form-label small text-secondary mb-0">Verifier</label>
+    <select name="verifier" class="form-select form-select-sm">
+      <option value="">All verifiers</option>
+      {% for u in staff_users %}
+        <option value="{{ u.pk }}" {% if filters.verifier_id == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.employee_profile.full_name|default:u.email }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% include "tasks/includes/task_date_range_field.html" with prefix="created" label="Task created" preset=filters.created_preset from_name="created_from" to_name="created_to" from_value=filters.created_from to_value=filters.created_to display_id="taskCreatedRangeDisplay" %}
+  {% include "tasks/includes/task_date_range_field.html" with prefix="due" label="Due date" preset=filters.due_preset from_name="due_from" to_name="due_to" from_value=filters.due_from to_value=filters.due_to display_id="taskDueRangeDisplay" %}
+  {% include "tasks/includes/task_date_range_field.html" with prefix="approved" label="Approved date" preset=filters.approved_preset from_name="approved_from" to_name="approved_to" from_value=filters.approved_from to_value=filters.approved_to display_id="taskApprovedRangeDisplay" %}
+
+  <div class="col-12 col-md-auto d-flex flex-wrap gap-2 align-items-center">
+    <button class="btn btn-outline-secondary btn-sm" type="submit">Apply filters</button>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ request.path }}">Clear</a>
+    {% if csv_export_url %}
+      <a class="btn btn-outline-primary btn-sm" href="{{ csv_export_url }}">Download CSV</a>
+    {% endif %}
+    {% if show_new_task and perms.tasks.add_task %}
+      <a class="btn btn-primary btn-sm" href="{% url 'task_create' %}">New task</a>
+    {% endif %}
+  </div>
+</form>

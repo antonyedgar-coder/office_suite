@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'create' %}New task master{% else %}Edit task master{% endif %}{% endblock %}
+{% block page_title %}{% if mode == 'create' %}New task master{% else %}Edit task master{% endif %}{% endblock %}
+{% block content %}
+  <div class="card p-3 col-lg-8">
+    <form method="post" id="taskMasterForm">{% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      {% if form.recurrence_config_json.errors %}<div class="alert alert-danger">{{ form.recurrence_config_json.errors }}</div>{% endif %}
+      <div class="mb-3"><label class="form-label">Task group</label>{{ form.task_group }}</div>
+      <div class="mb-3"><label class="form-label">Name</label>{{ form.name }}</div>
+      <div class="mb-3"><label class="form-label">Description</label>{{ form.description }}</div>
+      <div class="row">
+        <div class="col-md-4 mb-3"><label class="form-label">Default priority</label>{{ form.default_priority }}</div>
+        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_active }} <label class="form-check-label">Active</label></div>
+        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label">Recurring</label></div>
+      </div>
+      <div class="row mb-3">
+        <div class="col-md-4 form-check pt-2">{{ form.default_is_billable }} <label class="form-check-label" for="id_default_is_billable">Default billable</label></div>
+        <div class="col-md-4" id="masterFeesWrap" style="display:none">
+          <label class="form-label" for="id_default_fees_amount">Default fees</label>
+          {{ form.default_fees_amount }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="id_default_verifier">Default verifier</label>
+          {{ form.default_verifier }}
+        </div>
+      </div>
+      <div class="border rounded p-3 mb-3">
+        <h6 class="mb-2">Checklist template</h6>
+        <p class="form-text small">Items are copied to each new task from this master. Users tick them off on the task page.</p>
+        <div id="checklistRows"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="checklistAddBtn">Add item</button>
+        {{ form.checklist_json }}
+      </div>
+      <div id="recurrencePanel" class="border rounded p-3 mb-3" style="display:none">
+        <div class="mb-3"><label class="form-label">Frequency</label>{{ form.frequency }}</div>
+        <div id="recurrenceFields"></div>
+      </div>
+      {{ form.recurrence_config_json }}
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" href="{% url 'task_master_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+  {{ recurrence_config|default:"{}"|json_script:"recurrence-config-data" }}
+  {{ checklist_labels|json_script:"checklist-labels-data" }}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var cfg = JSON.parse(document.getElementById("recurrence-config-data").textContent || "{}");
+  var recurring = document.getElementById("id_is_recurring");
+  var freq = document.getElementById("id_frequency");
+  var panel = document.getElementById("recurrencePanel");
+  var fields = document.getElementById("recurrenceFields");
+  var hidden = document.getElementById("id_recurrence_config_json");
+  function fieldRow(label, name, type, val) {
+    var d = document.createElement("div");
+    d.className = "mb-2";
+    d.innerHTML = '<label class="form-label">' + label + '</label><input class="form-control" data-rc="' + name + '" type="' + type + '" value="' + (val != null ? val : "") + '">';
+    return d;
+  }
+  function selectRow(label, name, opts, val) {
+    var d = document.createElement("div");
+    d.className = "mb-2";
+    var html = '<label class="form-label">' + label + '</label><select class="form-select" data-rc="' + name + '">';
+    opts.forEach(function (o) { html += '<option value="' + o + '"' + (val === o ? " selected" : "") + ">" + o + "</option>"; });
+    html += "</select>";
+    d.innerHTML = html;
+    return d;
+  }
+  function render() {
+    fields.innerHTML = "";
+    if (!recurring.checked) { panel.style.display = "none"; hidden.value = "{}"; return; }
+    panel.style.display = "block";
+    var f = freq.value;
+    var c = cfg || {};
+    if (f === "monthly") {
+      fields.appendChild(selectRow("Month anchor", "month_anchor", ["same_month", "subsequent_month"], c.month_anchor));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "quarterly") {
+      fields.appendChild(selectRow("Quarter anchor", "quarter_anchor", ["first_month_same_qtr", "last_month_same_qtr", "first_month_next_qtr"], c.quarter_anchor));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "half_yearly") {
+      fields.appendChild(selectRow("Half anchor", "half_anchor", ["first_month_same_half", "last_month_same_half", "first_month_next_half"], c.half_anchor));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "annually") {
+      fields.appendChild(selectRow("FY anchor", "fy_anchor", ["same_fy", "next_fy"], c.fy_anchor));
+      fields.appendChild(fieldRow("Month (1-12)", "month", "number", c.month));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "every_3_years" || f === "every_5_years") {
+      fields.appendChild(fieldRow("Create month", "create_month", "number", c.create_month));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due month", "due_month", "number", c.due_month));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    }
+  }
+  var checklistRows = document.getElementById("checklistRows");
+  var checklistHidden = document.getElementById("id_checklist_json");
+  var checklistLabels = JSON.parse(document.getElementById("checklist-labels-data").textContent || "[]");
+  var defaultBillable = document.getElementById("id_default_is_billable");
+  var masterFeesWrap = document.getElementById("masterFeesWrap");
+
+  function syncMasterFeesUi() {
+    if (!defaultBillable || !masterFeesWrap) return;
+    masterFeesWrap.style.display = defaultBillable.checked ? "block" : "none";
+  }
+  if (defaultBillable) {
+    defaultBillable.addEventListener("change", syncMasterFeesUi);
+    syncMasterFeesUi();
+  }
+
+  function addChecklistRow(val) {
+    var row = document.createElement("div");
+    row.className = "input-group mb-2";
+    row.innerHTML =
+      '<input type="text" class="form-control checklist-input" value="' +
+      (val ? String(val).replace(/"/g, "&quot;") : "") +
+      '" placeholder="Checklist item" />' +
+      '<button type="button" class="btn btn-outline-danger checklist-remove">Remove</button>';
+    row.querySelector(".checklist-remove").addEventListener("click", function () {
+      row.remove();
+    });
+    checklistRows.appendChild(row);
+  }
+  (checklistLabels || []).forEach(addChecklistRow);
+  if (!checklistLabels || !checklistLabels.length) addChecklistRow("");
+  document.getElementById("checklistAddBtn").addEventListener("click", function () {
+    addChecklistRow("");
+  });
+
+  document.getElementById("taskMasterForm").addEventListener("submit", function () {
+    var out = {};
+    fields.querySelectorAll("[data-rc]").forEach(function (el) {
+      var k = el.getAttribute("data-rc");
+      out[k] = el.type === "number" ? parseInt(el.value, 10) : el.value;
+    });
+    hidden.value = JSON.stringify(out);
+    var labels = [];
+    checklistRows.querySelectorAll(".checklist-input").forEach(function (inp) {
+      var v = (inp.value || "").trim();
+      if (v) labels.push(v);
+    });
+    checklistHidden.value = JSON.stringify(labels);
+  });
+  recurring.addEventListener("change", render);
+  freq.addEventListener("change", render);
+  render();
+})();
+</script>
+{% endblock %}

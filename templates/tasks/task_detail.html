@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load task_labels %}
+{% block title %}{{ task.title }} — Tasks{% endblock %}
+{% block page_title %}{{ task.title }}{% endblock %}
+{% block content %}
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card p-3">
+        <p class="mb-1"><strong>Client:</strong> {{ task.client.client_name }} ({{ task.client_id }})</p>
+        <p class="mb-1"><strong>Status:</strong> {{ task.get_status_display }}</p>
+        <p class="mb-1"><strong>Priority:</strong> {{ task.get_priority_display }}</p>
+        <p class="mb-1"><strong>Due:</strong> {{ task.due_date }}</p>
+        <p class="mb-1"><strong>Period:</strong> {{ task.period_key }}</p>
+        <p class="mb-1"><strong>Billable:</strong> {% if task.is_billable %}Yes{% if task.fees_amount %} — ₹{{ task.fees_amount }}{% endif %}{% else %}No{% endif %}</p>
+        <p class="mb-1"><strong>Verifier:</strong> {{ verifier_label }}</p>
+        <p class="mb-0"><strong>Users:</strong> {% for a in assignees %}{{ a.user|person_name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          {% if can_submit %}
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="submit" /><button class="btn btn-sm btn-primary">Submit for verification</button></form>
+          {% endif %}
+          {% if can_cancel %}
+            <form method="post" onsubmit="return confirm('Cancel this task? Recurring tasks will not auto-create again until you assign a new task for this client.');">{% csrf_token %}<input type="hidden" name="action" value="cancel" /><button class="btn btn-sm btn-outline-warning">Cancel task</button></form>
+          {% endif %}
+          {% if can_delete %}
+            <form method="post" onsubmit="return confirm('Permanently delete this task? This cannot be undone.');">{% csrf_token %}<input type="hidden" name="action" value="delete" /><button class="btn btn-sm btn-outline-danger">Delete task</button></form>
+          {% endif %}
+        </div>
+      </div>
+      {% if checklist_items %}
+        <div class="card p-3 mt-3">
+          <h6 class="mb-3">Checklist</h6>
+          <ul class="list-unstyled mb-0">
+            {% for item in checklist_items %}
+              <li class="mb-2 d-flex align-items-start gap-2">
+                {% if can_toggle_checklist %}
+                  <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="checklist_toggle" />
+                    <input type="hidden" name="item_id" value="{{ item.pk }}" />
+                    <input type="hidden" name="done" value="{% if item.is_done %}0{% else %}1{% endif %}" />
+                    <input type="checkbox" class="form-check-input mt-1" {% if item.is_done %}checked{% endif %} onchange="this.form.submit()" />
+                  </form>
+                {% else %}
+                  <input type="checkbox" class="form-check-input mt-1" disabled {% if item.is_done %}checked{% endif %} />
+                {% endif %}
+                <span class="{% if item.is_done %}text-decoration-line-through text-secondary{% endif %}">{{ item.label }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if can_verify %}
+        <div class="card p-3 mt-3">
+          <h6>Verification</h6>
+          <form method="post" action="{% url 'task_verify_approve' task.pk %}">{% csrf_token %}<button class="btn btn-success btn-sm">Approve</button></form>
+          <form method="post" action="{% url 'task_verify_rework' task.pk %}" class="mt-2">{% csrf_token %}<button class="btn btn-warning btn-sm">Rework</button></form>
+        </div>
+      {% endif %}
+    </div>
+    <div class="col-lg-7">
+      <div class="card p-3 mb-3">
+        <h6 class="mb-3">Timeline</h6>
+        <ul class="list-unstyled mb-0">
+          {% for row in activity_rows %}
+            {% with act=row.activity %}
+            <li class="mb-2 border-bottom pb-2">
+              <span class="small text-secondary">{{ act.created_at }}</span> — {{ act.get_activity_type_display }}
+              {% if row.user_label %}<span class="small">({{ row.user_label }})</span>{% endif %}
+              {% if act.message %}<div>{{ act.message }}</div>{% endif %}
+              {% if act.new_status %}<div class="small">→ {{ act.new_status|task_status_label }}</div>{% endif %}
+            </li>
+            {% endwith %}
+          {% empty %}<li class="text-secondary">No activity yet.</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="card p-3">
+        <h6>Add remark</h6>
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="remark" />{{ remark_form.message }}<button class="btn btn-sm btn-outline-secondary mt-2">Add</button></form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

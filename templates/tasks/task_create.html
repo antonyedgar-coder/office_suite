@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}New task — CA Office Suite{% endblock %}
+{% block page_title %}Assign task{% endblock %}
+{% block extra_head %}
+<style>
+  .task-suggest-list {
+    position: absolute;
+    z-index: 20;
+    max-height: 220px;
+    overflow-y: auto;
+    width: 100%;
+    display: none;
+  }
+  .task-suggest-list.show { display: block; }
+  .task-suggest-item {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e8eaf1;
+    background: #fff;
+  }
+  .task-suggest-item:hover { background: #eef2ff; }
+  .assignee-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.15rem 0.35rem 0.15rem 0;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #e0e7ff;
+    font-size: 0.875rem;
+  }
+  .assignee-chip button {
+    border: none;
+    background: transparent;
+    line-height: 1;
+    padding: 0;
+    font-size: 1.1rem;
+    color: #475569;
+  }
+  .period-panel { display: none; }
+  .period-panel.is-visible { display: block; }
+  .field-wrap { position: relative; }
+</style>
+{% endblock %}
+{% block content %}
+  <div class="card p-3 col-lg-9">
+    <form method="post" id="taskCreateForm">{% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+      <div class="mb-3">
+        <label class="form-label" for="id_task_master">Task master</label>
+        {{ form.task_master }}
+        {% if form.task_master.errors %}<div class="text-danger small">{{ form.task_master.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="taskClientSearch">Client</label>
+        <input class="form-control" id="taskClientSearch" list="taskClientSuggestions" placeholder="Type client name or PAN (min. 2 characters)…" autocomplete="off" value="{{ form.client_search.value|default:'' }}" />
+        <datalist id="taskClientSuggestions"></datalist>
+        {{ form.client }}
+        {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
+        {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
+        <div class="form-text">Shows client name and PAN; pick from suggestions.</div>
+      </div>
+
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="taskAssigneeSearch">Users</label>
+        <input class="form-control" id="taskAssigneeSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />
+        <div id="taskAssigneeSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+        <div id="assigneeChips" class="mt-2"></div>
+        {{ form.assignee_ids }}
+        {% if form.assignee_picker.errors %}<div class="text-danger small">{{ form.assignee_picker.errors }}</div>{% endif %}
+        <div class="form-text">Type to filter staff; click a name to add. Multiple users allowed.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="id_verifier">Verifier</label>
+        {{ form.verifier }}
+        {% if form.verifier.errors %}<div class="text-danger small">{{ form.verifier.errors }}</div>{% endif %}
+        <div class="form-text">Select from list (no typing).</div>
+      </div>
+
+      <div class="mb-3 border rounded p-3 bg-light">
+        <label class="form-label" for="id_period_type">Filing period</label>
+        {{ form.period_type }}
+        {% if form.period_type.errors %}<div class="text-danger small">{{ form.period_type.errors }}</div>{% endif %}
+
+        <div class="period-panel row g-2 mt-2" data-period-for="monthly">
+          <div class="col-md-6"><label class="form-label">Month</label>{{ form.period_month }}</div>
+          <div class="col-md-6"><label class="form-label">Financial year</label>{{ form.period_year }}</div>
+        </div>
+
+        <div class="period-panel row g-2 mt-2" data-period-for="quarterly">
+          <div class="col-md-6"><label class="form-label">Quarter</label>{{ form.period_quarter }}</div>
+        </div>
+
+        <div class="period-panel row g-2 mt-2" data-period-for="half_yearly">
+          <div class="col-md-6"><label class="form-label">Half year</label>{{ form.period_half }}</div>
+        </div>
+
+        <div class="period-panel row g-2 mt-2" data-period-for="quarterly half_yearly yearly">
+          <div class="col-md-6"><label class="form-label">Financial year</label>{{ form.period_fy }}</div>
+          <p class="form-text mb-0 col-12">Defaults to current FY (from 1 Apr each year it advances, e.g. 2026-27).</p>
+        </div>
+
+        <div class="period-panel row g-2 mt-2" data-period-for="every_3_years every_5_years">
+          <div class="col-md-5"><label class="form-label">From FY</label>{{ form.period_year_from }}</div>
+          <div class="col-md-2 d-flex align-items-end justify-content-center pb-2">to</div>
+          <div class="col-md-5"><label class="form-label">To FY</label>{{ form.period_year_to }}</div>
+          <p class="form-text mb-0">3-year: 3 consecutive FYs (to FY auto-fills). 5-year: 5 consecutive FYs.</p>
+        </div>
+      </div>
+
+      <div class="mb-3 border rounded p-3">
+        <div class="form-check mb-2">
+          {{ form.is_billable }}
+          <label class="form-check-label" for="id_is_billable">Billable task</label>
+        </div>
+        <div id="taskFeesWrap" style="display:none">
+          <label class="form-label" for="id_fees_amount">Fees amount</label>
+          {{ form.fees_amount }}
+          {% if form.fees_amount.errors %}<div class="text-danger small">{{ form.fees_amount.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Due date</label>
+          {{ form.due_date }}
+          {% if form.due_date.errors %}<div class="text-danger small">{{ form.due_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Priority</label>
+          {{ form.priority }}
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Create task</button>
+        <a class="btn btn-outline-secondary" href="{% url 'task_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  {{ staff_users_json|json_script:"task-staff-users" }}
+  {{ clients_json|json_script:"task-clients" }}
+  {{ masters_billing_json|json_script:"task-masters-billing" }}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var MIN_CHARS = 2;
+  var staffUsers = JSON.parse(document.getElementById("task-staff-users").textContent || "[]");
+  var clients = JSON.parse(document.getElementById("task-clients").textContent || "[]");
+
+  var clientSearch = document.getElementById("taskClientSearch");
+  var clientHidden = document.querySelector("input[data-task-client-hidden='1']");
+  var clientList = document.getElementById("taskClientSuggestions");
+
+  function renderClientSuggestions(q) {
+    clientList.innerHTML = "";
+    var qq = (q || "").trim().toLowerCase();
+    if (qq.length < MIN_CHARS) return;
+    var shown = 0;
+    for (var i = 0; i < clients.length; i++) {
+      var c = clients[i];
+      if (c.search.indexOf(qq) !== -1 || c.label.toLowerCase().indexOf(qq) !== -1) {
+        var o = document.createElement("option");
+        o.value = c.label;
+        clientList.appendChild(o);
+        shown++;
+        if (shown >= 50) break;
+      }
+    }
+  }
+
+  function syncClientHidden() {
+    var v = (clientSearch.value || "").trim();
+    var match = null;
+    for (var i = 0; i < clients.length; i++) {
+      if (clients[i].label === v) { match = clients[i]; break; }
+    }
+    if (clientHidden) clientHidden.value = match ? match.id : "";
+  }
+
+  if (clientHidden && clientHidden.value) {
+    for (var i = 0; i < clients.length; i++) {
+      if (clients[i].id === clientHidden.value) {
+        clientSearch.value = clients[i].label;
+        break;
+      }
+    }
+  }
+  clientSearch.addEventListener("input", function () {
+    if (clientHidden) clientHidden.value = "";
+    renderClientSuggestions(clientSearch.value);
+  });
+  clientSearch.addEventListener("change", syncClientHidden);
+  clientSearch.addEventListener("blur", syncClientHidden);
+
+  var assigneeSearch = document.getElementById("taskAssigneeSearch");
+  var assigneeSuggest = document.getElementById("taskAssigneeSuggestions");
+  var assigneeChips = document.getElementById("assigneeChips");
+  var assigneeHidden = document.getElementById("taskAssigneeIdsHidden");
+  var selectedAssignees = {};
+
+  function renderAssigneeChips() {
+    assigneeChips.innerHTML = "";
+    Object.keys(selectedAssignees).forEach(function (id) {
+      var chip = document.createElement("span");
+      chip.className = "assignee-chip";
+      chip.innerHTML = "<span>" + selectedAssignees[id] + "</span><button type=\"button\" data-remove=\"" + id + "\" aria-label=\"Remove\">&times;</button>";
+      assigneeChips.appendChild(chip);
+    });
+    if (assigneeHidden) assigneeHidden.value = Object.keys(selectedAssignees).join(",");
+  }
+
+  function parseInitialAssignees() {
+    var raw = (assigneeHidden && assigneeHidden.value) ? assigneeHidden.value : "";
+    raw.split(",").forEach(function (id) {
+      id = id.trim();
+      if (!id) return;
+      for (var i = 0; i < staffUsers.length; i++) {
+        if (String(staffUsers[i].id) === id) {
+          selectedAssignees[id] = staffUsers[i].label;
+          break;
+        }
+      }
+    });
+    renderAssigneeChips();
+  }
+
+  function showAssigneeSuggestions(q) {
+    assigneeSuggest.innerHTML = "";
+    var qq = (q || "").trim().toLowerCase();
+    if (qq.length < MIN_CHARS) {
+      assigneeSuggest.classList.remove("show");
+      return;
+    }
+    var shown = 0;
+    staffUsers.forEach(function (u) {
+      if (selectedAssignees[String(u.id)]) return;
+      if (u.label.toLowerCase().indexOf(qq) === -1) return;
+      var item = document.createElement("div");
+      item.className = "task-suggest-item";
+      item.textContent = u.label;
+      item.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        selectedAssignees[String(u.id)] = u.label;
+        assigneeSearch.value = "";
+        assigneeSuggest.classList.remove("show");
+        renderAssigneeChips();
+      });
+      assigneeSuggest.appendChild(item);
+      shown++;
+    });
+    assigneeSuggest.classList.toggle("show", shown > 0);
+  }
+
+  assigneeSearch.addEventListener("input", function () { showAssigneeSuggestions(assigneeSearch.value); });
+  assigneeSearch.addEventListener("blur", function () { setTimeout(function () { assigneeSuggest.classList.remove("show"); }, 150); });
+  assigneeChips.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-remove]");
+    if (!btn) return;
+    delete selectedAssignees[btn.getAttribute("data-remove")];
+    renderAssigneeChips();
+  });
+  parseInitialAssignees();
+
+  var periodType = document.getElementById("id_period_type");
+  var panels = document.querySelectorAll(".period-panel");
+  function syncPeriodPanels() {
+    var t = periodType ? periodType.value : "";
+    panels.forEach(function (p) {
+      var forTypes = (p.getAttribute("data-period-for") || "").split(" ");
+      p.classList.toggle("is-visible", forTypes.indexOf(t) !== -1);
+    });
+  }
+  if (periodType) {
+    periodType.addEventListener("change", function () {
+      syncPeriodPanels();
+      if (yearFrom && yearFrom.value) {
+        if (periodType.value === "every_3_years") autoSpanYears(3);
+        if (periodType.value === "every_5_years") autoSpanYears(5);
+      }
+    });
+    syncPeriodPanels();
+  }
+
+  var yearFrom = document.getElementById("id_period_year_from");
+  var yearTo = document.getElementById("id_period_year_to");
+  function autoSpanYears(span) {
+    if (!yearFrom || !yearTo || !yearFrom.value) return;
+    var from = parseInt(yearFrom.value, 10);
+    if (!isNaN(from)) yearTo.value = String(from + span - 1);
+  }
+  if (yearFrom && periodType) {
+    yearFrom.addEventListener("change", function () {
+      if (periodType.value === "every_3_years") autoSpanYears(3);
+      if (periodType.value === "every_5_years") autoSpanYears(5);
+    });
+  }
+
+  var billableCb = document.getElementById("id_is_billable");
+  var feesWrap = document.getElementById("taskFeesWrap");
+  var feesInput = document.getElementById("id_fees_amount");
+  var taskMasterSelect = document.getElementById("id_task_master");
+  var mastersBilling = JSON.parse(document.getElementById("task-masters-billing").textContent || "{}");
+
+  function syncBillableUi() {
+    if (!billableCb || !feesWrap) return;
+    feesWrap.style.display = billableCb.checked ? "block" : "none";
+    if (!billableCb.checked && feesInput) feesInput.value = "";
+  }
+
+  var verifierSelect = document.getElementById("id_verifier");
+
+  function applyMasterBillingDefaults() {
+    if (!taskMasterSelect) return;
+    var cfg = mastersBilling[taskMasterSelect.value];
+    if (!cfg) return;
+    if (billableCb) {
+      billableCb.checked = !!cfg.is_billable;
+      if (feesInput) feesInput.value = cfg.fees_amount || "";
+      syncBillableUi();
+    }
+    if (verifierSelect && cfg.default_verifier_id) {
+      verifierSelect.value = String(cfg.default_verifier_id);
+    }
+  }
+
+  if (billableCb) {
+    billableCb.addEventListener("change", syncBillableUi);
+    syncBillableUi();
+  }
+  if (taskMasterSelect) {
+    taskMasterSelect.addEventListener("change", applyMasterBillingDefaults);
+    applyMasterBillingDefaults();
+  }
+
+  document.getElementById("taskCreateForm").addEventListener("submit", function () {
+    syncClientHidden();
+    renderAssigneeChips();
+  });
+})();
+</script>
+{% endblock %}

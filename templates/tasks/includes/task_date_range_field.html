@@ -1,0 +1,15 @@
+<div class="col-12 col-lg-4" data-date-filter-group="{{ prefix }}">
+  <label class="form-label small text-secondary mb-0">{{ label }}</label>
+  <select name="{{ prefix }}_preset" class="form-select form-select-sm mb-1" data-date-preset-select="{{ prefix }}">
+    {% for val, plabel in date_preset_choices %}
+      <option value="{{ val }}" {% if preset == val %}selected{% endif %}>{{ plabel }}</option>
+    {% endfor %}
+  </select>
+  <div class="{% if preset != 'custom' %}d-none{% endif %}" data-date-custom-range="{{ prefix }}">
+    <div data-task-date-range data-from-field="{{ from_name }}" data-to-field="{{ to_name }}">
+      <input type="text" id="{{ display_id }}" class="form-control form-control-sm" placeholder="Select date range" autocomplete="off" readonly />
+      <input type="hidden" name="{{ from_name }}" id="id_{{ from_name }}" value="{{ from_value|default:'' }}" />
+      <input type="hidden" name="{{ to_name }}" id="id_{{ to_name }}" value="{{ to_value|default:'' }}" />
+    </div>
+  </div>
+</div>

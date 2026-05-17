@@ -1,0 +1,76 @@
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+(function () {
+  if (window.__taskDateRangeBound) return;
+  window.__taskDateRangeBound = true;
+
+  function formatIso(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+
+  function initTaskDateRange(wrap) {
+    if (!wrap || wrap.dataset.taskFpInit === "1") return;
+    const fromName = wrap.getAttribute("data-from-field");
+    const toName = wrap.getAttribute("data-to-field");
+    const display = wrap.querySelector("input[type='text'], input[type=\"text\"]");
+    const fromInput = wrap.querySelector('input[name="' + fromName + '"]');
+    const toInput = wrap.querySelector('input[name="' + toName + '"]');
+    if (!display || !fromInput || !toInput || typeof flatpickr === "undefined") return;
+
+    wrap.dataset.taskFpInit = "1";
+    const defaults = [];
+    if (fromInput.value) defaults.push(fromInput.value);
+    if (toInput.value) defaults.push(toInput.value);
+
+    flatpickr(display, {
+      mode: "range",
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d M Y",
+      allowInput: false,
+      clickOpens: true,
+      defaultDate: defaults.length ? defaults : undefined,
+      onChange: function (selectedDates) {
+        fromInput.value = selectedDates.length >= 1 ? formatIso(selectedDates[0]) : "";
+        toInput.value = selectedDates.length >= 2 ? formatIso(selectedDates[1]) : "";
+      },
+    });
+  }
+
+  function syncPresetVisibility(prefix) {
+    const group = document.querySelector('[data-date-filter-group="' + prefix + '"]');
+    if (!group) return;
+    const select = group.querySelector('[data-date-preset-select="' + prefix + '"]');
+    const custom = group.querySelector('[data-date-custom-range="' + prefix + '"]');
+    if (!select || !custom) return;
+    const isCustom = select.value === "custom";
+    custom.classList.toggle("d-none", !isCustom);
+    if (!isCustom) {
+      const fromInput = group.querySelector('input[name="' + prefix + '_from"]');
+      const toInput = group.querySelector('input[name="' + prefix + '_to"]');
+      if (fromInput) fromInput.value = "";
+      if (toInput) toInput.value = "";
+    }
+  }
+
+  function initAll() {
+    document.querySelectorAll("[data-task-date-range]").forEach(initTaskDateRange);
+    document.querySelectorAll("[data-date-preset-select]").forEach(function (sel) {
+      const prefix = sel.getAttribute("data-date-preset-select");
+      syncPresetVisibility(prefix);
+      sel.addEventListener("change", function () {
+        syncPresetVisibility(prefix);
+      });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAll);
+  } else {
+    initAll();
+  }
+})();
+</script>
