@@ -17,7 +17,18 @@ urlpatterns = [
     path("my/export.csv", views.task_my_list_csv, name="task_my_list_csv"),
     path("my/", views.task_my_list, name="task_my_list"),
     path("new/", views.task_create, name="task_create"),
+    path("new/bulk-upload/", views.task_bulk_import, name="task_bulk_import"),
+    path(
+        "new/bulk-upload/template/",
+        views.task_bulk_import_template,
+        name="task_bulk_import_template",
+    ),
     path("verify/", views.task_verify_queue, name="task_verify_queue"),
+    path(
+        "verify/<int:pk>/approve-assignment/",
+        views.task_assignment_approve,
+        name="task_assignment_approve",
+    ),
     path("verify/<int:pk>/approve/", views.task_verify_approve, name="task_verify_approve"),
     path("verify/<int:pk>/rework/", views.task_verify_rework, name="task_verify_rework"),
     path("notifications/", views.notification_list, name="notification_list"),

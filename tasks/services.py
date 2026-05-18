@@ -32,15 +32,31 @@ def _log_activity(
     new_status="",
     metadata=None,
 ):
-    return TaskActivity.objects.create(
+    meta = metadata or {}
+    act = TaskActivity.objects.create(
         task=task,
         user=user,
         activity_type=activity_type,
         message=message,
         old_status=old_status or "",
         new_status=new_status or "",
-        metadata=metadata or {},
+        metadata=meta,
     )
+    try:
+        from masters.client_activity import log_task_client_activity
+
+        log_task_client_activity(
+            task=task,
+            user=user,
+            activity_type=activity_type,
+            message=message,
+            old_status=old_status or "",
+            new_status=new_status or "",
+            metadata=meta,
+        )
+    except ImportError:
+        pass
+    return act
 
 
 def _assignee_names(user_ids: list[int]) -> str:
@@ -151,12 +167,17 @@ def create_task_from_master(
         fees_amount=fees_amount,
     )
 
+    needs_assignment_approval = not auto_created
+    initial_status = (
+        Task.STATUS_PENDING_ASSIGNMENT if needs_assignment_approval else Task.STATUS_ASSIGNED
+    )
+
     task = Task.objects.create(
         client=client,
         task_master=master,
         enrollment=enrollment,
         title=master.name,
-        status=Task.STATUS_ASSIGNED,
+        status=initial_status,
         priority=master.default_priority,
         due_date=due_date,
         verifier=verifier,
@@ -176,15 +197,48 @@ def create_task_from_master(
         task,
         created_by,
         TaskActivity.TYPE_CREATED,
-        message=f"Task created; users: {names}."
+        message=(
+            f"Task created; users: {names} (awaiting verifier approval)."
+            if needs_assignment_approval
+            else f"Task created; users: {names}."
+        )
         + (" (auto)" if auto_created else ""),
         new_status=task.status,
         metadata={"assignee_ids": ids, "verifier_id": verifier.pk},
     )
-    for u in assignee_users:
+    if needs_assignment_approval:
         notify_user(
-            u,
-            f"You were assigned: {task.display_title} — {client.client_id}",
+            verifier,
+            f"Approve task assignment: {task.display_title} — {client.client_id}",
+            kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
+    else:
+        for u in assignee_users:
+            notify_user(
+                u,
+                f"You were assigned: {task.display_title} — {client.client_id}",
+                kind=TaskNotification.KIND_ASSIGNED,
+                link=f"/tasks/{task.pk}/",
+                task=task,
+            )
+    return task
+
+
+@transaction.atomic
+def approve_task_assignment(task: Task, user, message: str = "") -> Task:
+    if task.verifier_id != user.pk and not user.is_superuser:
+        raise ValidationError("Only the designated verifier can approve this assignment.")
+    if task.status != Task.STATUS_PENDING_ASSIGNMENT:
+        raise ValidationError("This task is not awaiting assignment approval.")
+
+    transition_task_status(task, Task.STATUS_ASSIGNED, user=user, message=message or "Assignment approved.")
+    client_id = task.client_id
+    for assignment in task.assignments.select_related("user"):
+        notify_user(
+            assignment.user,
+            f"You were assigned: {task.display_title} — {client_id}",
             kind=TaskNotification.KIND_ASSIGNED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -292,7 +346,11 @@ def cancel_task(task: Task, user, message: str = "") -> Task:
 @transaction.atomic
 def delete_task(task: Task, user) -> None:
     """Hard-delete a pending or cancelled task."""
-    if task.status not in (Task.STATUS_CANCELLED, Task.STATUS_ASSIGNED):
+    if task.status not in (
+        Task.STATUS_CANCELLED,
+        Task.STATUS_ASSIGNED,
+        Task.STATUS_PENDING_ASSIGNMENT,
+    ):
         raise ValidationError("Only pending or cancelled tasks can be deleted.")
     task.delete()
 

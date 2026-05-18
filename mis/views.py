@@ -8,7 +8,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from core.branch_access import approved_clients_for_user, filter_mis_qs
 from core.decorators import require_perm
-from masters.models import Client
+from masters.client_activity import log_client_activity
+from masters.models import Client, ClientActivityLog
 
 from .forms import ExpenseDetailForm, FeesDetailForm, ReceiptForm, TenderDetailForm
 from .models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
@@ -47,6 +48,12 @@ def fees_create(request):
         form = FeesDetailForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS fees entry saved for {obj.date:%d-%m-%Y}.",
+            )
             messages.success(request, f"Fees saved for {obj.client.client_name}.")
             return redirect("mis_fees_list")
     else:
@@ -61,6 +68,12 @@ def fees_edit(request, pk: int):
         form = FeesDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS fees entry updated for {obj.date:%d-%m-%Y}.",
+            )
             messages.success(request, f"Fees updated for {obj.client.client_name}.")
             return redirect("mis_fees_list")
     else:
@@ -73,6 +86,12 @@ def fees_delete(request, pk: int):
     obj = get_object_or_404(filter_mis_qs(FeesDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
+        log_client_activity(
+            client=obj.client,
+            user=request.user,
+            category=ClientActivityLog.CATEGORY_MIS,
+            activity=f"MIS fees entry deleted for {obj.date:%d-%m-%Y}.",
+        )
         obj.delete()
         messages.success(request, f"Fees entry deleted: {label}.")
         return redirect("mis_fees_list")
@@ -151,6 +170,12 @@ def receipt_create(request):
         form = ReceiptForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS receipt saved for {obj.date:%d-%m-%Y}.",
+            )
             messages.success(request, f"Receipt saved for {obj.client.client_name}.")
             return redirect("mis_receipt_list")
     else:
@@ -165,6 +190,12 @@ def receipt_edit(request, pk: int):
         form = ReceiptForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS receipt updated for {obj.date:%d-%m-%Y}.",
+            )
             messages.success(request, f"Receipt updated for {obj.client.client_name}.")
             return redirect("mis_receipt_list")
     else:
@@ -177,6 +208,12 @@ def receipt_delete(request, pk: int):
     obj = get_object_or_404(filter_mis_qs(Receipt.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
+        log_client_activity(
+            client=obj.client,
+            user=request.user,
+            category=ClientActivityLog.CATEGORY_MIS,
+            activity=f"MIS receipt deleted for {obj.date:%d-%m-%Y}.",
+        )
         obj.delete()
         messages.success(request, f"Receipt deleted: {label}.")
         return redirect("mis_receipt_list")
@@ -203,6 +240,12 @@ def expense_create(request):
         form = ExpenseDetailForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS expense saved for {obj.date:%d-%m-%Y}.",
+            )
             messages.success(request, f"Expense saved for {obj.client.client_name}.")
             return redirect("mis_expense_list")
     else:
@@ -217,6 +260,12 @@ def expense_edit(request, pk: int):
         form = ExpenseDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS expense updated for {obj.date:%d-%m-%Y}.",
+            )
             messages.success(request, f"Expense updated for {obj.client.client_name}.")
             return redirect("mis_expense_list")
     else:
@@ -229,6 +278,12 @@ def expense_delete(request, pk: int):
     obj = get_object_or_404(filter_mis_qs(ExpenseDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
+        log_client_activity(
+            client=obj.client,
+            user=request.user,
+            category=ClientActivityLog.CATEGORY_MIS,
+            activity=f"MIS expense deleted for {obj.date:%d-%m-%Y}.",
+        )
         obj.delete()
         messages.success(request, f"Expense entry deleted: {label}.")
         return redirect("mis_expense_list")

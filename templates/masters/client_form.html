@@ -135,6 +135,10 @@
     </form>
   </div>
 
+  {% if mode == "edit" %}
+    {% include "masters/includes/client_activity_log.html" %}
+  {% endif %}
+
   {{ groups_opts|json_script:"group-master-opts" }}
 
   <script>

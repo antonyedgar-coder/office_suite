@@ -49,10 +49,12 @@ def toggle_task_checklist_item(*, task: Task, item_id: int, user, done: bool) ->
         item.completed_at = None
         item.completed_by = None
     item.save(update_fields=["is_done", "completed_at", "completed_by"])
-    TaskActivity.objects.create(
-        task=task,
-        user=user,
-        activity_type=TaskActivity.TYPE_CHECKLIST,
+    from .services import _log_activity
+
+    _log_activity(
+        task,
+        user,
+        TaskActivity.TYPE_CHECKLIST,
         message=f"{'Completed' if done else 'Reopened'} checklist: {item.label}",
         metadata={"checklist_item_id": item.pk, "done": done},
     )

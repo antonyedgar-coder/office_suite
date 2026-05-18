@@ -17,6 +17,7 @@ from masters.models import DIRECTOR_ELIGIBLE_CLIENT_TYPES, Client, DirectorMappi
 from mis.models import ExpenseDetail, FeesDetail, Receipt
 
 from .activity_log import log_activity_from_request
+from .feature_flags import task_module_enabled
 
 
 def login_view(request):
@@ -88,37 +89,52 @@ def dashboard_view(request):
         if last_done is None or today >= earliest_next_dirkyc_allowed_date(last_done):
             dir3_pending_count += 1
 
-    mis_filter = {"date__gte": fy_start, "date__lte": fy_end}
-    mis_fy_fees = FeesDetail.objects.filter(**mis_filter).aggregate(
-        total=Sum("fees_amount"),
-        gst=Sum("gst_amount"),
+    user = request.user
+    show_mis_dashboard = user.is_superuser or (
+        user.has_perm("mis.add_feesdetail")
+        or user.has_perm("mis.add_receipt")
+        or user.has_perm("mis.add_expensedetail")
     )
-    fees_sum = (mis_fy_fees["total"] or Decimal("0")) + (mis_fy_fees["gst"] or Decimal("0"))
-    mis_fy_receipts = Receipt.objects.filter(**mis_filter).aggregate(total=Sum("amount_received"))["total"] or Decimal(
-        "0"
-    )
-    mis_fy_expenses = ExpenseDetail.objects.filter(**mis_filter).aggregate(total=Sum("expenses_paid"))[
-        "total"
-    ] or Decimal("0")
+    fees_sum = mis_fy_receipts = mis_fy_expenses = Decimal("0")
+    if show_mis_dashboard:
+        mis_filter = {"date__gte": fy_start, "date__lte": fy_end}
+        mis_fy_fees = FeesDetail.objects.filter(**mis_filter).aggregate(
+            total=Sum("fees_amount"),
+            gst=Sum("gst_amount"),
+        )
+        fees_sum = (mis_fy_fees["total"] or Decimal("0")) + (mis_fy_fees["gst"] or Decimal("0"))
+        mis_fy_receipts = Receipt.objects.filter(**mis_filter).aggregate(total=Sum("amount_received"))[
+            "total"
+        ] or Decimal("0")
+        mis_fy_expenses = ExpenseDetail.objects.filter(**mis_filter).aggregate(total=Sum("expenses_paid"))[
+            "total"
+        ] or Decimal("0")
 
-    return render(
-        request,
-        "dashboard.html",
-        {
-            "today": today,
-            "client_total": client_total,
-            "client_type_counts": client_type_counts,
-            "dir3_pending_count": dir3_pending_count,
-            "dir3_total_directors": dir3_total_directors,
-            "mis_fy_label": fy_label,
-            "mis_fy_period_start": fy_start,
-            "mis_fy_period_end": fy_end,
-            "mis_fy_fees": fees_sum,
-            "mis_fy_receipts": mis_fy_receipts,
-            "mis_fy_expenses": mis_fy_expenses,
-            "director_mapping_count": DirectorMapping.objects.count(),
-        },
-    )
+    context = {
+        "today": today,
+        "client_total": client_total,
+        "client_type_counts": client_type_counts,
+        "dir3_pending_count": dir3_pending_count,
+        "dir3_total_directors": dir3_total_directors,
+        "mis_fy_label": fy_label,
+        "mis_fy_period_start": fy_start,
+        "mis_fy_period_end": fy_end,
+        "mis_fy_fees": fees_sum,
+        "mis_fy_receipts": mis_fy_receipts,
+        "mis_fy_expenses": mis_fy_expenses,
+        "director_mapping_count": DirectorMapping.objects.count(),
+        "show_mis_dashboard": show_mis_dashboard,
+        "show_task_dashboard": False,
+    }
+    if task_module_enabled():
+        from tasks.dashboard_counts import build_task_dashboard_context
+
+        task_ctx = build_task_dashboard_context(request.user)
+        if task_ctx:
+            context["show_task_dashboard"] = True
+            context.update(task_ctx)
+
+    return render(request, "dashboard.html", context)
 
 
 @login_required

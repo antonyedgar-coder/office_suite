@@ -4,25 +4,59 @@
 {% block content %}
   <div class="card p-3 col-lg-8">
     <form method="post" id="taskMasterForm">{% csrf_token %}
-      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-      {% if form.recurrence_config_json.errors %}<div class="alert alert-danger">{{ form.recurrence_config_json.errors }}</div>{% endif %}
-      <div class="mb-3"><label class="form-label">Task group</label>{{ form.task_group }}</div>
-      <div class="mb-3"><label class="form-label">Name</label>{{ form.name }}</div>
-      <div class="mb-3"><label class="form-label">Description</label>{{ form.description }}</div>
+      {% if form.errors %}
+        <div class="alert alert-danger" role="alert">
+          <div class="fw-semibold mb-1">Please correct the following:</div>
+          <ul class="mb-0 ps-3">
+            {% for field in form %}
+              {% for error in field.errors %}
+                <li>{{ field.label }}: {{ error }}</li>
+              {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="id_task_group">Task group</label>
+        {{ form.task_group }}
+        {% if form.task_group.errors %}<div class="text-danger small">{{ form.task_group.errors }}</div>{% endif %}
+        {% if not form.task_group.field.queryset %}
+          <p class="form-text text-warning mb-0">Create an active task group first (Tasks → Task group).</p>
+        {% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_name">Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_description">Description</label>
+        {{ form.description }}
+        {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors }}</div>{% endif %}
+      </div>
       <div class="row">
-        <div class="col-md-4 mb-3"><label class="form-label">Default priority</label>{{ form.default_priority }}</div>
-        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_active }} <label class="form-check-label">Active</label></div>
-        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label">Recurring</label></div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label" for="id_default_priority">Default priority</label>
+          {{ form.default_priority }}
+          {% if form.default_priority.errors %}<div class="text-danger small">{{ form.default_priority.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_active }} <label class="form-check-label" for="id_is_active">Active</label></div>
+        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label" for="id_is_recurring">Recurring</label></div>
       </div>
       <div class="row mb-3">
         <div class="col-md-4 form-check pt-2">{{ form.default_is_billable }} <label class="form-check-label" for="id_default_is_billable">Default billable</label></div>
         <div class="col-md-4" id="masterFeesWrap" style="display:none">
           <label class="form-label" for="id_default_fees_amount">Default fees</label>
           {{ form.default_fees_amount }}
+          {% if form.default_fees_amount.errors %}<div class="text-danger small">{{ form.default_fees_amount.errors }}</div>{% endif %}
         </div>
         <div class="col-md-4">
           <label class="form-label" for="id_default_verifier">Default verifier</label>
           {{ form.default_verifier }}
+          {% if form.default_verifier.errors %}<div class="text-danger small">{{ form.default_verifier.errors }}</div>{% endif %}
         </div>
       </div>
       <div class="border rounded p-3 mb-3">
@@ -31,10 +65,18 @@
         <div id="checklistRows"></div>
         <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="checklistAddBtn">Add item</button>
         {{ form.checklist_json }}
+        {% if form.checklist_json.errors %}<div class="text-danger small mt-1">{{ form.checklist_json.errors }}</div>{% endif %}
       </div>
       <div id="recurrencePanel" class="border rounded p-3 mb-3" style="display:none">
-        <div class="mb-3"><label class="form-label">Frequency</label>{{ form.frequency }}</div>
+        <div class="mb-3">
+          <label class="form-label" for="id_frequency">Frequency</label>
+          {{ form.frequency }}
+          {% if form.frequency.errors %}<div class="text-danger small">{{ form.frequency.errors }}</div>{% endif %}
+        </div>
         <div id="recurrenceFields"></div>
+        {% if form.recurrence_config_json.errors %}
+          <div class="text-danger small">{{ form.recurrence_config_json.errors }}</div>
+        {% endif %}
       </div>
       {{ form.recurrence_config_json }}
       <div class="d-flex gap-2">
@@ -55,6 +97,8 @@
   var panel = document.getElementById("recurrencePanel");
   var fields = document.getElementById("recurrenceFields");
   var hidden = document.getElementById("id_recurrence_config_json");
+  if (!recurring || !freq || !panel || !fields || !hidden) return;
+
   function fieldRow(label, name, type, val) {
     var d = document.createElement("div");
     d.className = "mb-2";
@@ -128,25 +172,34 @@
     });
     checklistRows.appendChild(row);
   }
-  (checklistLabels || []).forEach(addChecklistRow);
-  if (!checklistLabels || !checklistLabels.length) addChecklistRow("");
-  document.getElementById("checklistAddBtn").addEventListener("click", function () {
-    addChecklistRow("");
-  });
+  if (checklistRows && checklistHidden) {
+    (checklistLabels || []).forEach(addChecklistRow);
+    if (!checklistLabels || !checklistLabels.length) addChecklistRow("");
+    document.getElementById("checklistAddBtn").addEventListener("click", function () {
+      addChecklistRow("");
+    });
+  }
 
   document.getElementById("taskMasterForm").addEventListener("submit", function () {
     var out = {};
     fields.querySelectorAll("[data-rc]").forEach(function (el) {
       var k = el.getAttribute("data-rc");
-      out[k] = el.type === "number" ? parseInt(el.value, 10) : el.value;
+      if (el.type === "number") {
+        var n = parseInt(el.value, 10);
+        if (!Number.isNaN(n)) out[k] = n;
+      } else if (el.value) {
+        out[k] = el.value;
+      }
     });
     hidden.value = JSON.stringify(out);
-    var labels = [];
-    checklistRows.querySelectorAll(".checklist-input").forEach(function (inp) {
-      var v = (inp.value || "").trim();
-      if (v) labels.push(v);
-    });
-    checklistHidden.value = JSON.stringify(labels);
+    if (checklistHidden) {
+      var labels = [];
+      checklistRows.querySelectorAll(".checklist-input").forEach(function (inp) {
+        var v = (inp.value || "").trim();
+        if (v) labels.push(v);
+      });
+      checklistHidden.value = JSON.stringify(labels);
+    }
   });
   recurring.addEventListener("change", render);
   freq.addEventListener("change", render);

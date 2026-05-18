@@ -6,14 +6,15 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from core.branch_access import approved_clients_for_user
 
-from .date_presets import DATE_PRESET_CHOICES, PRESET_CUSTOM, resolve_date_preset
+from .date_presets import DATE_PRESET_CHOICES, PRESET_ALL_TIME, PRESET_CUSTOM, resolve_date_preset
 from .models import Task, TaskMaster
-from .period_display import PeriodColumns, format_next_period, format_period_key
+from .period_display import PeriodColumns, format_next_period, format_period_display
 from .user_labels import build_short_codes_for_users, staff_users_queryset, user_person_name
 
 User = get_user_model()
@@ -87,6 +88,13 @@ def tasks_queryset_for_user(user):
         "approved_by__employee_profile",
         "enrollment",
     )
+
+
+def tasks_queryset_personal_for_user(user):
+    """Tasks the user is assigned to, verifies, or created (branch-scoped)."""
+    return tasks_queryset_for_user(user).filter(
+        Q(assignments__user=user) | Q(verifier=user) | Q(created_by=user)
+    ).distinct()
 
 
 def apply_task_list_filters(qs, filters: TaskListFilters):
@@ -175,7 +183,11 @@ def prepare_task_list_rows(tasks, *, include_assignees: bool = False) -> list[Ta
 
     rows = []
     for task in task_list:
-        period = format_period_key(task.period_key)
+        period = format_period_display(
+            task.period_key,
+            period_type=task.period_type or "",
+            master=task.task_master,
+        )
         period.next_period = format_next_period(task)
         rows.append(
             TaskListRow(
@@ -211,6 +223,36 @@ def get_filtered_tasks(user, filters: TaskListFilters, *, base_qs=None, limit: i
     qs = base_qs if base_qs is not None else tasks_queryset_for_user(user)
     qs = apply_task_list_filters(qs, filters)
     return qs.order_by("-created_at", "-due_date")[:limit]
+
+
+def task_list_url(
+    route_name: str,
+    *,
+    status: str = "",
+    assignee_id: str = "",
+    verifier_id: str = "",
+    open_tasks: bool = False,
+) -> str:
+    """Build a task list URL with standard date presets applied."""
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    params: dict[str, str] = {
+        "created_preset": PRESET_ALL_TIME,
+        "due_preset": PRESET_ALL_TIME,
+        "approved_preset": PRESET_ALL_TIME,
+    }
+    if status:
+        params["status"] = status
+    if assignee_id:
+        params["assignee"] = assignee_id
+    if verifier_id:
+        params["verifier"] = verifier_id
+    if open_tasks:
+        params["open"] = "1"
+    q = urlencode(params)
+    return f"{reverse(route_name)}?{q}" if q else reverse(route_name)
 
 
 def filters_query_string(filters: TaskListFilters) -> str:

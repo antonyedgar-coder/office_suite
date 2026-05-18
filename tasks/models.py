@@ -181,12 +181,14 @@ class Task(models.Model):
     STATUS_DRAFT = "draft"
     STATUS_IN_PROGRESS = "in_progress"
 
+    STATUS_PENDING_ASSIGNMENT = "pending_assignment"
     STATUS_ASSIGNED = "assigned"
     STATUS_SUBMITTED = "submitted"
     STATUS_APPROVED = "approved"
     STATUS_REWORK = "rework"
     STATUS_CANCELLED = "cancelled"
     STATUS_CHOICES = [
+        (STATUS_PENDING_ASSIGNMENT, "Awaiting assignment approval"),
         (STATUS_ASSIGNED, "Pending"),
         (STATUS_SUBMITTED, "Submitted"),
         (STATUS_APPROVED, "Approved"),
@@ -292,6 +294,8 @@ class Task(models.Model):
 
     @classmethod
     def status_label(cls, code: str) -> str:
+        if code == cls.STATUS_PENDING_ASSIGNMENT:
+            return "Awaiting assignment approval"
         if code in (cls.STATUS_ASSIGNED, cls.STATUS_IN_PROGRESS, cls.STATUS_DRAFT):
             return "Pending"
         return dict(cls.STATUS_CHOICES).get(code, code or "")
@@ -389,6 +393,7 @@ class TaskActivity(models.Model):
 
 class TaskNotification(models.Model):
     KIND_ASSIGNED = "assigned"
+    KIND_ASSIGNMENT_APPROVAL = "assignment_approval"
     KIND_VERIFY = "verify"
     KIND_REWORK = "rework"
     KIND_APPROVED = "approved"
@@ -396,6 +401,7 @@ class TaskNotification(models.Model):
     KIND_GENERAL = "general"
     KIND_CHOICES = [
         (KIND_ASSIGNED, "Assigned"),
+        (KIND_ASSIGNMENT_APPROVAL, "Assignment approval"),
         (KIND_VERIFY, "Verification"),
         (KIND_REWORK, "Rework"),
         (KIND_APPROVED, "Approved"),

@@ -16,12 +16,14 @@ def task_nav_counts(request):
     return {
         "task_nav_my_count": base.filter(assignments__user=request.user)
         .exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
+        .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
         .distinct()
         .count(),
-        "task_nav_verify_count": base.filter(
-            status=Task.STATUS_SUBMITTED,
-            verifier=request.user,
-        ).count(),
+        "task_nav_verify_count": base.filter(verifier=request.user)
+        .filter(
+            status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT],
+        )
+        .count(),
         "task_nav_notification_count": TaskNotification.objects.filter(
             user=request.user,
             is_read=False,

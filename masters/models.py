@@ -621,3 +621,52 @@ class DirectorMapping(models.Model):
         if errors:
             raise ValidationError(errors)
 
+
+class ClientActivityLog(models.Model):
+    """Per-client timeline (client bible) for master, mapping, tasks, MIS, and DIR-3 events."""
+
+    CATEGORY_CLIENT = "client_master"
+    CATEGORY_DIRECTOR = "director_mapping"
+    CATEGORY_TASK = "task"
+    CATEGORY_MIS = "mis"
+    CATEGORY_DIR3 = "dir3_kyc"
+    CATEGORY_CHOICES = [
+        (CATEGORY_CLIENT, "Client Master"),
+        (CATEGORY_DIRECTOR, "Director Mapping"),
+        (CATEGORY_TASK, "Task"),
+        (CATEGORY_MIS, "MIS"),
+        (CATEGORY_DIR3, "DIR-3 KYC"),
+    ]
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="activity_logs",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    category = models.CharField(max_length=32, choices=CATEGORY_CHOICES)
+    activity = models.TextField()
+    task = models.ForeignKey(
+        "tasks.Task",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_activity_logs",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["client", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.client_id} — {self.get_category_display()} — {self.created_at:%Y-%m-%d %H:%M}"
+

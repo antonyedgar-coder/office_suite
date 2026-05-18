@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.utils import timezone
 
-from .models import Client, ClientGroup, ClientSequence, DirectorMapping, GroupSequence
+from .models import (
+    Client,
+    ClientActivityLog,
+    ClientGroup,
+    ClientSequence,
+    DirectorMapping,
+    GroupSequence,
+)
 
 
 @admin.register(GroupSequence)
@@ -66,4 +73,26 @@ class DirectorMappingAdmin(admin.ModelAdmin):
 @admin.register(ClientSequence)
 class ClientSequenceAdmin(admin.ModelAdmin):
     list_display = ("prefix", "last_value")
+
+
+@admin.register(ClientActivityLog)
+class ClientActivityLogAdmin(admin.ModelAdmin):
+    list_display = ("client", "category", "activity", "user", "task", "created_at")
+    list_filter = ("category", "created_at")
+    search_fields = ("client__client_id", "client__client_name", "activity")
+    readonly_fields = (
+        "client",
+        "user",
+        "category",
+        "activity",
+        "task",
+        "metadata",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 

@@ -121,8 +121,6 @@ class TaskMasterForm(forms.ModelForm):
 
             "default_fees_amount",
 
-            "default_currency",
-
             "default_verifier",
 
         ]
@@ -146,8 +144,6 @@ class TaskMasterForm(forms.ModelForm):
             "default_is_billable": forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_default_is_billable"}),
 
             "default_fees_amount": forms.NumberInput(attrs={"class": "form-control", "id": "id_default_fees_amount", "step": "0.01", "min": "0"}),
-
-            "default_currency": forms.TextInput(attrs={"class": "form-control", "maxlength": 8}),
 
             "default_verifier": forms.Select(attrs={"class": "form-select"}),
 
@@ -204,16 +200,14 @@ class TaskMasterForm(forms.ModelForm):
             ) from exc
 
         if is_recurring:
-
-            try:
-
-                validate_recurrence_config(frequency, cfg)
-
-            except DjangoValidationError as exc:
-
-                raise self._recurrence_validation_error(exc) from exc
-
-            self.instance.recurrence_config = cfg
+            if not frequency:
+                self.add_error("frequency", "Select a frequency for recurring tasks.")
+            else:
+                try:
+                    validate_recurrence_config(frequency, cfg)
+                except DjangoValidationError as exc:
+                    raise self._recurrence_validation_error(exc) from exc
+                self.instance.recurrence_config = cfg
 
         else:
 
@@ -283,13 +277,17 @@ class TaskMasterForm(forms.ModelForm):
 
     def save(self, commit=True):
 
-        instance = super().save(commit=commit)
+        instance = super().save(commit=False)
+        if not instance.default_currency:
+            instance.default_currency = TaskMaster.CURRENCY_INR
 
         if commit:
-
+            instance.save()
             from .checklist import save_master_checklist
 
             save_master_checklist(instance, self.cleaned_data.get("checklist_items", []))
+        else:
+            self.instance = instance
 
         return instance
 
@@ -604,6 +602,19 @@ class TaskCreateForm(forms.Form):
             self.add_error("assignee_picker", "Add at least one valid user from the suggestions.")
 
         cleaned["assignees"] = assignees
+
+        verifier = cleaned.get("verifier")
+        user = self._task_user
+        if user and user.is_authenticated and assignees and verifier:
+            assignee_ids = {u.pk for u in assignees}
+            if user.pk == verifier.pk:
+                self.add_error("verifier", "Creator cannot be the verifier.")
+            if user.pk in assignee_ids:
+                self.add_error("assignee_picker", "Creator cannot be assigned to the task.")
+            if verifier.pk in assignee_ids:
+                self.add_error("verifier", "Verifier cannot be one of the assigned users.")
+            if len(assignee_ids) < len(assignees):
+                self.add_error("assignee_picker", "Each assigned user must be a different person.")
 
 
 

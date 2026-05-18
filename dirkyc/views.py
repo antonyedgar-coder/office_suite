@@ -5,6 +5,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from core.branch_access import filter_mis_qs
 from core.decorators import require_perm
 
+from masters.client_activity import log_client_activity
+from masters.models import ClientActivityLog
+
 from .forms import Dir3KycForm
 from .models import Dir3Kyc
 
@@ -33,7 +36,13 @@ def dir3kyc_create(request):
     if request.method == "POST":
         form = Dir3KycForm(request.POST, user=request.user)
         if form.is_valid():
-            form.save()
+            obj = form.save()
+            log_client_activity(
+                client=obj.director,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_DIR3,
+                activity="DIR-3 KYC record created.",
+            )
             messages.success(request, "DIR-3 KYC record saved.")
             return redirect("dirkyc_list")
     else:
@@ -50,7 +59,13 @@ def dir3kyc_edit(request, pk: int):
     if request.method == "POST":
         form = Dir3KycForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
-            form.save()
+            obj = form.save()
+            log_client_activity(
+                client=obj.director,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_DIR3,
+                activity="DIR-3 KYC record updated.",
+            )
             messages.success(request, "DIR-3 KYC record updated.")
             return redirect("dirkyc_list")
     else:
@@ -65,6 +80,12 @@ def dir3kyc_delete(request, pk: int):
         pk=pk,
     )
     if request.method == "POST":
+        log_client_activity(
+            client=obj.director,
+            user=request.user,
+            category=ClientActivityLog.CATEGORY_DIR3,
+            activity="DIR-3 KYC record deleted.",
+        )
         obj.delete()
         messages.success(request, "DIR-3 KYC record deleted.")
         return redirect("dirkyc_list")

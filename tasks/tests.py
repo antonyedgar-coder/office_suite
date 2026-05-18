@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -6,15 +6,26 @@ from django.contrib.auth.models import Group
 from django.test import TestCase, modify_settings
 
 from core.models import Employee
-from masters.models import Client, ClientGroup
+from masters.models import Client, ClientActivityLog, ClientGroup
 from tasks.checklist import master_checklist_labels, save_master_checklist, toggle_task_checklist_item
-from tasks.models import Task, TaskChecklistItem, TaskGroup, TaskMaster, TaskRecurrenceEnrollment
-from tasks.period_display import format_period_key
+from tasks.forms import TaskMasterForm
+from tasks.models import (
+    Task,
+    TaskAssignment,
+    TaskChecklistItem,
+    TaskGroup,
+    TaskMaster,
+    TaskRecurrenceEnrollment,
+)
+from tasks.period_display import format_period_display
 from tasks.period_keys import build_period_key, current_fy_start
 from tasks.user_labels import build_short_codes_for_users, short_code_for_user, user_person_name
+from tasks.dashboard_counts import build_task_dashboard_context, task_due_bucket_counts
 from tasks.recurrence import compute_create_due_dates
+from tasks.models import TaskNotification
 from tasks.services import (
     approve_task,
+    approve_task_assignment,
     cancel_task,
     create_task_from_master,
     submit_task,
@@ -44,15 +55,36 @@ class TaskWorkflowTests(TestCase):
             is_recurring=False,
         )
 
-    def test_submit_and_approve_workflow(self):
+    def test_create_task_logs_client_activity(self):
         task = create_task_from_master(
             master=self.master,
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
             created_by=self.user,
+            period_key="2026-08",
+            due_date=date(2026, 8, 20),
+            auto_created=True,
+        )
+        logs = ClientActivityLog.objects.filter(
+            client=self.client,
+            category=ClientActivityLog.CATEGORY_TASK,
+            task=task,
+        )
+        self.assertGreaterEqual(logs.count(), 1)
+        self.assertIn("GSTR-1", logs.first().activity)
+
+    def test_submit_and_approve_workflow(self):
+        creator = User.objects.create_user(email="creator@example.com", password="pass12345")
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            created_by=creator,
             period_key="2026-05",
             due_date=date(2026, 5, 20),
+            auto_created=True,
         )
         self.assertEqual(task.status, Task.STATUS_ASSIGNED)
         submit_task(task, self.user)
@@ -80,6 +112,7 @@ class TaskWorkflowTests(TestCase):
             due_date=date(2026, 4, 20),
             is_billable=True,
             fees_amount=Decimal("100.00"),
+            auto_created=True,
         )
         self.master.default_fees_amount = Decimal("250.00")
         self.master.save()
@@ -91,6 +124,7 @@ class TaskWorkflowTests(TestCase):
             created_by=self.user,
             period_key="2026-06",
             due_date=date(2026, 6, 20),
+            auto_created=True,
         )
         task_old.refresh_from_db()
         task_new.refresh_from_db()
@@ -107,6 +141,7 @@ class TaskWorkflowTests(TestCase):
             created_by=self.user,
             period_key="2026-07",
             due_date=date(2026, 7, 20),
+            auto_created=True,
         )
         items = list(TaskChecklistItem.objects.filter(task=task).order_by("sort_order"))
         self.assertEqual(len(items), 2)
@@ -146,6 +181,43 @@ class TaskWorkflowTests(TestCase):
         enrollment.refresh_from_db()
         self.assertFalse(enrollment.is_active)
         self.assertEqual(try_create_recurring_for_enrollment(enrollment, date(2026, 6, 1)), None)
+
+    def test_manual_task_requires_verifier_assignment_approval(self):
+        creator = User.objects.create_user(email="maker@example.com", password="pass12345")
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            created_by=creator,
+            period_key="2026-08",
+            due_date=date(2026, 8, 20),
+        )
+        self.assertEqual(task.status, Task.STATUS_PENDING_ASSIGNMENT)
+        self.assertFalse(
+            TaskNotification.objects.filter(
+                user=self.user,
+                kind=TaskNotification.KIND_ASSIGNED,
+                task=task,
+            ).exists()
+        )
+        self.assertTrue(
+            TaskNotification.objects.filter(
+                user=self.verifier,
+                kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
+                task=task,
+            ).exists()
+        )
+        approve_task_assignment(task, self.verifier)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_ASSIGNED)
+        self.assertTrue(
+            TaskNotification.objects.filter(
+                user=self.user,
+                kind=TaskNotification.KIND_ASSIGNED,
+                task=task,
+            ).exists()
+        )
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
@@ -195,8 +267,19 @@ class PeriodKeyTests(TestCase):
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class TaskListDisplayTests(TestCase):
     def test_period_columns_monthly(self):
-        cols = format_period_key("2026-05")
-        self.assertEqual(cols.month, "May 2026")
+        cols = format_period_display("2026-05", period_type="monthly")
+        self.assertEqual(cols.frequency, "Monthly")
+        self.assertEqual(cols.period, "May 2026")
+
+    def test_period_columns_quarterly(self):
+        cols = format_period_display("2025-Q1", period_type="quarterly")
+        self.assertEqual(cols.frequency, "Qtr")
+        self.assertIn("Q1", cols.period)
+
+    def test_period_columns_three_year_span(self):
+        cols = format_period_display("2023-2025", period_type="every_3_years")
+        self.assertEqual(cols.frequency, "3 years")
+        self.assertIn("2023", cols.period)
 
     def test_user_person_name_from_employee_profile(self):
         u = User.objects.create_user(email="staff@example.com", password="pass12345")
@@ -289,3 +372,160 @@ class RecurringCreateTests(TestCase):
         self.assertIsNone(result)
         self.assertFalse(Task.objects.filter(client=self.client, task_master=self.master).exists())
         self.assertTrue(TaskNotification.objects.filter(kind=TaskNotification.KIND_RECURRING_FAIL).exists())
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskDashboardDueBucketTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="dash@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="DASH GROUP")
+        self.client = Client.objects.create(
+            client_name="DASH CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+        )
+        tg = TaskGroup.objects.create(name="Dash TG")
+        self.master = TaskMaster.objects.create(task_group=tg, name="Dash task")
+
+    def _task(self, due: date, *, status=Task.STATUS_ASSIGNED, period_key: str | None = None):
+        return Task.objects.create(
+            client=self.client,
+            task_master=self.master,
+            title="T",
+            status=status,
+            due_date=due,
+            verifier=self.user,
+            period_key=period_key or f"one-time-{due.isoformat()}-{status}",
+            created_by=self.user,
+        )
+
+    def test_due_buckets_mutually_exclusive(self):
+        today = date(2026, 5, 17)
+        self._task(today)
+        self._task(today + timedelta(days=3))
+        self._task(today + timedelta(days=8))
+        self._task(today - timedelta(days=2))
+        self._task(today - timedelta(days=10))
+        self._task(today - timedelta(days=40))
+        self._task(today, status=Task.STATUS_APPROVED)
+
+        c = task_due_bucket_counts(Task.objects.all(), today=today)
+        self.assertEqual(c["due_today"], 1)
+        self.assertEqual(c["due_next_7_days"], 1)
+        self.assertEqual(c["overdue_up_to_7"], 1)
+        self.assertEqual(c["overdue_up_to_30"], 1)
+        self.assertEqual(c["overdue_over_30"], 1)
+
+    def test_overdue_13_days_in_up_to_30_bucket(self):
+        today = date(2026, 5, 18)
+        due = date(2026, 5, 5)
+        self._task(due)
+        c = task_due_bucket_counts(Task.objects.all(), today=today)
+        self.assertEqual(c["overdue_up_to_7"], 0)
+        self.assertEqual(c["overdue_up_to_30"], 1)
+        self.assertEqual(c["overdue_over_30"], 0)
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskDashboardContextTests(TestCase):
+    def setUp(self):
+        self.assignee = User.objects.create_user(email="worker@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="ver@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="CTX GROUP")
+        self.client_row = Client.objects.create(
+            client_name="CTX CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+        )
+        tg = TaskGroup.objects.create(name="CTX TG")
+        self.master = TaskMaster.objects.create(task_group=tg, name="Ctx task")
+
+    def test_dashboard_context_without_view_task_permission(self):
+        Task.objects.create(
+            client=self.client_row,
+            task_master=self.master,
+            title="T",
+            status=Task.STATUS_ASSIGNED,
+            due_date=date(2026, 6, 1),
+            verifier=self.verifier,
+            period_key="ctx-1",
+            created_by=self.verifier,
+        )
+        task = Task.objects.get(period_key="ctx-1")
+        TaskAssignment.objects.create(task=task, user=self.assignee)
+
+        ctx = build_task_dashboard_context(self.assignee)
+        self.assertIsNotNone(ctx)
+        self.assertFalse(ctx["task_dashboard_office_view"])
+        self.assertEqual(ctx["task_counts"]["my_open"], 1)
+        self.assertNotIn("total_open", ctx["task_counts"])
+        self.assertTrue(ctx["task_due_buckets"])
+        my_open_card = next(c for c in ctx["task_detail_cards"] if c.key == "my_open")
+        self.assertIn("task_my_list", my_open_card.list_url)
+        submitted_card = next(c for c in ctx["task_detail_cards"] if c.key == "my_submitted")
+        self.assertIn("status=submitted", submitted_card.list_url)
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskMasterFormTests(TestCase):
+    def test_create_without_currency_field_in_post(self):
+        tg = TaskGroup.objects.create(name="Form TG", is_active=True)
+        form = TaskMasterForm(
+            data={
+                "task_group": str(tg.pk),
+                "name": "GSTR-3B",
+                "description": "",
+                "default_priority": TaskMaster.PRIORITY_NORMAL,
+                "is_active": "on",
+                "is_recurring": "",
+                "frequency": "",
+                "default_is_billable": "",
+                "default_fees_amount": "",
+                "default_verifier": "",
+                "recurrence_config_json": "{}",
+                "checklist_json": "[]",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        master = form.save()
+        self.assertEqual(master.default_currency, TaskMaster.CURRENCY_INR)
+        self.assertEqual(master.name, "GSTR-3B")
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskCsvImportTests(TestCase):
+    def setUp(self):
+        self.creator = User.objects.create_user(email="creator@example.com", password="pass12345")
+        self.assignee = User.objects.create_user(email="assign@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="verify@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="CSV GRP")
+        self.client_row = Client.objects.create(
+            client_name="CSV CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            client_id="CSV001",
+            approval_status=Client.APPROVED,
+        )
+        tg = TaskGroup.objects.create(name="CSV TG")
+        self.master = TaskMaster.objects.create(task_group=tg, name="CSV Master")
+
+    def test_parse_valid_row(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,monthly,"
+            "5,2026,,,,,18-05-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[0].data["period_key"], "2026-05")

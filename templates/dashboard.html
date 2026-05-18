@@ -48,6 +48,12 @@
           {% if request.user.is_superuser %}
             <a class="btn btn-outline-danger btn-sm" href="{% url 'reset_test_data' %}">Reset test data</a>
           {% endif %}
+          {% if show_task_dashboard %}
+            {% if perms.tasks.view_task or request.user.is_superuser %}
+              <a class="btn btn-outline-primary btn-sm" href="{% url 'task_list' %}">All tasks</a>
+            {% endif %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'task_my_list' %}">My tasks</a>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -63,8 +69,14 @@
     </div>
   </div>
 
+  {% if show_task_dashboard %}
+    <div class="row g-3 mt-0">
+      {% include "includes/dashboard_task_summary.html" %}
+    </div>
+  {% endif %}
+
   <div class="row g-3 mt-0">
-    <div class="col-12 col-lg-4">
+    <div class="col-12 {% if show_mis_dashboard %}col-lg-4{% else %}col-lg-6{% endif %}">
       <div class="card p-3 h-100">
         <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
           <div class="fw-semibold">Clients by type</div>
@@ -88,7 +100,7 @@
       </div>
     </div>
 
-    <div class="col-12 col-lg-4">
+    <div class="col-12 {% if show_mis_dashboard %}col-lg-4{% else %}col-lg-6{% endif %}">
       <div class="card p-3 h-100">
         <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
           <div class="fw-semibold">DIR-3 eKYC pending</div>
@@ -113,6 +125,7 @@
       </div>
     </div>
 
+    {% if show_mis_dashboard %}
     <div class="col-12 col-lg-4">
       <div class="card p-3 h-100">
         <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
@@ -153,6 +166,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
   </div>
   {{ client_type_counts|json_script:"dashboard-client-types" }}
 {% endblock %}

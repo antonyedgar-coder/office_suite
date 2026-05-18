@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Bulk assign tasks — CA Office Suite{% endblock %}
+{% block page_title %}Bulk assign tasks (CSV){% endblock %}
+{% block content %}
+  <div class="card p-3">
+    <p class="text-secondary small mb-2">
+      Upload a CSV to create multiple tasks. Each row follows the same rules as
+      <a href="{% url 'task_create' %}">New task</a> (verifier must approve before assignees are notified).
+      Use <strong>Group | Master</strong> for TASK_MASTER when names repeat across groups.
+    </p>
+    <p class="mb-2 small"><strong>PERIOD_TYPE:</strong> monthly, quarterly, half_yearly, yearly, every_3_years, every_5_years, one_time</p>
+    <div class="mb-3"><code class="small">{{ columns|join:", " }}</code></div>
+    <div class="mb-3 d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{% url 'task_bulk_import_template' %}">Download CSV template</a>
+      <a class="btn btn-outline-secondary" href="{% url 'task_create' %}">Single task</a>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="vstack gap-2">
+      {% csrf_token %}
+      <input class="form-control" type="file" name="csv_file" accept=".csv" required />
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Upload &amp; preview</button>
+        <a class="btn btn-outline-secondary" href="{% url 'task_my_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

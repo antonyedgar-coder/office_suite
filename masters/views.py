@@ -18,12 +18,25 @@ from .director_mapping_import import (
     validate_director_mapping_import_active_uniqueness_in_file,
 )
 from .forms import ClientForm, ClientGroupForm, DirectorCompanyPickForm, DirectorForm, DirectorMappingRowFormSet
-from .models import DIRECTOR_COMPANY_TYPES, DIRECTOR_ELIGIBLE_CLIENT_TYPES, Client, ClientGroup, DirectorMapping
+from .client_activity import (
+    build_client_activity_rows,
+    get_client_activity_timeline,
+    log_client_activity,
+)
+from .models import (
+    DIRECTOR_COMPANY_TYPES,
+    DIRECTOR_ELIGIBLE_CLIENT_TYPES,
+    Client,
+    ClientActivityLog,
+    ClientGroup,
+    DirectorMapping,
+)
 from .csv_import import parse_clients_csv, CSV_COLUMNS
 from .group_csv_import import GROUP_CSV_COLUMNS, parse_client_groups_csv
 
 from core.branch_access import filter_clients_by_branch
 from core.decorators import require_perm
+from core.feature_flags import task_module_enabled
 
 
 def client_master_queryset_for_user(user):
@@ -99,8 +112,22 @@ def client_create(request):
             _apply_new_client_approval(client, request.user)
             client.save()
             if client.approval_status == Client.APPROVED:
+                log_client_activity(
+                    client=client,
+                    user=request.user,
+                    category=ClientActivityLog.CATEGORY_CLIENT,
+                    activity=f"Client master created ({client.client_id}).",
+                )
                 messages.success(request, f"Client created: {client.client_id}")
             else:
+                log_client_activity(
+                    client=client,
+                    user=request.user,
+                    category=ClientActivityLog.CATEGORY_CLIENT,
+                    activity=(
+                        f"Client master created ({client.client_id}) and is pending approval."
+                    ),
+                )
                 messages.success(
                     request,
                     f"Client saved as {client.client_id} and is pending approval. "
@@ -125,6 +152,12 @@ def client_edit(request, client_id: str):
             client = form.save(commit=False)
             _apply_updated_client_approval(client, request.user)
             client.save()
+            log_client_activity(
+                client=client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_CLIENT,
+                activity="Client master updated.",
+            )
             if client.approval_status == Client.APPROVED:
                 messages.success(request, "Client updated.")
             else:
@@ -135,22 +168,31 @@ def client_edit(request, client_id: str):
             return redirect("client_list")
     else:
         form = ClientForm(instance=client)
-    return render(
-        request,
-        "masters/client_form.html",
-        {
-            "form": form,
-            "mode": "edit",
-            "client": client,
-            "groups_opts": _group_options_for_client_form(client),
-        },
-    )
+    ctx = {
+        "form": form,
+        "mode": "edit",
+        "client": client,
+        "groups_opts": _group_options_for_client_form(client),
+    }
+    if request.user.has_perm("masters.view_client"):
+        can_link_tasks = task_module_enabled() and (
+            request.user.is_superuser or request.user.has_perm("tasks.view_task")
+        )
+        logs = get_client_activity_timeline(client)
+        ctx["activity_rows"] = build_client_activity_rows(logs, can_link_tasks=can_link_tasks)
+    return render(request, "masters/client_form.html", ctx)
 
 
 @require_perm("masters.delete_client")
 def client_delete(request, client_id: str):
     client = get_object_or_404(client_master_queryset_for_user(request.user), pk=client_id)
     if request.method == "POST":
+        log_client_activity(
+            client=client,
+            user=request.user,
+            category=ClientActivityLog.CATEGORY_CLIENT,
+            activity="Client master deleted.",
+        )
         try:
             client.delete()
         except ProtectedError:
@@ -185,6 +227,12 @@ def client_approve(request, client_id: str):
     client.approved_by = request.user
     client.approved_at = now
     client.save(update_fields=["approval_status", "approved_by", "approved_at", "updated_at"])
+    log_client_activity(
+        client=client,
+        user=request.user,
+        category=ClientActivityLog.CATEGORY_CLIENT,
+        activity="Client master approved.",
+    )
     messages.success(request, f"Client {client.client_id} approved.")
     return redirect("client_pending_list")
 
@@ -228,6 +276,22 @@ def client_import(request):
                 c = Client(**r.data)
                 _apply_new_client_approval(c, request.user)
                 c.save()
+                if c.approval_status == Client.APPROVED:
+                    log_client_activity(
+                        client=c,
+                        user=request.user,
+                        category=ClientActivityLog.CATEGORY_CLIENT,
+                        activity=f"Client master created ({c.client_id}) via import.",
+                    )
+                else:
+                    log_client_activity(
+                        client=c,
+                        user=request.user,
+                        category=ClientActivityLog.CATEGORY_CLIENT,
+                        activity=(
+                            f"Client master created ({c.client_id}) via import and is pending approval."
+                        ),
+                    )
 
         request.session.pop("client_import_csv", None)
         if request.user.is_superuser:
@@ -425,6 +489,26 @@ def _dm_company_queryset(user=None):
     return approved_clients_for_user(user).filter(client_type__in=sorted(DIRECTOR_COMPANY_TYPES)).order_by("client_name")
 
 
+def _director_mapping_activity(*, mapping: DirectorMapping, verb: str) -> str:
+    director_name = (mapping.director.client_name or "").strip() or mapping.director_id
+    parts = [f"Director mapping {verb}: {director_name}"]
+    if mapping.appointed_date:
+        parts.append(f"appointed {mapping.appointed_date:%d-%m-%Y}")
+    if mapping.cessation_date:
+        parts.append(f"cessation {mapping.cessation_date:%d-%m-%Y}")
+    return ". ".join(parts) + "."
+
+
+def _log_director_mapping_company(*, company: Client, user, mapping: DirectorMapping, verb: str) -> None:
+    log_client_activity(
+        client=company,
+        user=user,
+        category=ClientActivityLog.CATEGORY_DIRECTOR,
+        activity=_director_mapping_activity(mapping=mapping, verb=verb),
+        metadata={"director_mapping_id": mapping.pk, "director_id": mapping.director_id},
+    )
+
+
 def _dm_client_options_json(qs, *, kind: str) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for c in qs:
@@ -476,6 +560,12 @@ def director_create(request):
                         )
                         m.full_clean()
                         m.save()
+                        _log_director_mapping_company(
+                            company=company,
+                            user=request.user,
+                            mapping=m,
+                            verb="added",
+                        )
                         created += 1
             except ValidationError as ve:
                 msgs = []
@@ -542,7 +632,13 @@ def director_edit(request, pk: int):
     if request.method == "POST":
         form = DirectorForm(request.POST, instance=director, user=request.user)
         if form.is_valid():
-            form.save()
+            mapping = form.save()
+            _log_director_mapping_company(
+                company=mapping.company,
+                user=request.user,
+                mapping=mapping,
+                verb="updated",
+            )
             messages.success(request, "Director mapping updated.")
             return redirect("director_list")
     else:
@@ -556,6 +652,12 @@ def director_delete(request, pk: int):
 
     mapping = get_object_or_404(filter_director_mapping_qs(DirectorMapping.objects.all(), request.user), pk=pk)
     if request.method == "POST":
+        _log_director_mapping_company(
+            company=mapping.company,
+            user=request.user,
+            mapping=mapping,
+            verb="removed",
+        )
         mapping.delete()
         messages.success(request, "Director mapping deleted.")
         return redirect("director_list")
@@ -661,6 +763,12 @@ def director_mapping_bulk_import(request):
                 )
                 obj.full_clean()
                 obj.save()
+                _log_director_mapping_company(
+                    company=comp_client,
+                    user=request.user,
+                    mapping=obj,
+                    verb="added via import",
+                )
         request.session.pop(session_key, None)
         messages.success(request, f"Imported {len(rows)} director mapping(s).")
         return redirect("director_list")

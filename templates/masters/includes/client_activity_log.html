@@ -1,0 +1,37 @@
+{% if activity_rows %}
+  <div class="card mt-3">
+    <div class="card-header py-2">
+      <h2 class="h6 mb-0">Client activity log</h2>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th scope="col" class="text-nowrap">Date</th>
+              <th scope="col" class="text-nowrap">Description</th>
+              <th scope="col">Activity</th>
+              <th scope="col" class="text-nowrap">By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in activity_rows %}
+              <tr>
+                <td class="text-nowrap small">{{ row.created_at|date:"d M Y, H:i" }}</td>
+                <td class="text-nowrap small">{{ row.category_label }}</td>
+                <td class="small">
+                  {% if row.task_link and row.task %}
+                    {{ row.activity_before }}<a href="{% url 'task_detail' row.task.pk %}">{{ row.task.display_title }}</a>{{ row.activity_after }}
+                  {% else %}
+                    {{ row.activity }}
+                  {% endif %}
+                </td>
+                <td class="text-nowrap small">{{ row.user_label|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endif %}

@@ -27,11 +27,12 @@ class WipeOptions:
 
 def count_local_data() -> dict[str, int]:
     from dirkyc.models import Dir3Kyc
-    from masters.models import Client, ClientGroup, DirectorMapping
+    from masters.models import Client, ClientActivityLog, ClientGroup, DirectorMapping
     from mis.models import ExpenseDetail, FeesDetail, Receipt
 
     counts = {
         "clients": Client.objects.count(),
+        "client_activity_logs": ClientActivityLog.objects.count(),
         "client_groups": ClientGroup.objects.count(),
         "fees": FeesDetail.objects.count(),
         "receipts": Receipt.objects.count(),
@@ -150,8 +151,9 @@ def wipe_local_data(options: WipeOptions) -> dict[str, int]:
         deleted["dir3kyc"] = Dir3Kyc.objects.all().delete()[0]
 
     if options.clients:
-        from masters.models import Client, ClientSequence
+        from masters.models import Client, ClientActivityLog, ClientSequence
 
+        deleted["client_activity_logs"] = ClientActivityLog.objects.all().delete()[0]
         deleted["client_sequences"] = ClientSequence.objects.all().delete()[0]
         deleted["clients"] = Client.objects.all().delete()[0]
 

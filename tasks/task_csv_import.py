@@ -1,0 +1,253 @@
+"""Parse and validate bulk task assignment CSV uploads."""
+
+from __future__ import annotations
+
+import csv
+import io
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.dateparse import parse_date
+
+from core.branch_access import approved_clients_for_user, client_allowed_for_user
+from masters.models import Client
+
+from .models import Task, TaskMaster
+from .period_keys import build_period_key
+from .user_labels import staff_users_queryset
+
+User = get_user_model()
+
+TASK_CSV_COLUMNS = [
+    "CLIENT_ID",
+    "TASK_MASTER",
+    "ASSIGNEE_EMAILS",
+    "VERIFIER_EMAIL",
+    "PERIOD_TYPE",
+    "PERIOD_MONTH",
+    "PERIOD_FY",
+    "PERIOD_QUARTER",
+    "PERIOD_HALF",
+    "PERIOD_YEAR_FROM",
+    "PERIOD_YEAR_TO",
+    "DUE_DATE",
+    "PRIORITY",
+    "IS_BILLABLE",
+    "FEES_AMOUNT",
+]
+
+
+def _upper(v: str) -> str:
+    return (v or "").strip().upper()
+
+
+def _cell(raw: dict, header_map: dict[str, str], key: str) -> str:
+    orig = header_map.get(key)
+    return (raw.get(orig, "") or "").strip() if orig else ""
+
+
+def _parse_due_date(raw: str) -> date | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    d = parse_date(s)
+    if d:
+        return d
+    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_bool_yes(raw: str) -> bool:
+    s = _upper(raw)
+    if s in {"", "NO", "N", "FALSE", "0"}:
+        return False
+    if s in {"YES", "Y", "TRUE", "1"}:
+        return True
+    raise ValueError("IS_BILLABLE must be YES or NO (or blank for NO).")
+
+
+def _resolve_task_master(raw: str) -> TaskMaster | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if "|" in s:
+        group_name, master_name = [p.strip() for p in s.split("|", 1)]
+        return (
+            TaskMaster.objects.filter(
+                is_active=True,
+                archived_at__isnull=True,
+                task_group__name__iexact=group_name,
+                name__iexact=master_name,
+            )
+            .select_related("task_group")
+            .first()
+        )
+    return (
+        TaskMaster.objects.filter(is_active=True, archived_at__isnull=True, name__iexact=s)
+        .select_related("task_group")
+        .first()
+    )
+
+
+@dataclass
+class TaskParsedRow:
+    row_num: int
+    data: dict = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+
+
+def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], list[str]]:
+    """Returns (rows, file_level_errors)."""
+    file_errors: list[str] = []
+    try:
+        text = csv_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = csv_bytes.decode("cp1252", errors="replace")
+
+    reader = csv.DictReader(io.StringIO(text, newline=""))
+    if not reader.fieldnames:
+        return [], ["CSV appears to have no header row."]
+
+    header_map = {_upper(h): h for h in reader.fieldnames}
+    required = {"CLIENT_ID", "TASK_MASTER", "ASSIGNEE_EMAILS", "VERIFIER_EMAIL", "PERIOD_TYPE", "DUE_DATE"}
+    missing = sorted(required - set(header_map))
+    if missing:
+        return [], [f"Missing required column(s): {', '.join(missing)}"]
+
+    staff_by_email = {u.email.lower(): u for u in staff_users_queryset()}
+    client_qs = approved_clients_for_user(user)
+    clients_by_id = {c.client_id.upper(): c for c in client_qs}
+    rows: list[TaskParsedRow] = []
+    seen_keys: set[tuple] = set()
+
+    for i, raw in enumerate(reader, start=2):
+        errors: list[str] = []
+        client_id = _upper(_cell(raw, header_map, "CLIENT_ID"))
+        master_raw = _cell(raw, header_map, "TASK_MASTER")
+        assignee_raw = _cell(raw, header_map, "ASSIGNEE_EMAILS")
+        verifier_email = _cell(raw, header_map, "VERIFIER_EMAIL").lower()
+        period_type = _cell(raw, header_map, "PERIOD_TYPE").lower().replace(" ", "_")
+        due_raw = _cell(raw, header_map, "DUE_DATE")
+
+        client = clients_by_id.get(client_id)
+        if not client_id:
+            errors.append("CLIENT_ID is required.")
+        elif not client:
+            errors.append(f"CLIENT_ID not found or not in your branch: {client_id}")
+        elif not client_allowed_for_user(user, client):
+            errors.append(f"CLIENT_ID not allowed for your branch: {client_id}")
+
+        master = _resolve_task_master(master_raw) if master_raw else None
+        if not master_raw:
+            errors.append("TASK_MASTER is required (use Group | Master or master name).")
+        elif not master:
+            errors.append(f"TASK_MASTER not found: {master_raw}")
+
+        assignee_emails = [e.strip().lower() for e in assignee_raw.replace(";", ",").split(",") if e.strip()]
+        assignees = []
+        if not assignee_emails:
+            errors.append("ASSIGNEE_EMAILS is required (comma or semicolon separated).")
+        else:
+            for em in assignee_emails:
+                u = staff_by_email.get(em)
+                if not u:
+                    errors.append(f"Unknown assignee email: {em}")
+                else:
+                    assignees.append(u)
+            if len({u.pk for u in assignees}) != len(assignees):
+                errors.append("ASSIGNEE_EMAILS must be different people.")
+
+        verifier = staff_by_email.get(verifier_email) if verifier_email else None
+        if not verifier_email:
+            errors.append("VERIFIER_EMAIL is required.")
+        elif not verifier:
+            errors.append(f"Unknown verifier email: {verifier_email}")
+
+        if user.is_authenticated:
+            if verifier and user.pk == verifier.pk:
+                errors.append("Creator cannot be the verifier.")
+            if user.pk in {u.pk for u in assignees}:
+                errors.append("Creator cannot be an assignee.")
+            if verifier and verifier.pk in {u.pk for u in assignees}:
+                errors.append("Verifier cannot be an assignee.")
+
+        due_date = _parse_due_date(due_raw)
+        if not due_raw:
+            errors.append("DUE_DATE is required (YYYY-MM-DD or DD-MM-YYYY).")
+        elif not due_date:
+            errors.append(f"Invalid DUE_DATE: {due_raw}")
+
+        period_key = ""
+        period_type_stored = period_type
+        try:
+            month = int(_cell(raw, header_map, "PERIOD_MONTH") or "0") or None
+            fy_raw = _cell(raw, header_map, "PERIOD_FY")
+            fy_start = int(fy_raw) if fy_raw else None
+            quarter = _upper(_cell(raw, header_map, "PERIOD_QUARTER")) or None
+            half = _upper(_cell(raw, header_map, "PERIOD_HALF")) or None
+            y_from = int(_cell(raw, header_map, "PERIOD_YEAR_FROM") or "0") or None
+            y_to = int(_cell(raw, header_map, "PERIOD_YEAR_TO") or "0") or None
+            period_key = build_period_key(
+                period_type,
+                month=month,
+                fy_start=fy_start,
+                quarter=quarter,
+                half=half,
+                year_from=y_from,
+                year_to=y_to,
+            )
+        except (ValueError, DjangoValidationError) as exc:
+            msg = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            errors.append(f"Period: {msg}")
+
+        priority = _cell(raw, header_map, "PRIORITY").lower() or TaskMaster.PRIORITY_NORMAL
+        if priority not in dict(TaskMaster.PRIORITY_CHOICES):
+            errors.append("PRIORITY must be low, normal, or urgent.")
+
+        try:
+            is_billable = _parse_bool_yes(_cell(raw, header_map, "IS_BILLABLE"))
+        except ValueError as exc:
+            errors.append(str(exc))
+            is_billable = False
+
+        fees_raw = _cell(raw, header_map, "FEES_AMOUNT")
+        fees_amount = None
+        if fees_raw:
+            try:
+                fees_amount = Decimal(fees_raw)
+            except InvalidOperation:
+                errors.append("FEES_AMOUNT must be a number.")
+        if is_billable and fees_amount is None:
+            errors.append("FEES_AMOUNT is required when IS_BILLABLE is YES.")
+
+        if client and master and period_key and not errors:
+            dup_key = (client.pk, master.pk, period_key)
+            if dup_key in seen_keys:
+                errors.append("Duplicate row for same client, task master, and period in this file.")
+            elif Task.objects.filter(client=client, task_master=master, period_key=period_key).exists():
+                errors.append("A task for this client, task master, and period already exists.")
+            else:
+                seen_keys.add(dup_key)
+
+        cleaned = {
+            "client": client,
+            "task_master": master,
+            "assignees": assignees,
+            "verifier": verifier,
+            "period_key": period_key,
+            "period_type": period_type_stored,
+            "due_date": due_date,
+            "priority": priority,
+            "is_billable": is_billable,
+            "fees_amount": fees_amount,
+        }
+        rows.append(TaskParsedRow(row_num=i, data=cleaned if not errors else {}, errors=errors))
+
+    return rows, file_errors

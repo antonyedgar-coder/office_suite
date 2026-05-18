@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from .models import Task
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    Task.STATUS_PENDING_ASSIGNMENT: {Task.STATUS_ASSIGNED, Task.STATUS_CANCELLED},
     Task.STATUS_ASSIGNED: {Task.STATUS_SUBMITTED, Task.STATUS_CANCELLED},
     Task.STATUS_SUBMITTED: {Task.STATUS_APPROVED, Task.STATUS_REWORK, Task.STATUS_CANCELLED},
     Task.STATUS_REWORK: {Task.STATUS_SUBMITTED, Task.STATUS_CANCELLED},

@@ -1,4 +1,8 @@
+import csv
+import json
+
 from django.contrib import messages
+from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -25,6 +29,7 @@ from .checklist import master_checklist_labels, toggle_task_checklist_item
 from .user_labels import user_person_name
 from .services import (
     approve_task,
+    approve_task_assignment,
     create_task_from_master,
     rework_task,
     start_enrollment_if_recurring,
@@ -99,6 +104,31 @@ def task_master_list(request):
     )
 
 
+def _task_master_form_context(form, *, mode: str, master: TaskMaster | None = None) -> dict:
+    recurrence_config: dict = {}
+    checklist_labels: list[str] = []
+    if form.is_bound:
+        try:
+            recurrence_config = json.loads(form.data.get("recurrence_config_json") or "{}")
+        except json.JSONDecodeError:
+            recurrence_config = {}
+        try:
+            raw = json.loads(form.data.get("checklist_json") or "[]")
+            checklist_labels = [str(x).strip() for x in raw if str(x).strip()] if isinstance(raw, list) else []
+        except json.JSONDecodeError:
+            checklist_labels = []
+    elif master is not None:
+        recurrence_config = master.recurrence_config or {}
+        checklist_labels = master_checklist_labels(master)
+    return {
+        "form": form,
+        "mode": mode,
+        "master": master,
+        "recurrence_config": recurrence_config,
+        "checklist_labels": checklist_labels,
+    }
+
+
 @require_perm("tasks.add_taskmaster")
 def task_master_create(request):
     if request.method == "POST":
@@ -107,12 +137,13 @@ def task_master_create(request):
             form.save()
             messages.success(request, "Task master created.")
             return redirect("task_master_list")
+        messages.error(request, "Could not save task master. Please fix the errors below.")
     else:
         form = TaskMasterForm()
     return render(
         request,
         "tasks/task_master_form.html",
-        {"form": form, "mode": "create", "recurrence_config": {}, "checklist_labels": []},
+        _task_master_form_context(form, mode="create"),
     )
 
 
@@ -125,18 +156,13 @@ def task_master_edit(request, pk: int):
             form.save()
             messages.success(request, "Task master updated.")
             return redirect("task_master_list")
+        messages.error(request, "Could not save task master. Please fix the errors below.")
     else:
         form = TaskMasterForm(instance=master)
     return render(
         request,
         "tasks/task_master_form.html",
-        {
-            "form": form,
-            "mode": "edit",
-            "master": master,
-            "recurrence_config": master.recurrence_config or {},
-            "checklist_labels": master_checklist_labels(master),
-        },
+        _task_master_form_context(form, mode="edit", master=master),
     )
 
 
@@ -158,6 +184,10 @@ def _task_list_context(request, *, list_title, show_new_task, csv_url_name, base
 
 @require_perm("tasks.view_task")
 def task_list(request):
+    base = tasks_for_user(request.user)
+    filters = parse_task_list_filters(request)
+    if request.GET.get("open") == "1" and not filters.status:
+        base = base.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
     return render(
         request,
         "tasks/task_list.html",
@@ -166,6 +196,7 @@ def task_list(request):
             list_title="All tasks",
             show_new_task=True,
             csv_url_name="task_list_csv",
+            base_qs=base,
         ),
     )
 
@@ -229,7 +260,13 @@ def task_create(request):
             if form.cleaned_data.get("priority"):
                 task.priority = form.cleaned_data["priority"]
                 task.save(update_fields=["priority"])
-            messages.success(request, f"Task created: {task.title}")
+            if task.status == Task.STATUS_PENDING_ASSIGNMENT:
+                messages.success(
+                    request,
+                    f"Task created: {task.title}. The verifier must approve the assignment before users are notified.",
+                )
+            else:
+                messages.success(request, f"Task created: {task.title}")
             return redirect("task_detail", pk=task.pk)
     else:
         form = TaskCreateForm(user=request.user)
@@ -266,36 +303,171 @@ def task_create(request):
     )
 
 
+TASK_IMPORT_SESSION_KEY = "task_import_csv"
+
+
+@require_perm("tasks.add_task")
+def task_bulk_import(request):
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(TASK_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Import session expired. Please upload the file again.")
+            return redirect("task_bulk_import")
+        from .task_csv_import import parse_tasks_csv
+
+        rows, file_errors = parse_tasks_csv(raw.encode("utf-8"), user=request.user)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("task_bulk_import")
+        if any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("task_bulk_import")
+        created = 0
+        for row in rows:
+            d = row.data
+            master = d["task_master"]
+            client = d["client"]
+            assignees = d["assignees"]
+            verifier = d["verifier"]
+            enrollment = start_enrollment_if_recurring(
+                master=master,
+                client=client,
+                assignee_users=assignees,
+                verifier=verifier,
+                created_by=request.user,
+            )
+            task = create_task_from_master(
+                master=master,
+                client=client,
+                assignee_users=assignees,
+                verifier=verifier,
+                created_by=request.user,
+                period_key=d["period_key"],
+                period_type=d.get("period_type") or "",
+                enrollment=enrollment,
+                due_date=d["due_date"],
+                is_billable=d.get("is_billable"),
+                fees_amount=d.get("fees_amount"),
+            )
+            if d.get("priority"):
+                task.priority = d["priority"]
+                task.save(update_fields=["priority"])
+            created += 1
+        request.session.pop(TASK_IMPORT_SESSION_KEY, None)
+        messages.success(
+            request,
+            f"Imported {created} task(s). Verifiers are notified to approve assignments where required.",
+        )
+        return redirect("task_list" if request.user.has_perm("tasks.view_task") else "task_my_list")
+
+    if request.method == "POST":
+        from .task_csv_import import TASK_CSV_COLUMNS, parse_tasks_csv
+
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("task_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_tasks_csv(raw_bytes, user=request.user)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("task_bulk_import")
+        try:
+            request.session[TASK_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            request.session[TASK_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
+        can_import = all(not r.errors for r in rows) and len(rows) > 0
+        if can_import:
+            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
+        else:
+            bad = sum(1 for r in rows if r.errors)
+            messages.error(request, f"{bad} row(s) have errors. Fix the CSV and upload again.")
+        return render(
+            request,
+            "tasks/task_bulk_import_preview.html",
+            {
+                "rows": rows,
+                "error_rows": [r for r in rows if r.errors],
+                "total_rows": len(rows),
+                "error_count": sum(1 for r in rows if r.errors),
+                "can_import": can_import,
+                "columns": TASK_CSV_COLUMNS,
+            },
+        )
+
+    from .task_csv_import import TASK_CSV_COLUMNS
+
+    return render(request, "tasks/task_bulk_import.html", {"columns": TASK_CSV_COLUMNS})
+
+
+@require_perm("tasks.add_task")
+def task_bulk_import_template(request):
+    from .task_csv_import import TASK_CSV_COLUMNS
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="task-bulk-upload-template.csv"'
+    writer = csv.writer(response)
+    writer.writerow(TASK_CSV_COLUMNS)
+    writer.writerow(
+        [
+            "CL001",
+            "GST|GSTR-1",
+            "staff@example.com",
+            "verify@example.com",
+            "monthly",
+            "4",
+            "2026",
+            "",
+            "",
+            "",
+            "",
+            "2026-05-31",
+            "normal",
+            "NO",
+            "",
+        ]
+    )
+    return response
+
+
 @login_required
 def task_detail(request, pk: int):
     task = get_object_or_404(task_detail_queryset(request.user), pk=pk)
-    if not (
+    is_assignee = task.assignments.filter(user=request.user).exists()
+    is_verifier = task.verifier_id == request.user.pk
+    is_creator = task.created_by_id == request.user.pk
+    can_view_task = (
         request.user.is_superuser
         or request.user.has_perm("tasks.view_task")
-        or task.assignments.filter(user=request.user).exists()
-        or task.verifier_id == request.user.pk
-        or task.created_by_id == request.user.pk
-    ):
+        or is_verifier
+        or is_creator
+        or (is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT)
+    )
+    if not can_view_task:
         raise PermissionDenied
 
     remark_form = TaskRemarkForm()
-    is_assignee = task.assignments.filter(user=request.user).exists()
-    is_verifier = task.verifier_id == request.user.pk
-    can_submit = is_assignee and task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
+    assignee_active = is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT
+    can_submit = assignee_active and task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
     can_verify = is_verifier and task.status == Task.STATUS_SUBMITTED
-    can_toggle_checklist = is_assignee and task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
+    can_approve_assignment = (
+        is_verifier or request.user.is_superuser
+    ) and task.status == Task.STATUS_PENDING_ASSIGNMENT
+    can_toggle_checklist = assignee_active and task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
     can_manage_task = (
-        is_assignee
-        or task.created_by_id == request.user.pk
-        or task.verifier_id == request.user.pk
+        assignee_active
+        or is_creator
+        or is_verifier
         or request.user.has_perm("tasks.change_task")
     )
     can_cancel = can_manage_task and task.status in (
+        Task.STATUS_PENDING_ASSIGNMENT,
         Task.STATUS_ASSIGNED,
         Task.STATUS_REWORK,
         Task.STATUS_SUBMITTED,
     )
     can_delete = request.user.has_perm("tasks.delete_task") and task.status in (
+        Task.STATUS_PENDING_ASSIGNMENT,
         Task.STATUS_ASSIGNED,
         Task.STATUS_CANCELLED,
     )
@@ -322,6 +494,10 @@ def task_detail(request, pk: int):
             delete_task(task, request.user)
             messages.success(request, "Task deleted.")
             return redirect("task_list")
+        if action == "approve_assignment" and can_approve_assignment:
+            approve_task_assignment(task, request.user)
+            messages.success(request, "Assignment approved. Assigned users have been notified.")
+            return redirect("task_detail", pk=pk)
         if action == "submit" and can_submit:
             submit_task(task, request.user)
             messages.success(request, "Task submitted for verification.")
@@ -329,10 +505,12 @@ def task_detail(request, pk: int):
         if action == "remark":
             remark_form = TaskRemarkForm(request.POST)
             if remark_form.is_valid():
-                TaskActivity.objects.create(
-                    task=task,
-                    user=request.user,
-                    activity_type=TaskActivity.TYPE_REMARK,
+                from .services import _log_activity
+
+                _log_activity(
+                    task,
+                    request.user,
+                    TaskActivity.TYPE_REMARK,
                     message=remark_form.cleaned_data["message"],
                 )
                 messages.success(request, "Remark added.")
@@ -347,28 +525,43 @@ def task_detail(request, pk: int):
         }
         for act in activities
     ]
+    from .period_display import format_period_display
+
+    period_cols = format_period_display(
+        task.period_key,
+        period_type=task.period_type or "",
+        master=task.task_master,
+    )
     return render(
         request,
         "tasks/task_detail.html",
         {
             "task": task,
+            "period_frequency": period_cols.frequency,
+            "period_label": period_cols.period,
             "activity_rows": activity_rows,
             "assignees": assignees,
             "verifier_label": user_person_name(task.verifier),
             "remark_form": remark_form,
             "can_submit": can_submit,
             "can_verify": can_verify,
+            "can_approve_assignment": can_approve_assignment,
             "checklist_items": checklist_items,
             "can_toggle_checklist": can_toggle_checklist,
             "can_cancel": can_cancel,
             "can_delete": can_delete,
+            "assignment_pending": task.status == Task.STATUS_PENDING_ASSIGNMENT,
         },
     )
 
 
 @login_required
 def task_my_list(request):
-    base = tasks_for_user(request.user).filter(assignments__user=request.user)
+    base = (
+        tasks_for_user(request.user)
+        .filter(assignments__user=request.user)
+        .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
+    )
     filters = parse_task_list_filters(request)
     if not filters.status:
         base = base.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
@@ -387,7 +580,11 @@ def task_my_list(request):
 
 @login_required
 def task_my_list_csv(request):
-    base = tasks_for_user(request.user).filter(assignments__user=request.user)
+    base = (
+        tasks_for_user(request.user)
+        .filter(assignments__user=request.user)
+        .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
+    )
     filters = parse_task_list_filters(request)
     if not filters.status:
         base = base.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
@@ -402,21 +599,46 @@ def task_my_list_csv(request):
 
 @require_perm("tasks.verify_task")
 def task_verify_queue(request):
-    base = tasks_for_user(request.user).filter(
+    user = request.user
+    assignment_base = tasks_for_user(user).filter(
+        status=Task.STATUS_PENDING_ASSIGNMENT,
+        verifier=user,
+    )
+    submitted_base = tasks_for_user(user).filter(
         status=Task.STATUS_SUBMITTED,
-        verifier=request.user,
+        verifier=user,
     )
-    return render(
-        request,
-        "tasks/task_verify_queue.html",
-        _task_list_context(
-            request,
-            list_title="Verification queue",
-            show_new_task=False,
-            csv_url_name="task_list_csv",
-            base_qs=base,
+    filters = parse_task_list_filters(request)
+    ctx = filter_context(user, filters)
+    ctx.update(
+        {
+            "assignment_rows": prepare_task_list_rows(
+                get_filtered_tasks(user, filters, base_qs=assignment_base)
+            ),
+            "submitted_rows": prepare_task_list_rows(
+                get_filtered_tasks(user, filters, base_qs=submitted_base)
+            ),
+            "list_title": "Verification queue",
+        }
+    )
+    return render(request, "tasks/task_verify_queue.html", ctx)
+
+
+@require_perm("tasks.verify_task")
+@require_POST
+def task_assignment_approve(request, pk: int):
+    task = get_object_or_404(
+        tasks_for_user(request.user).filter(
+            status=Task.STATUS_PENDING_ASSIGNMENT,
+            verifier=request.user,
         ),
+        pk=pk,
     )
+    form = TaskVerifyForm(request.POST)
+    message = form.cleaned_data["message"] if form.is_valid() else ""
+    approve_task_assignment(task, request.user, message=message)
+    messages.success(request, "Assignment approved. Users have been notified.")
+    return redirect("task_verify_queue")
 
 
 @require_perm("tasks.verify_task")
@@ -449,19 +671,8 @@ def task_verify_rework(request, pk: int):
 
 @require_perm("tasks.view_task")
 def task_dashboard(request):
-    base = tasks_for_user(request.user)
-    counts = {
-        "total_open": base.exclude(
-            status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED]
-        ).count(),
-        "submitted": base.filter(status=Task.STATUS_SUBMITTED).count(),
-        "my_open": base.filter(assignments__user=request.user)
-        .exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
-        .distinct()
-        .count(),
-        "verify_queue": base.filter(status=Task.STATUS_SUBMITTED, verifier=request.user).count(),
-    }
-    return render(request, "tasks/task_dashboard.html", {"counts": counts})
+    """Task summary lives on the main dashboard."""
+    return redirect(f"{reverse('dashboard')}#task-summary")
 
 
 @login_required

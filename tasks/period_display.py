@@ -1,4 +1,4 @@
-"""Human-readable filing period columns from task period_key."""
+"""Human-readable filing period for task lists (frequency + period)."""
 
 from __future__ import annotations
 
@@ -11,15 +11,24 @@ from .recurrence import next_period_key
 
 _CYCLE_RE = re.compile(r"^cycle-(\d+)$")
 
+# Compact labels for list / report / CSV columns
+_FREQUENCY_LABEL = {
+    "one_time": "One time",
+    "monthly": "Monthly",
+    "quarterly": "Qtr",
+    "half_yearly": "Half yearly",
+    "yearly": "Yearly",
+    "every_3_years": "3 years",
+    "every_5_years": "5 years",
+    # Task master recurrence values
+    "annually": "Yearly",
+}
+
 
 @dataclass
 class PeriodColumns:
-    month: str = ""
-    quarter: str = ""
-    half: str = ""
-    yearly: str = ""
-    span_3y: str = ""
-    span_5y: str = ""
+    frequency: str = ""
+    period: str = ""
     next_period: str = ""
 
 
@@ -27,55 +36,81 @@ def _fy_label_from_start(y: int) -> str:
     return fy_choice_label(y)
 
 
-def format_period_key(period_key: str) -> PeriodColumns:
+def _infer_frequency_from_period_key(period_key: str) -> str:
     pk = (period_key or "").strip()
-    cols = PeriodColumns()
     if not pk or pk == "one-time":
-        return cols
+        return _FREQUENCY_LABEL["one_time"]
+    if re.match(r"^\d{4}-\d{2}$", pk):
+        return "Monthly"
+    if re.match(r"^\d{4}-Q[1-4]$", pk):
+        return "Qtr"
+    if re.match(r"^\d{4}-H[12]$", pk):
+        return "Half yearly"
+    if pk.startswith("FY"):
+        return "Yearly"
+    m = re.match(r"^(\d{4})-(\d{4})$", pk)
+    if m:
+        span = int(m.group(2)) - int(m.group(1)) + 1
+        return "5 years" if span == 5 else "3 years"
+    if _CYCLE_RE.match(pk):
+        return "3 years"
+    return ""
 
+
+def _period_text_from_period_key(period_key: str) -> str:
+    pk = (period_key or "").strip()
+    if not pk or pk == "one-time":
+        return "—"
     if re.match(r"^\d{4}-\d{2}$", pk):
         y, m = map(int, pk.split("-"))
-        cols.month = f"{calendar.month_abbr[m]} {y}"
-        return cols
-
+        return f"{calendar.month_abbr[m]} {y}"
     m = re.match(r"^(\d{4})-Q([1-4])$", pk)
     if m:
         fy = int(m.group(1))
         q = int(m.group(2))
         qtr_names = {1: "Apr–Jun", 2: "Jul–Sep", 3: "Oct–Dec", 4: "Jan–Mar"}
-        cols.quarter = f"Q{q} ({qtr_names[q]}) {_fy_label_from_start(fy)}"
-        return cols
-
+        return f"Q{q} ({qtr_names[q]}) {_fy_label_from_start(fy)}"
     m = re.match(r"^(\d{4})-H([12])$", pk)
     if m:
         fy = int(m.group(1))
         h = int(m.group(2))
         half_name = "Apr–Sep" if h == 1 else "Oct–Mar"
-        cols.half = f"H{h} ({half_name}) {_fy_label_from_start(fy)}"
-        return cols
-
+        return f"H{h} ({half_name}) {_fy_label_from_start(fy)}"
     if pk.startswith("FY"):
         raw = pk[2:]
-        cols.yearly = raw if re.match(r"^\d{4}-\d{2}$", raw) else pk
-        return cols
-
+        return raw if re.match(r"^\d{4}-\d{2}$", raw) else pk
     m = re.match(r"^(\d{4})-(\d{4})$", pk)
     if m:
         y0, y1 = int(m.group(1)), int(m.group(2))
-        span = y1 - y0 + 1
-        label = f"{_fy_label_from_start(y0)} to {_fy_label_from_start(y1)}"
-        if span == 5:
-            cols.span_5y = label
-        else:
-            cols.span_3y = label
-        return cols
-
+        return f"{_fy_label_from_start(y0)} to {_fy_label_from_start(y1)}"
     if _CYCLE_RE.match(pk):
-        cols.span_3y = pk
-        return cols
+        return pk
+    return pk
 
-    cols.month = pk
-    return cols
+
+def format_period_display(
+    period_key: str,
+    *,
+    period_type: str = "",
+    master=None,
+) -> PeriodColumns:
+    """Single frequency label + human-readable period for list/report columns."""
+    pk = (period_key or "").strip()
+    pt = (period_type or "").strip()
+    freq = _FREQUENCY_LABEL.get(pt, "").strip()
+    if not freq and master is not None and getattr(master, "frequency", None):
+        freq = _FREQUENCY_LABEL.get((master.frequency or "").strip(), "") or (
+            master.get_frequency_display() or ""
+        )
+    if not freq:
+        freq = _infer_frequency_from_period_key(pk)
+    period = _period_text_from_period_key(pk)
+    return PeriodColumns(frequency=freq or "—", period=period)
+
+
+def format_period_key(period_key: str) -> PeriodColumns:
+    """Backward-compatible entry point (frequency inferred from period_key only)."""
+    return format_period_display(period_key)
 
 
 def format_next_period(task) -> str:
@@ -86,15 +121,5 @@ def format_next_period(task) -> str:
         nxt = next_period_key(master, task.period_key, task.enrollment.started_at)
     except Exception:
         return ""
-    nxt_cols = format_period_key(nxt)
-    for val in (
-        nxt_cols.month,
-        nxt_cols.quarter,
-        nxt_cols.half,
-        nxt_cols.yearly,
-        nxt_cols.span_3y,
-        nxt_cols.span_5y,
-    ):
-        if val:
-            return val
-    return nxt
+    cols = format_period_display(nxt, period_type=task.period_type or "", master=master)
+    return cols.period if cols.period and cols.period != "—" else nxt

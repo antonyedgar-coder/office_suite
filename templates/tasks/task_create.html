@@ -43,6 +43,10 @@
 </style>
 {% endblock %}
 {% block content %}
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'task_bulk_import' %}">Bulk upload (CSV)</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'task_bulk_import_template' %}">Download CSV template</a>
+  </div>
   <div class="card p-3 col-lg-9">
     <form method="post" id="taskCreateForm">{% csrf_token %}
       {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
