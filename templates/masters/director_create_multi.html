@@ -3,6 +3,8 @@
 {% block page_title %}New director mappings{% endblock %}
 
 {% block content %}
+  {% include "includes/page_header.html" with title="New director mappings" subtitle="Map one or more directors to the same company or LLP in a single save." %}
+
   <div class="card p-3 mb-3">
     <p class="text-secondary small mb-0">
       Choose the <strong>company / LLP</strong> first, then add one or more <strong>directors</strong>.
@@ -17,9 +19,10 @@
     {% endif %}
   </div>
 
-  <div class="card p-3">
-    <form method="post" class="row g-3">
-      {% csrf_token %}
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
 
       <div class="col-12">
         <div class="fw-semibold mb-2">1. Company / LLP</div>
@@ -83,12 +86,11 @@
         </div>
       </div>
 
-      <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">Save all mappings</button>
-        <a class="btn btn-outline-secondary" href="{% url 'director_list' %}">Back</a>
       </div>
-    </form>
-  </div>
+    </div>
+
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url save_label="Save all mappings" %}
+  </form>
 
   <template id="dmRowTpl">
     {% with f=formset.empty_form %}

@@ -1,8 +1,27 @@
 from core.feature_flags import task_module_enabled
+from core.user_display import user_display_name
 
 
 def enable_task_module(request):
     return {"enable_task_module": task_module_enabled()}
+
+
+def topbar_user(request):
+    if not getattr(request, "user", None) or not request.user.is_authenticated:
+        return {}
+    name = user_display_name(request.user)
+    meta_parts = []
+    emp = getattr(request.user, "employee_profile", None)
+    if emp:
+        if emp.branch_access:
+            meta_parts.append(emp.get_branch_access_display())
+        if emp.user_type:
+            meta_parts.append(emp.get_user_type_display())
+    return {
+        "topbar_user_name": name or "User",
+        "topbar_user_meta": " · ".join(meta_parts) if meta_parts else "",
+        "topbar_user_email": request.user.email,
+    }
 
 
 def task_nav_counts(request):

@@ -3,7 +3,9 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
-  <div class="mb-3">
+  {% include "includes/page_header.html" with title="Dashboard" subtitle="Your office at a glance — open items and quick links." %}
+  {% include "includes/dashboard_action_cards.html" %}
+  <div class="mb-3 d-none">
     <div class="d-flex flex-wrap align-items-end justify-content-between gap-2">
       <div>
         <div class="text-secondary small">Welcome back</div>

@@ -3,6 +3,12 @@
 {% block page_title %}{% if mode == "create" %}New DIR-3 KYC{% else %}Edit DIR-3 KYC{% endif %}{% endblock %}
 
 {% block content %}
+  {% if mode == "create" %}
+    {% include "includes/page_header.html" with title="New DIR-3 KYC" subtitle="Record DIR-3 / DIR e-KYC completion for a director." %}
+  {% else %}
+    {% include "includes/page_header.html" with title="Edit DIR-3 KYC" subtitle="Update DIR-3 KYC details for this director." %}
+  {% endif %}
+
   <div class="card p-3 mb-3">
     <div class="text-secondary small">
       Pick the director from <strong>Client Master</strong> (Individual or Foreign Citizen, marked director, with DIN). Enter the date the DIR-3 / DIR e-KYC was completed and the MCA <strong>SRN</strong>.
@@ -10,10 +16,10 @@
     </div>
   </div>
 
-  <div class="card p-3">
-    <form method="post" class="row g-3">
-      {% csrf_token %}
-
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
       <div class="col-12 col-md-6">
         <label class="form-label">Director</label>
         <input class="form-control" id="directorSearch" list="directorSuggestions" placeholder="Type name, DIN, or Client ID…" autocomplete="off" />
@@ -42,12 +48,11 @@
         <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
       {% endif %}
 
-      <div class="col-12 d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <a class="btn btn-outline-secondary" href="{% url 'dirkyc_list' %}">Back</a>
       </div>
-    </form>
-  </div>
+    </div>
+
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
 
   <script>
     (function () {

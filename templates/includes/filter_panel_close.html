@@ -1,0 +1,13 @@
+{# clear_url (optional), apply_label (default Apply filters), show_apply (default true) #}
+    <div class="col-12 filter-panel-actions d-flex flex-wrap gap-2 align-items-center">
+      {% if show_apply|default:True %}
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+          {{ apply_label|default:"Apply filters" }}
+        </button>
+      {% endif %}
+      {% if clear_url %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ clear_url }}">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</div>

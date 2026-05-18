@@ -1,0 +1,42 @@
+<div class="row g-3 mb-3">
+  {% if show_pending_clients_card %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <a
+        href="{% url 'client_pending_list' %}"
+        class="dashboard-action-card {% if pending_client_count %}has-items{% endif %}"
+      >
+        <div class="dac-count">{{ pending_client_count }}</div>
+        <div class="dac-label">Client approvals</div>
+        <div class="dac-hint">Pending master approval</div>
+      </a>
+    </div>
+  {% endif %}
+  {% if show_task_dashboard %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <a href="{% url 'task_my_list' %}" class="dashboard-action-card {% if task_nav_my_count %}has-items{% endif %}">
+        <div class="dac-count">{{ task_nav_my_count|default:0 }}</div>
+        <div class="dac-label">My open tasks</div>
+        <div class="dac-hint">Assigned to you</div>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+      <a href="{% url 'task_verify_queue' %}" class="dashboard-action-card {% if task_nav_verify_count %}has-items{% endif %}">
+        <div class="dac-count">{{ task_nav_verify_count|default:0 }}</div>
+        <div class="dac-label">Verify queue</div>
+        <div class="dac-hint">Awaiting verification</div>
+      </a>
+    </div>
+  {% endif %}
+  {% if dir3_pending_count %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <a
+        href="{% if perms.dirkyc.view_dir3kyc %}{% url 'dirkyc_list' %}{% else %}#{% endif %}"
+        class="dashboard-action-card has-items"
+      >
+        <div class="dac-count">{{ dir3_pending_count }}</div>
+        <div class="dac-label">DIR-3 pending</div>
+        <div class="dac-hint">Directors due for KYC</div>
+      </a>
+    </div>
+  {% endif %}
+</div>

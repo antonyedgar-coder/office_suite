@@ -7,10 +7,13 @@ from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.contrib import messages
 from django.http import HttpResponse
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+
+from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
 
 from .director_mapping_import import (
     DIRECTOR_MAPPING_CSV_HEADERS,
@@ -107,7 +110,17 @@ def client_list(request):
             | Q(passport_no__icontains=q)
             | Q(aadhaar_no__icontains=q)
         )
-    return render(request, "masters/client_list.html", {"clients": qs, "q": q})
+    empty_state_add_url = reverse("client_create") if request.user.has_perm("masters.add_client") else ""
+    return render(
+        request,
+        "masters/client_list.html",
+        {
+            "clients": qs,
+            "q": q,
+            "empty_state_add_url": empty_state_add_url,
+            "breadcrumbs": ui_breadcrumbs(("Client Master",)),
+        },
+    )
 
 
 @require_perm("masters.view_client")
@@ -164,6 +177,7 @@ def client_activity_log_list(request):
             "task_master_choices": task_master_choices,
             "show_task_type_filter": show_task_type_filter,
             "enable_task_module": task_module_enabled(),
+            "breadcrumbs": ui_breadcrumbs(("Client activity log",)),
         },
     )
 
@@ -206,7 +220,13 @@ def client_create(request):
     return render(
         request,
         "masters/client_form.html",
-        {"form": form, "mode": "create", "groups_opts": _group_options_for_client_form(None)},
+        {
+            "form": form,
+            "mode": "create",
+            "groups_opts": _group_options_for_client_form(None),
+            "cancel_url": reverse("client_list"),
+            "breadcrumbs": ui_breadcrumbs(("Client Master", "client_list"), ("New client",)),
+        },
     )
 
 
@@ -241,6 +261,11 @@ def client_edit(request, client_id: str):
         "mode": "edit",
         "client": client,
         "groups_opts": _group_options_for_client_form(client),
+        "cancel_url": reverse("client_list"),
+        "breadcrumbs": ui_breadcrumbs(
+            ("Client Master", "client_list"),
+            (f"Edit {client.client_id}",),
+        ),
     }
     if request.user.has_perm("masters.view_client"):
         can_link_tasks = task_module_enabled() and (
@@ -540,7 +565,11 @@ def director_list(request):
             | Q(company__llpin__icontains=q)
         )
     qs = qs.order_by("-appointed_date", "company__client_name")
-    return render(request, "masters/director_list.html", {"mappings": qs, "q": q})
+    return render(
+        request,
+        "masters/director_list.html",
+        {"mappings": qs, "q": q, "breadcrumbs": ui_breadcrumbs(("Director Mapping",))},
+    )
 
 
 def _dm_director_queryset(user=None):
@@ -652,12 +681,12 @@ def director_create(request):
                 return render(
                     request,
                     "masters/director_create_multi.html",
-                    {
-                        "company_form": company_form,
-                        "formset": formset,
-                        "directors_opts": directors_opts,
-                        "companies_opts": companies_opts,
-                    },
+                    _director_create_multi_context(
+                        company_form,
+                        formset,
+                        directors_opts,
+                        companies_opts,
+                    ),
                 )
             except IntegrityError:
                 messages.error(
@@ -667,12 +696,12 @@ def director_create(request):
                 return render(
                     request,
                     "masters/director_create_multi.html",
-                    {
-                        "company_form": company_form,
-                        "formset": formset,
-                        "directors_opts": directors_opts,
-                        "companies_opts": companies_opts,
-                    },
+                    _director_create_multi_context(
+                        company_form,
+                        formset,
+                        directors_opts,
+                        companies_opts,
+                    ),
                 )
 
             messages.success(request, f"Saved {created} director mapping(s) for {company.client_name}.")
@@ -688,13 +717,22 @@ def director_create(request):
     return render(
         request,
         "masters/director_create_multi.html",
-        {
-            "company_form": company_form,
-            "formset": formset,
-            "directors_opts": directors_opts,
-            "companies_opts": companies_opts,
-        },
+        _director_create_multi_context(company_form, formset, directors_opts, companies_opts),
     )
+
+
+def _director_create_multi_context(company_form, formset, directors_opts, companies_opts):
+    return {
+        "company_form": company_form,
+        "formset": formset,
+        "directors_opts": directors_opts,
+        "companies_opts": companies_opts,
+        "cancel_url": reverse("director_list"),
+        "breadcrumbs": ui_breadcrumbs(
+            ("Director Mapping", "director_list"),
+            ("New mappings",),
+        ),
+    }
 
 
 @require_perm("masters.change_directormapping")
@@ -716,7 +754,20 @@ def director_edit(request, pk: int):
             return redirect("director_list")
     else:
         form = DirectorForm(instance=director, user=request.user)
-    return render(request, "masters/director_form.html", {"form": form, "mode": "edit", "mapping": director})
+    return render(
+        request,
+        "masters/director_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "mapping": director,
+            "cancel_url": reverse("director_list"),
+            "breadcrumbs": ui_breadcrumbs(
+                ("Director Mapping", "director_list"),
+                ("Edit mapping",),
+            ),
+        },
+    )
 
 
 @require_perm("masters.delete_directormapping")

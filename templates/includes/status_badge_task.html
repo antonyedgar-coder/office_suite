@@ -1,0 +1,15 @@
+{% if status == "approved" %}
+  <span class="badge badge-status-approved">{{ label|default:"Approved" }}</span>
+{% elif status == "rework" %}
+  <span class="badge badge-status-rework">{{ label|default:"Rework" }}</span>
+{% elif status == "cancelled" %}
+  <span class="badge badge-status-cancelled">{{ label|default:"Cancelled" }}</span>
+{% elif status == "submitted" %}
+  <span class="badge badge-status-submitted">{{ label|default:"Submitted" }}</span>
+{% elif status == "pending_assignment" %}
+  <span class="badge badge-status-awaiting">{{ label|default:"Awaiting assignment" }}</span>
+{% elif status == "assigned" %}
+  <span class="badge badge-status-assigned">{{ label|default:"Pending" }}</span>
+{% else %}
+  <span class="badge badge-status-assigned">{{ label|default:status }}</span>
+{% endif %}

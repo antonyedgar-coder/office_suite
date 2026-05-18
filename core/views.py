@@ -110,9 +110,17 @@ def dashboard_view(request):
             "total"
         ] or Decimal("0")
 
+    pending_client_count = 0
+    show_pending_clients_card = False
+    if request.user.is_superuser or request.user.has_perm("masters.approve_client"):
+        show_pending_clients_card = True
+        pending_client_count = Client.objects.filter(approval_status=Client.PENDING).count()
+
     context = {
         "today": today,
         "client_total": client_total,
+        "pending_client_count": pending_client_count,
+        "show_pending_clients_card": show_pending_clients_card,
         "client_type_counts": client_type_counts,
         "dir3_pending_count": dir3_pending_count,
         "dir3_total_directors": dir3_total_directors,
@@ -146,7 +154,13 @@ def activity_log_list(request):
 
     paginator = Paginator(ActivityLog.objects.all(), 50)
     page_obj = paginator.get_page(request.GET.get("page"))
-    return render(request, "core/activity_log_list.html", {"page_obj": page_obj})
+    from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
+
+    return render(
+        request,
+        "core/activity_log_list.html",
+        {"page_obj": page_obj, "breadcrumbs": ui_breadcrumbs(("Activity log",))},
+    )
 
 
 @login_required

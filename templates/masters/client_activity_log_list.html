@@ -4,27 +4,12 @@
 
 {% block extra_head %}
   {% include "tasks/includes/task_date_range_assets.html" %}
-  <style>
-    #clientActivityFilterForm .filter-field-label {
-      min-height: 2.5rem;
-      display: flex;
-      align-items: flex-end;
-      line-height: 1.25;
-      margin-bottom: 0.25rem;
-    }
-    #clientActivityFilterForm .form-control-sm,
-    #clientActivityFilterForm .form-select-sm {
-      min-height: calc(1.5em + 0.5rem + 2px);
-    }
-  </style>
 {% endblock %}
 
 {% block content %}
-  <div class="card p-3 mb-3">
-    <p class="text-secondary small mb-3">
-      All actions recorded for clients you can access. The same events also appear on each client’s edit page.
-    </p>
-    <form method="get" class="row g-3 align-items-end" id="clientActivityFilterForm">
+  {% include "includes/page_header.html" with title="Client activity log" subtitle="All actions recorded for clients you can access. The same events also appear on each client's edit page." %}
+
+  {% include "includes/filter_panel_open.html" with form_id="clientActivityFilterForm" %}
       {% include "masters/includes/client_activity_date_filter.html" %}
       <div class="col-12 col-md-6 col-lg-4">
         <label class="form-label small text-secondary filter-field-label" for="clientActivityClientSearch">Client name / PAN</label>
@@ -98,17 +83,12 @@
           {% endfor %}
         </datalist>
       </div>
-      <div class="col-12 d-flex flex-wrap gap-2">
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Apply filters</button>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'client_activity_log_list' %}">Clear</a>
-      </div>
-    </form>
-  </div>
+  {% include "includes/filter_panel_close.html" with clear_url=request.path %}
 
-  <div class="card p-0">
-    <div class="table-responsive">
-      <table class="table table-sm table-striped mb-0 align-middle">
-        <thead class="table-light">
+  <div class="card data-table-card">
+    <div class="table-responsive data-table-wrap">
+      <table class="table table-sm table-striped data-table align-middle mb-0">
+        <thead>
           <tr>
             <th scope="col" class="text-nowrap">Date</th>
             <th scope="col">Client name</th>
@@ -144,8 +124,8 @@
               <td class="text-nowrap small">{{ row.user_label|default:"—" }}</td>
             </tr>
           {% empty %}
-            <tr>
-              <td colspan="{% if enable_task_module %}7{% else %}6{% endif %}" class="text-secondary text-center py-4">No activity found for these filters.</td>
+            <tr class="table-empty-row">
+              <td colspan="{% if enable_task_module %}7{% else %}6{% endif %}">No activity found for these filters.</td>
             </tr>
           {% endfor %}
         </tbody>

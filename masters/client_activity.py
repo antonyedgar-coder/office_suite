@@ -14,6 +14,8 @@ from tasks.date_presets import (
     resolve_date_preset,
 )
 
+from core.user_display import user_display_name
+
 from .models import Client, ClientActivityLog
 
 CLIENT_ACTIVITY_DATE_PRESET_CHOICES = [
@@ -28,16 +30,6 @@ CLIENT_ACTIVITY_DATE_PRESET_VALUES = {c[0] for c in CLIENT_ACTIVITY_DATE_PRESET_
 CLIENT_ACTIVITY_DEFAULT_DATE_PRESET = PRESET_ALL_TIME
 
 User = get_user_model()
-
-
-def user_display_name(user: User | None) -> str:
-    """Employee display name only (never login email)."""
-    if user is None:
-        return ""
-    emp = getattr(user, "employee_profile", None)
-    if emp and (emp.full_name or "").strip():
-        return emp.full_name.strip()
-    return (user.get_full_name() or "").strip()
 
 
 def log_client_activity(

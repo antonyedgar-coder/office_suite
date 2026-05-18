@@ -1,50 +1,34 @@
 {% extends "base.html" %}
-
 {% block title %}Receipts — CA Office Suite{% endblock %}
-
 {% block page_title %}{% if mode == "create" %}New receipt{% else %}Edit receipt{% endif %}{% endblock %}
 
-
-
 {% block content %}
+  {% if mode == "create" %}
+    {% include "includes/page_header.html" with title="New receipt" subtitle="Record an amount received from a client." %}
+  {% else %}
+    {% include "includes/page_header.html" with title="Edit receipt" subtitle="Update receipt details for this client." %}
+  {% endif %}
 
-  <div class="card p-3">
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        {% include "mis/includes/client_autocomplete_fields.html" %}
 
-    <form method="post" class="row g-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label required-field" for="{{ form.amount_received.id_for_label }}">Amount received</label>
+          {{ form.amount_received }}
+          {% if form.amount_received.errors %}<div class="text-danger small">{{ form.amount_received.errors }}</div>{% endif %}
+        </div>
 
-      {% csrf_token %}
+        {% include "includes/activity_remarks_field.html" with field=form.remarks %}
 
-      {% include "mis/includes/client_autocomplete_fields.html" %}
-
-      <div class="col-12 col-md-4">
-
-        <label class="form-label">Amount received</label>
-
-        {{ form.amount_received }}
-
-        {% if form.amount_received.errors %}<div class="text-danger small">{{ form.amount_received.errors }}</div>{% endif %}
-
+        {% if form.non_field_errors %}
+          <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+        {% endif %}
       </div>
+    </div>
 
-      {% include "includes/activity_remarks_field.html" with field=form.remarks %}
-
-      {% if form.non_field_errors %}
-
-        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
-
-      {% endif %}
-
-      <div class="col-12 d-flex gap-2">
-
-        <button type="submit" class="btn btn-primary">Save</button>
-
-        <a class="btn btn-outline-secondary" href="{% url 'mis_receipt_list' %}">Back</a>
-
-      </div>
-
-    </form>
-
-  </div>
-
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
 {% endblock %}
-

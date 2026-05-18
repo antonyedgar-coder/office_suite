@@ -1,0 +1,7 @@
+{% if perms.masters.approve_client %}
+  <a class="btn btn-outline-warning btn-sm" href="{% url 'client_pending_list' %}">Pending approvals</a>
+{% endif %}
+{% if perms.masters.add_client %}
+  <a class="btn btn-outline-primary btn-sm" href="{% url 'client_import' %}">Import CSV</a>
+  <a class="btn btn-primary btn-sm" href="{% url 'client_create' %}">New client</a>
+{% endif %}

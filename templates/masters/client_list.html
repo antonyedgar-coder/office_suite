@@ -3,27 +3,24 @@
 {% block page_title %}Client Master{% endblock %}
 
 {% block content %}
-  <div class="card p-3 mb-3">
-    <form method="get" class="row g-2 align-items-center">
-      <div class="col-12 col-md">
-        <input class="form-control" name="q" value="{{ q }}" placeholder="Search by name / group / file no / PAN / passport / client ID" />
-      </div>
-      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
-        <button class="btn btn-outline-secondary" type="submit">Search</button>
-        {% if perms.masters.approve_client %}
-          <a class="btn btn-outline-warning" href="{% url 'client_pending_list' %}">Pending approvals</a>
-        {% endif %}
-        {% if perms.masters.add_client %}
-          <a class="btn btn-outline-primary" href="{% url 'client_import' %}">Import CSV</a>
-          <a class="btn btn-primary" href="{% url 'client_create' %}">New Client</a>
-        {% endif %}
-      </div>
-    </form>
-  </div>
+  {% include "includes/page_header.html" with title="Client Master" subtitle="Search and manage clients you can access. Approved clients are used across MIS, tasks, and reports." actions_template="masters/includes/client_list_header_actions.html" %}
 
-  <div class="card p-3">
-    <div class="table-responsive">
-      <table class="table table-sm align-middle mb-0">
+  {% include "includes/filter_panel_open.html" with form_id="clientListFilterForm" %}
+    <div class="col-12 col-md">
+      <label class="form-label small text-secondary filter-field-label" for="clientListSearch">Search</label>
+      <input
+        class="form-control form-control-sm"
+        id="clientListSearch"
+        name="q"
+        value="{{ q }}"
+        placeholder="Name, group, file no, PAN, passport, or client ID"
+      />
+    </div>
+  {% include "includes/filter_panel_close.html" with clear_url=request.path apply_label="Search" %}
+
+  <div class="card data-table-card">
+    <div class="table-responsive data-table-wrap">
+      <table class="table table-sm table-striped data-table align-middle mb-0">
         <thead>
           <tr>
             <th style="width: 110px">Client ID</th>
@@ -52,11 +49,7 @@
               <td class="mono">{{ c.passport_no|default:"—" }}</td>
               <td class="mono">{% if c.dob %}{{ c.dob|date:"d-m-Y" }}{% else %}—{% endif %}</td>
               <td>
-                {% if c.approval_status == "pending" %}
-                  <span class="badge text-bg-warning text-dark">Pending</span>
-                {% else %}
-                  <span class="badge text-bg-success">Approved</span>
-                {% endif %}
+                {% include "includes/status_badge_client.html" with status=c.approval_status %}
               </td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
@@ -70,11 +63,14 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="11" class="text-secondary">No clients found.</td></tr>
+            <tr>
+              <td colspan="11" class="p-0">
+                {% include "includes/empty_state.html" with icon="people" title="No clients found" message="Try a different search or add a new client." action_url=empty_state_add_url action_label="New client" %}
+              </td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 {% endblock %}
-

@@ -124,4 +124,19 @@
       </div>
     </div>
   {% endif %}
+
+  {% if user.is_superuser or perms.masters.view_client %}
+    <a
+      class="nav-link {% if url_name == 'client_activity_log_list' %}active{% endif %}"
+      href="{% url 'client_activity_log_list' %}"
+      ><i class="bi bi-clock-history nav-link-icon" aria-hidden="true"></i><span>Client activity log</span></a
+    >
+    {% if user.is_superuser %}
+      <a
+        class="nav-link {% if url_name == 'activity_log' %}active{% endif %}"
+        href="{% url 'activity_log' %}"
+        ><i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i><span>Activity log</span></a
+      >
+    {% endif %}
+  {% endif %}
 {% endwith %}

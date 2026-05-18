@@ -1,8 +1,10 @@
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from core.branch_access import filter_mis_qs
+from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
 from core.decorators import require_perm
 
 from masters.client_activity import log_client_activity
@@ -48,7 +50,16 @@ def dir3kyc_create(request):
             return redirect("dirkyc_list")
     else:
         form = Dir3KycForm(user=request.user)
-    return render(request, "dirkyc/dir3kyc_form.html", {"form": form, "mode": "create"})
+    return render(
+        request,
+        "dirkyc/dir3kyc_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("dirkyc_list"),
+            "breadcrumbs": ui_breadcrumbs(("DIR-3 KYC", "dirkyc_list"), ("New DIR-3 KYC",)),
+        },
+    )
 
 
 @require_perm("dirkyc.change_dir3kyc")
@@ -71,7 +82,17 @@ def dir3kyc_edit(request, pk: int):
             return redirect("dirkyc_list")
     else:
         form = Dir3KycForm(instance=obj, user=request.user)
-    return render(request, "dirkyc/dir3kyc_form.html", {"form": form, "mode": "edit", "obj": obj})
+    return render(
+        request,
+        "dirkyc/dir3kyc_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("dirkyc_list"),
+            "breadcrumbs": ui_breadcrumbs(("DIR-3 KYC", "dirkyc_list"), ("Edit DIR-3 KYC",)),
+        },
+    )
 
 
 @require_perm("dirkyc.delete_dir3kyc")

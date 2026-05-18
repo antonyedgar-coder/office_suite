@@ -3,9 +3,16 @@
 {% block page_title %}{% if mode == "create" %}New director mapping{% else %}Edit director mapping{% endif %}{% endblock %}
 
 {% block content %}
-  <div class="card p-3">
-    <form method="post" class="row g-3">
-      {% csrf_token %}
+  {% if mode == "create" %}
+    {% include "includes/page_header.html" with title="New director mapping" subtitle="Map a director to a company or LLP." %}
+  {% else %}
+    {% include "includes/page_header.html" with title="Edit director mapping" subtitle="Update appointment or cessation details." %}
+  {% endif %}
+
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
 
       <div class="col-12 col-md-6">
         <label class="form-label" for="companySearch">Company / LLP</label>
@@ -50,12 +57,11 @@
 
       {% include "includes/activity_remarks_field.html" with field=form.remarks %}
 
-      <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">Save</button>
-        <a class="btn btn-outline-secondary" href="{% url 'director_list' %}">Back</a>
       </div>
-    </form>
-  </div>
+    </div>
+
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
 
   <script>
     (function () {

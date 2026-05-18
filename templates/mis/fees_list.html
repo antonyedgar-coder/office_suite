@@ -3,23 +3,24 @@
 {% block page_title %}Fees Details{% endblock %}
 
 {% block content %}
-  <div class="card p-3 mb-3">
-    <form method="get" class="row g-2 align-items-center">
-      <div class="col-12 col-md">
-        <input class="form-control" name="q" value="{{ q }}" placeholder="Search by client name / Client ID / PAN" />
-      </div>
-      <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
-        <button class="btn btn-outline-secondary" type="submit">Search</button>
-        {% if perms.mis.add_feesdetail %}
-          <a class="btn btn-primary" href="{% url 'mis_fees_create' %}">New fees entry</a>
-        {% endif %}
-      </div>
-    </form>
-  </div>
+  {% include "includes/page_header.html" with title="Fees Details" subtitle="Invoice fees and GST recorded per client for MIS reporting." actions_template="mis/includes/fees_list_header_actions.html" %}
 
-  <div class="card p-3">
-    <div class="table-responsive">
-      <table class="table table-sm align-middle mb-0">
+  {% include "includes/filter_panel_open.html" with form_id="feesListFilterForm" %}
+    <div class="col-12 col-md">
+      <label class="form-label small text-secondary filter-field-label" for="feesListSearch">Search</label>
+      <input
+        class="form-control form-control-sm"
+        id="feesListSearch"
+        name="q"
+        value="{{ q }}"
+        placeholder="Client name, client ID, or PAN"
+      />
+    </div>
+  {% include "includes/filter_panel_close.html" with clear_url=request.path apply_label="Search" %}
+
+  <div class="card data-table-card">
+    <div class="table-responsive data-table-wrap">
+      <table class="table table-sm table-striped data-table align-middle mb-0">
         <thead>
           <tr>
             <th>Date</th>
@@ -52,12 +53,12 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="7" class="text-secondary">No fees entries.</td></tr>
+            <tr class="table-empty-row">
+              <td colspan="7">No fees entries found.</td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <div class="text-secondary small mt-2">Showing up to 500 latest rows.</div>
   </div>
 {% endblock %}
-

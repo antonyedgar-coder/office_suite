@@ -1,0 +1,7 @@
+{# cancel_url (required), save_label (optional), extra_class (optional) #}
+<div class="sticky-save-bar {{ extra_class|default:'' }}">
+  <div class="container d-flex flex-wrap gap-2 justify-content-end align-items-center">
+    <a class="btn btn-outline-secondary" href="{{ cancel_url }}">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{ save_label|default:"Save" }}</button>
+  </div>
+</div>

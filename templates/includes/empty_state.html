@@ -1,0 +1,9 @@
+{# icon (bootstrap icon name without bi-), title, message, action_url, action_label #}
+<div class="empty-state">
+  {% if icon %}<div class="empty-state-icon"><i class="bi bi-{{ icon }}" aria-hidden="true"></i></div>{% endif %}
+  <div class="empty-state-title">{{ title }}</div>
+  {% if message %}<p class="small mb-3">{{ message }}</p>{% endif %}
+  {% if action_url %}
+    <a class="btn btn-primary btn-sm" href="{{ action_url }}">{{ action_label|default:"Add" }}</a>
+  {% endif %}
+</div>

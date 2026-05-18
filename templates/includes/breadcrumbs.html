@@ -1,0 +1,16 @@
+{# items: list of {label, url?} — last item is current page (no link) #}
+{% if items %}
+  <nav class="app-breadcrumbs mb-2" aria-label="Breadcrumb">
+    <ol class="breadcrumb mb-0">
+      {% for item in items %}
+        {% if forloop.last %}
+          <li class="breadcrumb-item active" aria-current="page">{{ item.label }}</li>
+        {% elif item.url %}
+          <li class="breadcrumb-item"><a href="{{ item.url }}">{{ item.label }}</a></li>
+        {% else %}
+          <li class="breadcrumb-item">{{ item.label }}</li>
+        {% endif %}
+      {% endfor %}
+    </ol>
+  </nav>
+{% endif %}

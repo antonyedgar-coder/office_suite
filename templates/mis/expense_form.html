@@ -3,30 +3,37 @@
 {% block page_title %}{% if mode == "create" %}New expense{% else %}Edit expense{% endif %}{% endblock %}
 
 {% block content %}
-  <div class="card p-3">
-    <form method="post" class="row g-3">
-      {% csrf_token %}
-      {% include "mis/includes/client_autocomplete_fields.html" %}
-      <div class="col-12 col-md-4">
-        <label class="form-label">Expenses paid</label>
-        {{ form.expenses_paid }}
-        {% if form.expenses_paid.errors %}<div class="text-danger small">{{ form.expenses_paid.errors }}</div>{% endif %}
-      </div>
-      <div class="col-12">
-        <label class="form-label">Notes</label>
-        {{ form.notes }}
-        {% if form.notes.errors %}<div class="text-danger small">{{ form.notes.errors }}</div>{% endif %}
-      </div>
+  {% if mode == "create" %}
+    {% include "includes/page_header.html" with title="New expense" subtitle="Record expenses paid for a client." %}
+  {% else %}
+    {% include "includes/page_header.html" with title="Edit expense" subtitle="Update expense details for this client." %}
+  {% endif %}
 
-      {% include "includes/activity_remarks_field.html" with field=form.remarks %}
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        {% include "mis/includes/client_autocomplete_fields.html" %}
 
-      {% if form.non_field_errors %}
-        <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
-      {% endif %}
-      <div class="col-12 d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <a class="btn btn-outline-secondary" href="{% url 'mis_expense_list' %}">Back</a>
+        <div class="col-12 col-md-4">
+          <label class="form-label required-field" for="{{ form.expenses_paid.id_for_label }}">Expenses paid</label>
+          {{ form.expenses_paid }}
+          {% if form.expenses_paid.errors %}<div class="text-danger small">{{ form.expenses_paid.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="text-danger small">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+
+        {% include "includes/activity_remarks_field.html" with field=form.remarks %}
+
+        {% if form.non_field_errors %}
+          <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+        {% endif %}
       </div>
-    </form>
-  </div>
+    </div>
+
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
 {% endblock %}

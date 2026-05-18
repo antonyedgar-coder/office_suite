@@ -1,0 +1,16 @@
+{# title (required), subtitle (optional), actions_template (optional include path) #}
+<div class="page-header">
+  <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
+    <div class="page-header-text">
+      <h1 class="page-header-title h5 mb-1">{{ title }}</h1>
+      {% if subtitle %}
+        <p class="page-header-subtitle text-secondary small mb-0">{{ subtitle }}</p>
+      {% endif %}
+    </div>
+    {% if actions_template %}
+      <div class="page-header-actions d-flex flex-wrap gap-2 align-items-center">
+        {% include actions_template %}
+      </div>
+    {% endif %}
+  </div>
+</div>

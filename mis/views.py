@@ -5,8 +5,10 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from core.branch_access import approved_clients_for_user, filter_mis_qs
+from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
 from core.decorators import require_perm
 from masters.client_activity import log_client_activity
 from masters.models import Client, ClientActivityLog
@@ -39,7 +41,11 @@ def fees_list(request):
             | Q(pan_no__icontains=q)
         )
     qs = qs.order_by("-date", "-id")[:500]
-    return render(request, "mis/fees_list.html", {"rows": qs, "q": q})
+    return render(
+        request,
+        "mis/fees_list.html",
+        {"rows": qs, "q": q, "breadcrumbs": ui_breadcrumbs(("Fees Details",))},
+    )
 
 
 @require_perm("mis.add_feesdetail")
@@ -59,7 +65,16 @@ def fees_create(request):
             return redirect("mis_fees_list")
     else:
         form = FeesDetailForm(user=request.user)
-    return render(request, "mis/fees_form.html", {"form": form, "mode": "create"})
+    return render(
+        request,
+        "mis/fees_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("mis_fees_list"),
+            "breadcrumbs": ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("New fees entry",)),
+        },
+    )
 
 
 @require_perm("mis.change_feesdetail")
@@ -80,7 +95,17 @@ def fees_edit(request, pk: int):
             return redirect("mis_fees_list")
     else:
         form = FeesDetailForm(instance=obj, user=request.user)
-    return render(request, "mis/fees_form.html", {"form": form, "mode": "edit", "obj": obj})
+    return render(
+        request,
+        "mis/fees_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("mis_fees_list"),
+            "breadcrumbs": ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("Edit fees entry",)),
+        },
+    )
 
 
 @require_perm("mis.delete_feesdetail")
@@ -132,7 +157,16 @@ def tender_create(request):
             return redirect("mis_tender_list")
     else:
         form = TenderDetailForm(user=request.user)
-    return render(request, "mis/tender_form.html", {"form": form, "mode": "create"})
+    return render(
+        request,
+        "mis/tender_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("mis_tender_list"),
+            "breadcrumbs": ui_breadcrumbs(("Tender", "mis_tender_list"), ("New tender entry",)),
+        },
+    )
 
 
 @require_perm("mis.change_tenderdetail")
@@ -153,7 +187,17 @@ def tender_edit(request, pk: int):
             return redirect("mis_tender_list")
     else:
         form = TenderDetailForm(instance=obj, user=request.user)
-    return render(request, "mis/tender_form.html", {"form": form, "mode": "edit", "obj": obj})
+    return render(
+        request,
+        "mis/tender_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("mis_tender_list"),
+            "breadcrumbs": ui_breadcrumbs(("Tender", "mis_tender_list"), ("Edit tender entry",)),
+        },
+    )
 
 
 @require_perm("mis.delete_tenderdetail")
@@ -205,7 +249,16 @@ def receipt_create(request):
             return redirect("mis_receipt_list")
     else:
         form = ReceiptForm(user=request.user)
-    return render(request, "mis/receipt_form.html", {"form": form, "mode": "create"})
+    return render(
+        request,
+        "mis/receipt_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("mis_receipt_list"),
+            "breadcrumbs": ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("New receipt",)),
+        },
+    )
 
 
 @require_perm("mis.change_receipt")
@@ -226,7 +279,17 @@ def receipt_edit(request, pk: int):
             return redirect("mis_receipt_list")
     else:
         form = ReceiptForm(instance=obj, user=request.user)
-    return render(request, "mis/receipt_form.html", {"form": form, "mode": "edit", "obj": obj})
+    return render(
+        request,
+        "mis/receipt_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("mis_receipt_list"),
+            "breadcrumbs": ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("Edit receipt",)),
+        },
+    )
 
 
 @require_perm("mis.delete_receipt")
@@ -278,7 +341,16 @@ def expense_create(request):
             return redirect("mis_expense_list")
     else:
         form = ExpenseDetailForm(user=request.user)
-    return render(request, "mis/expense_form.html", {"form": form, "mode": "create"})
+    return render(
+        request,
+        "mis/expense_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("mis_expense_list"),
+            "breadcrumbs": ui_breadcrumbs(("Expenses Details", "mis_expense_list"), ("New expense",)),
+        },
+    )
 
 
 @require_perm("mis.change_expensedetail")
@@ -299,7 +371,17 @@ def expense_edit(request, pk: int):
             return redirect("mis_expense_list")
     else:
         form = ExpenseDetailForm(instance=obj, user=request.user)
-    return render(request, "mis/expense_form.html", {"form": form, "mode": "edit", "obj": obj})
+    return render(
+        request,
+        "mis/expense_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("mis_expense_list"),
+            "breadcrumbs": ui_breadcrumbs(("Expenses Details", "mis_expense_list"), ("Edit expense",)),
+        },
+    )
 
 
 @require_perm("mis.delete_expensedetail")
