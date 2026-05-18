@@ -125,7 +125,7 @@
       <aside class="sidebar d-none d-md-block p-3 d-flex flex-column">
         <div class="mb-3 flex-shrink-0">
           <div class="fw-bold">CA Office Suite</div>
-          <div class="text-secondary small">Masters • MIS • DIR-3 eKYC • Reports</div>
+          <div class="text-secondary small">Masters • Tasks • DIR-3 eKYC • MIS • Reports</div>
         </div>
         <nav class="nav flex-column gap-2 flex-grow-1">
           <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 nav-link-icon" aria-hidden="true"></i><span>Dashboard</span></a>
@@ -133,13 +133,20 @@
             {% include "includes/app_sidebar_nav.html" with nav_id_prefix="desktop" %}
           </div>
         </nav>
-        {% if user.is_superuser %}
-          <div class="border-top pt-2 mt-3 flex-shrink-0">
+        {% if user.is_superuser or perms.masters.view_client %}
+          <div class="border-top pt-2 mt-3 flex-shrink-0 d-flex flex-column gap-1">
             <a
-              class="nav-link {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}"
-              href="{% url 'activity_log' %}"
-              ><i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i><span>Activity log</span></a
+              class="nav-link {% if request.resolver_match.url_name == 'client_activity_log_list' %}active{% endif %}"
+              href="{% url 'client_activity_log_list' %}"
+              ><i class="bi bi-clock-history nav-link-icon" aria-hidden="true"></i><span>Client activity log</span></a
             >
+            {% if user.is_superuser %}
+              <a
+                class="nav-link {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}"
+                href="{% url 'activity_log' %}"
+                ><i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i><span>Activity log</span></a
+              >
+            {% endif %}
           </div>
         {% endif %}
       </aside>
@@ -189,13 +196,20 @@
             {% include "includes/app_sidebar_nav.html" with nav_id_prefix="mobile" %}
           </div>
         </div>
-        {% if user.is_superuser %}
-          <div class="border-top pt-2 mt-3 flex-shrink-0">
+        {% if user.is_superuser or perms.masters.view_client %}
+          <div class="border-top pt-2 mt-3 flex-shrink-0 d-flex flex-column gap-1">
             <a
-              class="nav-link {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}"
-              href="{% url 'activity_log' %}"
-              ><i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i><span>Activity log</span></a
+              class="nav-link {% if request.resolver_match.url_name == 'client_activity_log_list' %}active{% endif %}"
+              href="{% url 'client_activity_log_list' %}"
+              ><i class="bi bi-clock-history nav-link-icon" aria-hidden="true"></i><span>Client activity log</span></a
             >
+            {% if user.is_superuser %}
+              <a
+                class="nav-link {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}"
+                href="{% url 'activity_log' %}"
+                ><i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i><span>Activity log</span></a
+              >
+            {% endif %}
           </div>
         {% endif %}
       </div>

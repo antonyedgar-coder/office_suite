@@ -3,7 +3,13 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.forms import BaseFormSet, formset_factory
 
+from core.activity_remarks import ACTIVITY_REMARKS_MAX_LENGTH
+
 from .models import CESSATION_REASON_CHOICES, Client, ClientGroup, DIRECTOR_COMPANY_TYPES, DIRECTOR_ELIGIBLE_CLIENT_TYPES, DirectorMapping
+
+REMARKS_WIDGET = forms.Textarea(
+    attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
+)
 
 
 class ClientGroupForm(forms.ModelForm):
@@ -93,11 +99,12 @@ class ClientForm(forms.ModelForm):
             "contact_person",
             "mobile",
             "email",
+            "remarks",
         ]
         widgets = {
             "address": forms.TextInput(attrs={"placeholder": "Address"}),
-            # Calendar picker; browsers submit YYYY-MM-DD; model accepts it.
             "dob": forms.DateInput(attrs={"type": "date"}),
+            "remarks": REMARKS_WIDGET,
         }
 
 
@@ -138,11 +145,19 @@ class DirectorForm(forms.ModelForm):
 
     class Meta:
         model = DirectorMapping
-        fields = ["company", "director", "appointed_date", "cessation_date", "reason_for_cessation"]
+        fields = [
+            "company",
+            "director",
+            "appointed_date",
+            "cessation_date",
+            "reason_for_cessation",
+            "remarks",
+        ]
         widgets = {
             "appointed_date": forms.DateInput(attrs={"type": "date"}),
             "cessation_date": forms.DateInput(attrs={"type": "date"}),
             "reason_for_cessation": forms.Select(attrs={"class": "form-select"}),
+            "remarks": REMARKS_WIDGET,
         }
 
     def clean(self):
@@ -229,6 +244,12 @@ class DirectorMappingRowForm(forms.Form):
         required=False,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    remarks = forms.CharField(
+        required=False,
+        max_length=ACTIVITY_REMARKS_MAX_LENGTH,
+        widget=REMARKS_WIDGET,
+        label="Remarks",
+    )
 
     def __init__(self, *args, director_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -241,8 +262,9 @@ class DirectorMappingRowForm(forms.Form):
         ad = data.get("appointed_date")
         cd = data.get("cessation_date")
         reason = (data.get("reason_for_cessation") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
 
-        if not director and not ad and not cd and not reason:
+        if not director and not ad and not cd and not reason and not remarks:
             return data
 
         if ad and not director:
@@ -280,7 +302,8 @@ class BaseDirectorMappingRowFormSet(BaseFormSet):
             ad = form.cleaned_data.get("appointed_date")
             cd = form.cleaned_data.get("cessation_date")
             reason = (form.cleaned_data.get("reason_for_cessation") or "").strip()
-            if not director and not ad and not cd and not reason:
+            remarks = (form.cleaned_data.get("remarks") or "").strip()
+            if not director and not ad and not cd and not reason and not remarks:
                 continue
             if not director:
                 continue

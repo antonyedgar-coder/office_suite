@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Client activity log — CA Office Suite{% endblock %}
+{% block page_title %}Client activity log{% endblock %}
+
+{% block extra_head %}
+  {% include "tasks/includes/task_date_range_assets.html" %}
+  <style>
+    #clientActivityFilterForm .filter-field-label {
+      min-height: 2.5rem;
+      display: flex;
+      align-items: flex-end;
+      line-height: 1.25;
+      margin-bottom: 0.25rem;
+    }
+    #clientActivityFilterForm .form-control-sm,
+    #clientActivityFilterForm .form-select-sm {
+      min-height: calc(1.5em + 0.5rem + 2px);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <p class="text-secondary small mb-3">
+      All actions recorded for clients you can access. The same events also appear on each client’s edit page.
+    </p>
+    <form method="get" class="row g-3 align-items-end" id="clientActivityFilterForm">
+      {% include "masters/includes/client_activity_date_filter.html" %}
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small text-secondary filter-field-label" for="clientActivityClientSearch">Client name / PAN</label>
+        <input
+          type="search"
+          class="form-control form-control-sm"
+          id="clientActivityClientSearch"
+          name="client_q"
+          list="clientActivityClientSuggestions"
+          value="{{ filters.client_q }}"
+          placeholder="Client name or PAN"
+          autocomplete="off"
+        />
+        <datalist id="clientActivityClientSuggestions"></datalist>
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small text-secondary filter-field-label">Type of work</label>
+        <select name="category" class="form-select form-select-sm">
+          <option value="">All types</option>
+          {% for val, label in category_choices %}
+            <option value="{{ val }}" {% if filters.category == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if show_task_type_filter %}
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small text-secondary filter-field-label">Type of task</label>
+        <select name="task_master_id" class="form-select form-select-sm">
+          <option value="">All task types</option>
+          {% for tm in task_master_choices %}
+            <option value="{{ tm.pk }}" {% if filters.task_master_id == tm.pk|stringformat:"s" %}selected{% endif %}>{{ tm.task_group__name }} — {{ tm.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small text-secondary filter-field-label">Description of activity</label>
+        <input
+          type="search"
+          class="form-control form-control-sm"
+          name="activity_q"
+          value="{{ filters.activity_q }}"
+          placeholder="Description of activity"
+        />
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small text-secondary filter-field-label">Remarks</label>
+        <input
+          type="search"
+          class="form-control form-control-sm"
+          name="remarks_q"
+          value="{{ filters.remarks_q }}"
+          placeholder="Remarks"
+        />
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small text-secondary filter-field-label" for="clientActivityUserSearch">Name of user</label>
+        <input
+          type="search"
+          class="form-control form-control-sm"
+          id="clientActivityUserSearch"
+          name="user_q"
+          list="clientActivityUserSuggestions"
+          value="{{ filters.user_q }}"
+          placeholder="Name of user"
+          autocomplete="off"
+        />
+        <datalist id="clientActivityUserSuggestions">
+          {% for name in staff_names %}
+            <option value="{{ name }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+      <div class="col-12 d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Apply filters</button>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'client_activity_log_list' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th scope="col" class="text-nowrap">Date</th>
+            <th scope="col">Client name</th>
+            <th scope="col" class="text-nowrap">Type of work</th>
+            {% if enable_task_module %}<th scope="col" class="text-nowrap">Type of task</th>{% endif %}
+            <th scope="col">Description of activity</th>
+            <th scope="col">Remarks</th>
+            <th scope="col" class="text-nowrap">Name of user</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in activity_rows %}
+            <tr>
+              <td class="text-nowrap small">{{ row.created_at|date:"d M Y, H:i" }}</td>
+              <td class="small">
+                <a href="{% url 'client_edit' row.client_id %}">{{ row.client_name }}</a>
+                {% if row.client_pan %}
+                  <span class="text-secondary mono d-block">{{ row.client_pan }}</span>
+                {% endif %}
+              </td>
+              <td class="text-nowrap small">{{ row.category_label }}</td>
+              {% if enable_task_module %}
+              <td class="text-nowrap small">{% if row.task_type_label %}{{ row.task_type_label }}{% else %}—{% endif %}</td>
+              {% endif %}
+              <td class="small">
+                {% if row.task_link and row.task %}
+                  {{ row.activity_before }}<a href="{% url 'task_detail' row.task.pk %}">{{ row.task.display_title }}</a>{{ row.activity_after }}
+                {% else %}
+                  {{ row.description|default:row.activity }}
+                {% endif %}
+              </td>
+              <td class="small">{{ row.remarks|default:"—" }}</td>
+              <td class="text-nowrap small">{{ row.user_label|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="{% if enable_task_module %}7{% else %}6{% endif %}" class="text-secondary text-center py-4">No activity found for these filters.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-3" aria-label="Activity log pages">
+      <ul class="pagination pagination-sm justify-content-center mb-0">
+        {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a
+              class="page-link"
+              href="?page={{ page_obj.previous_page_number }}&date_preset={{ filters.date_preset }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&client_q={{ filters.client_q|urlencode }}&category={{ filters.category }}&task_master_id={{ filters.task_master_id }}&activity_q={{ filters.activity_q|urlencode }}&remarks_q={{ filters.remarks_q|urlencode }}&user_q={{ filters.user_q|urlencode }}"
+            >Previous</a>
+          </li>
+        {% endif %}
+        <li class="page-item disabled">
+          <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        </li>
+        {% if page_obj.has_next %}
+          <li class="page-item">
+            <a
+              class="page-link"
+              href="?page={{ page_obj.next_page_number }}&date_preset={{ filters.date_preset }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&client_q={{ filters.client_q|urlencode }}&category={{ filters.category }}&task_master_id={{ filters.task_master_id }}&activity_q={{ filters.activity_q|urlencode }}&remarks_q={{ filters.remarks_q|urlencode }}&user_q={{ filters.user_q|urlencode }}"
+            >Next</a>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
+
+  {{ client_opts|json_script:"client-activity-client-opts" }}
+  {% include "tasks/includes/task_date_range_init.html" %}
+  <script>
+    (function () {
+      var search = document.getElementById("clientActivityClientSearch");
+      var list = document.getElementById("clientActivityClientSuggestions");
+      var dataEl = document.getElementById("client-activity-client-opts");
+      if (!search || !list || !dataEl) return;
+
+      var clients = JSON.parse(dataEl.textContent);
+
+      function renderSuggestions(q) {
+        list.innerHTML = "";
+        var qq = (q || "").toLowerCase().trim();
+        var shown = 0;
+        for (var i = 0; i < clients.length; i++) {
+          var c = clients[i];
+          if (!qq || (c.search && c.search.indexOf(qq) !== -1) || (c.label && c.label.toLowerCase().indexOf(qq) !== -1)) {
+            var o = document.createElement("option");
+            o.value = c.label;
+            list.appendChild(o);
+            shown++;
+            if (shown >= 50) break;
+          }
+        }
+      }
+
+      renderSuggestions(search.value);
+      search.addEventListener("input", function () {
+        renderSuggestions(search.value);
+      });
+    })();
+  </script>
+{% endblock %}

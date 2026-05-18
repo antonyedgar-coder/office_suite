@@ -72,6 +72,9 @@
                   {% if f.reason_for_cessation.errors %}<div class="text-danger small">{{ f.reason_for_cessation.errors }}</div>{% endif %}
                 </div>
               </div>
+              {% if f.remarks %}
+                {% include "includes/activity_remarks_field.html" with field=f.remarks %}
+              {% endif %}
               {% if f.non_field_errors %}
                 <div class="text-danger small mt-2">{{ f.non_field_errors }}</div>
               {% endif %}
@@ -110,6 +113,9 @@
             {{ f.reason_for_cessation }}
           </div>
         </div>
+        {% if f.remarks %}
+          {% include "includes/activity_remarks_field.html" with field=f.remarks %}
+        {% endif %}
       </div>
     {% endwith %}
   </template>

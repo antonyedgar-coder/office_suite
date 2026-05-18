@@ -53,6 +53,7 @@ def fees_create(request):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
                 activity=f"MIS fees entry saved for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
             )
             messages.success(request, f"Fees saved for {obj.client.client_name}.")
             return redirect("mis_fees_list")
@@ -73,6 +74,7 @@ def fees_edit(request, pk: int):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
                 activity=f"MIS fees entry updated for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
             )
             messages.success(request, f"Fees updated for {obj.client.client_name}.")
             return redirect("mis_fees_list")
@@ -91,6 +93,7 @@ def fees_delete(request, pk: int):
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
             activity=f"MIS fees entry deleted for {obj.date:%d-%m-%Y}.",
+            remarks=obj.remarks,
         )
         obj.delete()
         messages.success(request, f"Fees entry deleted: {label}.")
@@ -118,6 +121,13 @@ def tender_create(request):
         form = TenderDetailForm(request.POST, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS tender entry saved for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
+            )
             messages.success(request, f"Tender entry saved for {obj.client.client_name}.")
             return redirect("mis_tender_list")
     else:
@@ -132,6 +142,13 @@ def tender_edit(request, pk: int):
         form = TenderDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
             obj = form.save()
+            log_client_activity(
+                client=obj.client,
+                user=request.user,
+                category=ClientActivityLog.CATEGORY_MIS,
+                activity=f"MIS tender entry updated for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
+            )
             messages.success(request, f"Tender entry updated for {obj.client.client_name}.")
             return redirect("mis_tender_list")
     else:
@@ -144,6 +161,13 @@ def tender_delete(request, pk: int):
     obj = get_object_or_404(filter_mis_qs(TenderDetail.objects.all(), request.user), pk=pk)
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
+        log_client_activity(
+            client=obj.client,
+            user=request.user,
+            category=ClientActivityLog.CATEGORY_MIS,
+            activity=f"MIS tender entry deleted for {obj.date:%d-%m-%Y}.",
+            remarks=obj.remarks,
+        )
         obj.delete()
         messages.success(request, f"Tender entry deleted: {label}.")
         return redirect("mis_tender_list")
@@ -175,6 +199,7 @@ def receipt_create(request):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
                 activity=f"MIS receipt saved for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
             )
             messages.success(request, f"Receipt saved for {obj.client.client_name}.")
             return redirect("mis_receipt_list")
@@ -195,6 +220,7 @@ def receipt_edit(request, pk: int):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
                 activity=f"MIS receipt updated for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
             )
             messages.success(request, f"Receipt updated for {obj.client.client_name}.")
             return redirect("mis_receipt_list")
@@ -213,6 +239,7 @@ def receipt_delete(request, pk: int):
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
             activity=f"MIS receipt deleted for {obj.date:%d-%m-%Y}.",
+            remarks=obj.remarks,
         )
         obj.delete()
         messages.success(request, f"Receipt deleted: {label}.")
@@ -245,6 +272,7 @@ def expense_create(request):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
                 activity=f"MIS expense saved for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
             )
             messages.success(request, f"Expense saved for {obj.client.client_name}.")
             return redirect("mis_expense_list")
@@ -265,6 +293,7 @@ def expense_edit(request, pk: int):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
                 activity=f"MIS expense updated for {obj.date:%d-%m-%Y}.",
+                remarks=obj.remarks,
             )
             messages.success(request, f"Expense updated for {obj.client.client_name}.")
             return redirect("mis_expense_list")
@@ -283,6 +312,7 @@ def expense_delete(request, pk: int):
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
             activity=f"MIS expense deleted for {obj.date:%d-%m-%Y}.",
+            remarks=obj.remarks,
         )
         obj.delete()
         messages.success(request, f"Expense entry deleted: {label}.")

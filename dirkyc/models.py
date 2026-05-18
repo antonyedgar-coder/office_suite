@@ -21,6 +21,7 @@ class Dir3Kyc(models.Model):
     )
     date_done = models.DateField("Date of DIR-3 KYC done")
     srn = models.CharField("SRN (DIR e-KYC)", max_length=40)
+    remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

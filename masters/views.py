@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.http import HttpResponse
@@ -19,9 +20,15 @@ from .director_mapping_import import (
 )
 from .forms import ClientForm, ClientGroupForm, DirectorCompanyPickForm, DirectorForm, DirectorMappingRowFormSet
 from .client_activity import (
+    CLIENT_ACTIVITY_DATE_PRESET_CHOICES,
+    apply_client_activity_log_filters,
+    build_client_activity_list_rows,
     build_client_activity_rows,
+    client_activity_log_queryset_for_user,
     get_client_activity_timeline,
     log_client_activity,
+    parse_client_activity_log_filters,
+    user_display_name,
 )
 from .models import (
     DIRECTOR_COMPANY_TYPES,
@@ -103,6 +110,64 @@ def client_list(request):
     return render(request, "masters/client_list.html", {"clients": qs, "q": q})
 
 
+@require_perm("masters.view_client")
+def client_activity_log_list(request):
+    filters = parse_client_activity_log_filters(request.GET)
+    qs = client_activity_log_queryset_for_user(request.user)
+    qs = apply_client_activity_log_filters(qs, filters)
+
+    can_link_tasks = task_module_enabled() and (
+        request.user.is_superuser or request.user.has_perm("tasks.view_task")
+    )
+    paginator = Paginator(qs, 50)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    activity_rows = build_client_activity_list_rows(page_obj.object_list, can_link_tasks=can_link_tasks)
+
+    client_opts = []
+    for c in client_master_queryset_for_user(request.user).values("client_id", "client_name", "pan"):
+        pan = (c.get("pan") or "").strip().upper()
+        name = c.get("client_name") or ""
+        label = f"{name} — {pan}" if pan else name
+        client_opts.append(
+            {
+                "id": c["client_id"],
+                "label": label,
+                "search": f"{name} {pan}".lower(),
+            }
+        )
+
+    from tasks.user_labels import staff_users_queryset
+
+    staff_names = []
+    for u in staff_users_queryset():
+        name = user_display_name(u)
+        if name:
+            staff_names.append(name)
+
+    from .client_activity import task_master_choices_for_activity_log
+
+    task_master_choices = task_master_choices_for_activity_log()
+    show_task_type_filter = task_module_enabled()
+
+    return render(
+        request,
+        "masters/client_activity_log_list.html",
+        {
+            "page_obj": page_obj,
+            "activity_rows": activity_rows,
+            "filters": filters,
+            "category_choices": ClientActivityLog.CATEGORY_CHOICES,
+            "date_preset_choices": CLIENT_ACTIVITY_DATE_PRESET_CHOICES,
+            "can_link_tasks": can_link_tasks,
+            "client_opts": client_opts,
+            "staff_names": staff_names,
+            "task_master_choices": task_master_choices,
+            "show_task_type_filter": show_task_type_filter,
+            "enable_task_module": task_module_enabled(),
+        },
+    )
+
+
 @require_perm("masters.add_client")
 def client_create(request):
     if request.method == "POST":
@@ -117,6 +182,7 @@ def client_create(request):
                     user=request.user,
                     category=ClientActivityLog.CATEGORY_CLIENT,
                     activity=f"Client master created ({client.client_id}).",
+                    remarks=client.remarks,
                 )
                 messages.success(request, f"Client created: {client.client_id}")
             else:
@@ -127,6 +193,7 @@ def client_create(request):
                     activity=(
                         f"Client master created ({client.client_id}) and is pending approval."
                     ),
+                    remarks=client.remarks,
                 )
                 messages.success(
                     request,
@@ -157,6 +224,7 @@ def client_edit(request, client_id: str):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_CLIENT,
                 activity="Client master updated.",
+                remarks=client.remarks,
             )
             if client.approval_status == Client.APPROVED:
                 messages.success(request, "Client updated.")
@@ -179,7 +247,8 @@ def client_edit(request, client_id: str):
             request.user.is_superuser or request.user.has_perm("tasks.view_task")
         )
         logs = get_client_activity_timeline(client)
-        ctx["activity_rows"] = build_client_activity_rows(logs, can_link_tasks=can_link_tasks)
+        ctx["activity_rows"] = build_client_activity_list_rows(logs, can_link_tasks=can_link_tasks)
+        ctx["enable_task_module"] = task_module_enabled()
     return render(request, "masters/client_form.html", ctx)
 
 
@@ -192,6 +261,7 @@ def client_delete(request, client_id: str):
             user=request.user,
             category=ClientActivityLog.CATEGORY_CLIENT,
             activity="Client master deleted.",
+            remarks=client.remarks,
         )
         try:
             client.delete()
@@ -232,6 +302,7 @@ def client_approve(request, client_id: str):
         user=request.user,
         category=ClientActivityLog.CATEGORY_CLIENT,
         activity="Client master approved.",
+        remarks=client.remarks,
     )
     messages.success(request, f"Client {client.client_id} approved.")
     return redirect("client_pending_list")
@@ -505,6 +576,7 @@ def _log_director_mapping_company(*, company: Client, user, mapping: DirectorMap
         user=user,
         category=ClientActivityLog.CATEGORY_DIRECTOR,
         activity=_director_mapping_activity(mapping=mapping, verb=verb),
+        remarks=mapping.remarks or "",
         metadata={"director_mapping_id": mapping.pk, "director_id": mapping.director_id},
     )
 
@@ -557,6 +629,7 @@ def director_create(request):
                             appointed_date=appointed or None,
                             cessation_date=form.cleaned_data.get("cessation_date") or None,
                             reason_for_cessation=(form.cleaned_data.get("reason_for_cessation") or "").strip() or "",
+                            remarks=(form.cleaned_data.get("remarks") or "").strip(),
                         )
                         m.full_clean()
                         m.save()

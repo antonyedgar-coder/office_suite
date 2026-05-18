@@ -295,6 +295,7 @@ class Client(models.Model):
     contact_person = models.CharField(max_length=120, blank=True)
     mobile = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
+    remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -551,6 +552,7 @@ class DirectorMapping(models.Model):
         blank=True,
         verbose_name="Reason for cessation",
     )
+    remarks = models.CharField(max_length=500, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

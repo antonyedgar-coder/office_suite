@@ -1,37 +1,78 @@
 {% extends "base.html" %}
+
 {% block title %}Fees Details — CA Office Suite{% endblock %}
+
 {% block page_title %}{% if mode == "create" %}New fees entry{% else %}Edit fees entry{% endif %}{% endblock %}
 
+
+
 {% block content %}
+
   <div class="card p-3">
+
     <form method="post" class="row g-3">
+
       {% csrf_token %}
+
       {% include "mis/includes/client_autocomplete_fields.html" %}
 
+
+
       <div class="col-12 col-md-4">
+
         <label class="form-label">Fees amount</label>
+
         {{ form.fees_amount }}
+
         {% if form.fees_amount.errors %}<div class="text-danger small">{{ form.fees_amount.errors }}</div>{% endif %}
+
       </div>
+
       <div class="col-12 col-md-4">
+
         <label class="form-label">GST amount</label>
+
         {{ form.gst_amount }}
+
         {% if form.gst_amount.errors %}<div class="text-danger small">{{ form.gst_amount.errors }}</div>{% endif %}
+
       </div>
+
       <div class="col-12 col-md-4">
+
         <label class="form-label">Total</label>
+
         <input class="form-control" value="{% if obj %}{{ obj.total_amount }}{% else %}Auto{% endif %}" disabled readonly />
+
         <div class="form-text">Total is automatically calculated as Fees + GST.</div>
+
       </div>
+
+
+
+      {% include "includes/activity_remarks_field.html" with field=form.remarks %}
+
+
 
       {% if form.non_field_errors %}
+
         <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+
       {% endif %}
 
+
+
       <div class="col-12 d-flex gap-2">
+
         <button type="submit" class="btn btn-primary">Save</button>
+
         <a class="btn btn-outline-secondary" href="{% url 'mis_fees_list' %}">Back</a>
+
       </div>
+
     </form>
+
   </div>
+
 {% endblock %}
+

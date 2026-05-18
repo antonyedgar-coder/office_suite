@@ -128,6 +128,8 @@
         {{ form.email }}
       </div>
 
+      {% include "includes/activity_remarks_field.html" with field=form.remarks %}
+
       <div class="col-12 d-flex gap-2">
         <button class="btn btn-primary" type="submit">Save</button>
         <a class="btn btn-outline-secondary" href="{% url 'client_list' %}">Back</a>

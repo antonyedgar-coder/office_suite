@@ -1,0 +1,22 @@
+<div class="col-12 col-md-6 col-lg-4" data-date-filter-group="date">
+  <label class="form-label small text-secondary filter-field-label">Date</label>
+  <select name="date_preset" class="form-select form-select-sm mb-1" data-date-preset-select="date">
+    {% for val, plabel in date_preset_choices %}
+      <option value="{{ val }}" {% if filters.date_preset == val %}selected{% endif %}>{{ plabel }}</option>
+    {% endfor %}
+  </select>
+  <div class="{% if filters.date_preset != 'custom' %}d-none{% endif %}" data-date-custom-range="date">
+    <div data-task-date-range data-from-field="date_from" data-to-field="date_to">
+      <input
+        type="text"
+        id="clientActivityDateRangeDisplay"
+        class="form-control form-control-sm"
+        placeholder="Select from and to date"
+        autocomplete="off"
+        readonly
+      />
+      <input type="hidden" name="date_from" id="id_date_from" value="{{ filters.date_from|default:'' }}" />
+      <input type="hidden" name="date_to" id="id_date_to" value="{{ filters.date_to|default:'' }}" />
+    </div>
+  </div>
+</div>

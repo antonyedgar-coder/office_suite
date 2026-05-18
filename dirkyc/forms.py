@@ -148,7 +148,7 @@ class Dir3KycForm(_DirectorAutocompleteMixin, forms.ModelForm):
 
         model = Dir3Kyc
 
-        fields = ["director", "date_done", "srn"]
+        fields = ["director", "date_done", "srn", "remarks"]
 
         widgets = {
 
@@ -166,6 +166,10 @@ class Dir3KycForm(_DirectorAutocompleteMixin, forms.ModelForm):
 
                 }
 
+            ),
+
+            "remarks": forms.Textarea(
+                attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
             ),
 
         }

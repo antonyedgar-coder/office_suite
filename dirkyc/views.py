@@ -42,6 +42,7 @@ def dir3kyc_create(request):
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_DIR3,
                 activity="DIR-3 KYC record created.",
+                remarks=obj.remarks,
             )
             messages.success(request, "DIR-3 KYC record saved.")
             return redirect("dirkyc_list")
@@ -85,6 +86,7 @@ def dir3kyc_delete(request, pk: int):
             user=request.user,
             category=ClientActivityLog.CATEGORY_DIR3,
             activity="DIR-3 KYC record deleted.",
+            remarks=obj.remarks,
         )
         obj.delete()
         messages.success(request, "DIR-3 KYC record deleted.")

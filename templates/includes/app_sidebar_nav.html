@@ -1,4 +1,4 @@
-{# Collapsible sidebar sections: Masters, MIS, DIR-3 eKYC, Reports #}
+{# Collapsible sidebar: Masters, Tasks, DIR-3 eKYC, MIS, Reports #}
 {% with url_name=request.resolver_match.url_name|default:"" nav_prefix=nav_id_prefix|default:"main" %}
   {% if user.is_superuser or perms.masters.view_client or perms.masters.view_clientgroup or perms.masters.approve_client or perms.masters.view_directormapping or perms.core.view_employee %}
     <div
@@ -31,6 +31,29 @@
         {% if user.is_superuser or perms.core.view_employee %}
           <a class="nav-link {% if url_name in 'user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}active{% endif %}" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
         {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% include "includes/app_sidebar_tasks_nav.html" %}
+
+  {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
+    <div
+      class="nav-accordion-item{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} is-open{% endif %}"
+      data-nav-section="dirkyc"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-dirkyc"
+      >
+        <i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i>
+        <span>DIR-3 eKYC</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div id="nav-panel-{{ nav_prefix }}-dirkyc" class="nav-accordion-panel"{% if url_name not in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} hidden{% endif %}>
+        <a class="nav-link {% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
       </div>
     </div>
   {% endif %}
@@ -69,29 +92,6 @@
       </div>
     </div>
   {% endif %}
-
-  {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
-    <div
-      class="nav-accordion-item{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} is-open{% endif %}"
-      data-nav-section="dirkyc"
-    >
-      <button
-        type="button"
-        class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}true{% else %}false{% endif %}"
-        aria-controls="nav-panel-{{ nav_prefix }}-dirkyc"
-      >
-        <i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i>
-        <span>DIR-3 eKYC</span>
-        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
-      </button>
-      <div id="nav-panel-{{ nav_prefix }}-dirkyc" class="nav-accordion-panel"{% if url_name not in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} hidden{% endif %}>
-        <a class="nav-link {% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
-      </div>
-    </div>
-  {% endif %}
-
-  {% include "includes/app_sidebar_tasks_nav.html" %}
 
   {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report %}
     <div

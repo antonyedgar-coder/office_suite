@@ -30,6 +30,7 @@ class FeesDetail(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         editable=False,
     )
+    remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -62,6 +63,7 @@ class Receipt(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
     )
+    remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -92,6 +94,7 @@ class ExpenseDetail(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     notes = models.CharField(max_length=300, blank=True)
+    remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -126,6 +129,7 @@ class TenderDetail(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
+    remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -17,6 +17,9 @@
         {{ form.tender_deposit }}
         {% if form.tender_deposit.errors %}<div class="text-danger small">{{ form.tender_deposit.errors }}</div>{% endif %}
       </div>
+
+      {% include "includes/activity_remarks_field.html" with field=form.remarks %}
+
       {% if form.non_field_errors %}
         <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
       {% endif %}

@@ -1,0 +1,5 @@
+<div class="col-12">
+  <label class="form-label" for="{{ field.id_for_label }}">Remarks</label>
+  {{ field }}
+  {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+</div>

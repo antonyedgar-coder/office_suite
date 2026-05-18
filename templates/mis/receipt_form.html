@@ -1,24 +1,50 @@
 {% extends "base.html" %}
+
 {% block title %}Receipts — CA Office Suite{% endblock %}
+
 {% block page_title %}{% if mode == "create" %}New receipt{% else %}Edit receipt{% endif %}{% endblock %}
 
+
+
 {% block content %}
+
   <div class="card p-3">
+
     <form method="post" class="row g-3">
+
       {% csrf_token %}
+
       {% include "mis/includes/client_autocomplete_fields.html" %}
+
       <div class="col-12 col-md-4">
+
         <label class="form-label">Amount received</label>
+
         {{ form.amount_received }}
+
         {% if form.amount_received.errors %}<div class="text-danger small">{{ form.amount_received.errors }}</div>{% endif %}
+
       </div>
+
+      {% include "includes/activity_remarks_field.html" with field=form.remarks %}
+
       {% if form.non_field_errors %}
+
         <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+
       {% endif %}
+
       <div class="col-12 d-flex gap-2">
+
         <button type="submit" class="btn btn-primary">Save</button>
+
         <a class="btn btn-outline-secondary" href="{% url 'mis_receipt_list' %}">Back</a>
+
       </div>
+
     </form>
+
   </div>
+
 {% endblock %}
+

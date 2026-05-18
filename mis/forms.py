@@ -140,7 +140,7 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
         model = FeesDetail
 
-        fields = ["date", "client", "fees_amount", "gst_amount"]
+        fields = ["date", "client", "fees_amount", "gst_amount", "remarks"]
 
         widgets = {
 
@@ -149,6 +149,10 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
             "fees_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
 
             "gst_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+
+            "remarks": forms.Textarea(
+                attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
+            ),
 
         }
 
@@ -186,13 +190,17 @@ class ReceiptForm(_ClientAutocompleteMixin, forms.ModelForm):
 
         model = Receipt
 
-        fields = ["date", "client", "amount_received"]
+        fields = ["date", "client", "amount_received", "remarks"]
 
         widgets = {
 
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
 
             "amount_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+
+            "remarks": forms.Textarea(
+                attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
+            ),
 
         }
 
@@ -210,7 +218,7 @@ class ExpenseDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
         model = ExpenseDetail
 
-        fields = ["date", "client", "expenses_paid", "notes"]
+        fields = ["date", "client", "expenses_paid", "remarks"]
 
         widgets = {
 
@@ -218,7 +226,9 @@ class ExpenseDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
             "expenses_paid": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
 
-            "notes": forms.TextInput(attrs={"class": "form-control", "placeholder": "Optional notes"}),
+            "remarks": forms.Textarea(
+                attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
+            ),
 
         }
 
@@ -228,11 +238,14 @@ class TenderDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
     class Meta:
         model = TenderDetail
-        fields = ["date", "client", "tender_fees", "tender_deposit"]
+        fields = ["date", "client", "tender_fees", "tender_deposit", "remarks"]
         widgets = {
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "tender_fees": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "tender_deposit": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "remarks": forms.Textarea(
+                attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
+            ),
         }
 
     def clean(self):
