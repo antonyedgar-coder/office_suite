@@ -1,21 +1,21 @@
-{# Collapsible sidebar: Masters, Tasks, DIR-3 eKYC, MIS, Reports #}
+{# Sidebar sections: Masters → Tasks → DSC Management → MIS → DIR-3 eKYC → Reports #}
 {% with url_name=request.resolver_match.url_name|default:"" nav_prefix=nav_id_prefix|default:"main" %}
   {% if user.is_superuser or perms.masters.view_client or perms.masters.view_clientgroup or perms.masters.approve_client or perms.masters.view_clientportalcredential or perms.masters.view_directormapping or perms.core.view_employee %}
     <div
-      class="nav-accordion-item{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %} is-open{% endif %}"
+      class="nav-accordion-item{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete expense_category_list expense_category_create expense_category_edit expense_category_delete' %} is-open{% endif %}"
       data-nav-section="masters"
     >
       <button
         type="button"
         class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}true{% else %}false{% endif %}"
+        aria-expanded="{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete expense_category_list expense_category_create expense_category_edit expense_category_delete' %}true{% else %}false{% endif %}"
         aria-controls="nav-panel-{{ nav_prefix }}-masters"
       >
         <i class="bi bi-database nav-link-icon" aria-hidden="true"></i>
         <span>Masters</span>
         <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
       </button>
-      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %} hidden{% endif %}>
+      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete expense_category_list expense_category_create expense_category_edit expense_category_delete' %} hidden{% endif %}>
         {% if user.is_superuser or perms.masters.view_client %}
           <a class="nav-link {% if url_name in 'client_list client_create client_detail client_edit client_delete client_import' %}active{% endif %}" href="{% url 'client_list' %}"><i class="bi bi-people nav-link-icon" aria-hidden="true"></i><span>Client Master</span></a>
         {% endif %}
@@ -40,6 +40,8 @@
       </div>
     </div>
   {% endif %}
+
+  {% include "includes/app_sidebar_tasks_nav.html" %}
 
   {% if user.is_superuser or perms.masters.view_clientdsc or perms.masters.view_dscinout %}
     <div
@@ -69,29 +71,6 @@
             {% if dsc_nav_notification_count %}<span class="badge rounded-pill text-bg-danger ms-auto">{{ dsc_nav_notification_count }}</span>{% endif %}
           </a>
         {% endif %}
-      </div>
-    </div>
-  {% endif %}
-
-  {% include "includes/app_sidebar_tasks_nav.html" %}
-
-  {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
-    <div
-      class="nav-accordion-item{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} is-open{% endif %}"
-      data-nav-section="dirkyc"
-    >
-      <button
-        type="button"
-        class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}true{% else %}false{% endif %}"
-        aria-controls="nav-panel-{{ nav_prefix }}-dirkyc"
-      >
-        <i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i>
-        <span>DIR-3 eKYC</span>
-        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
-      </button>
-      <div id="nav-panel-{{ nav_prefix }}-dirkyc" class="nav-accordion-panel"{% if url_name not in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} hidden{% endif %}>
-        <a class="nav-link {% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
       </div>
     </div>
   {% endif %}
@@ -131,6 +110,27 @@
     </div>
   {% endif %}
 
+  {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
+    <div
+      class="nav-accordion-item{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} is-open{% endif %}"
+      data-nav-section="dirkyc"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-dirkyc"
+      >
+        <i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i>
+        <span>DIR-3 eKYC</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div id="nav-panel-{{ nav_prefix }}-dirkyc" class="nav-accordion-panel"{% if url_name not in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} hidden{% endif %}>
+        <a class="nav-link {% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
+      </div>
+    </div>
+  {% endif %}
+
   {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report or perms.reports.view_portal_password_report or perms.reports.export_portal_password_report %}
     <div
       class="nav-accordion-item{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_index' %} is-open{% endif %}"
@@ -164,20 +164,5 @@
         {% endif %}
       </div>
     </div>
-  {% endif %}
-
-  {% if user.is_superuser or perms.masters.view_client %}
-    <a
-      class="nav-link {% if url_name == 'client_activity_log_list' %}active{% endif %}"
-      href="{% url 'client_activity_log_list' %}"
-      ><i class="bi bi-clock-history nav-link-icon" aria-hidden="true"></i><span>Client activity log</span></a
-    >
-    {% if user.is_superuser %}
-      <a
-        class="nav-link {% if url_name == 'activity_log' %}active{% endif %}"
-        href="{% url 'activity_log' %}"
-        ><i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i><span>Activity log</span></a
-      >
-    {% endif %}
   {% endif %}
 {% endwith %}

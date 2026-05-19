@@ -61,6 +61,33 @@
         >Password</a>
       </li>
     {% endif %}
+    {% if show_dsc_tab %}
+      <li class="nav-item" role="presentation">
+        <a
+          class="nav-link{% if active_tab == 'dsc' %} active{% endif %}"
+          href="{% url 'client_detail' client.client_id %}?tab=dsc"
+          role="tab"
+        >DSC Management</a>
+      </li>
+    {% endif %}
+    {% if show_mis_tab %}
+      <li class="nav-item" role="presentation">
+        <a
+          class="nav-link{% if active_tab == 'mis' %} active{% endif %}"
+          href="{% url 'client_detail' client.client_id %}?tab=mis"
+          role="tab"
+        >MIS</a>
+      </li>
+    {% endif %}
+    {% if show_directors_tab %}
+      <li class="nav-item" role="presentation">
+        <a
+          class="nav-link{% if active_tab == 'directors' %} active{% endif %}"
+          href="{% url 'client_detail' client.client_id %}?tab=directors"
+          role="tab"
+        >Director Mapping</a>
+      </li>
+    {% endif %}
   </ul>
 
   {% if active_tab == "details" %}
@@ -69,5 +96,11 @@
     {% include "masters/includes/client_detail_tasks.html" %}
   {% elif active_tab == "passwords" %}
     {% include "masters/includes/client_detail_passwords.html" %}
+  {% elif active_tab == "dsc" %}
+    {% include "masters/includes/client_detail_dsc.html" %}
+  {% elif active_tab == "mis" %}
+    {% include "masters/includes/client_detail_mis.html" %}
+  {% elif active_tab == "directors" %}
+    {% include "masters/includes/client_detail_directors.html" %}
   {% endif %}
 {% endblock %}

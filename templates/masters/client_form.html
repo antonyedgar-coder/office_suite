@@ -76,7 +76,7 @@
                 <label class="form-label" for="{{ form.pan.id_for_label }}">PAN</label>
                 {{ form.pan }}
                 <div class="field-feedback"></div>
-                <div class="form-field-hint">Required except for None / Foreign Citizen.</div>
+                <div class="form-field-hint">Optional for New Client, One Off Client, Foreign Citizen, and Branch.</div>
                 {% if form.pan.errors %}<div class="text-danger small">{{ form.pan.errors }}</div>{% endif %}
               </div>
               <div class="col-12 col-md-4">

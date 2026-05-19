@@ -1,0 +1,158 @@
+<div class="card p-3 mb-3">
+  <p class="text-secondary small mb-3">
+    MIS entries for this client. Links open the full MIS lists with this client ID in search.
+  </p>
+  <div class="d-flex flex-wrap gap-2">
+    {% if perms.mis.view_feesdetail %}
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_fees_list' %}?q={{ mis_client_q|urlencode }}">Fees details</a>
+      {% if perms.mis.add_feesdetail %}
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_fees_create' %}">Add fees</a>
+      {% endif %}
+    {% endif %}
+    {% if perms.mis.view_receipt %}
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_receipt_list' %}?q={{ mis_client_q|urlencode }}">Receipts</a>
+      {% if perms.mis.add_receipt %}
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_receipt_create' %}">Add receipt</a>
+      {% endif %}
+    {% endif %}
+    {% if perms.mis.view_expensedetail %}
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_expense_list' %}?q={{ mis_client_q|urlencode }}">Expenses</a>
+      {% if perms.mis.add_expensedetail %}
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_expense_create' %}">Add expense</a>
+      {% endif %}
+    {% endif %}
+    {% if perms.mis.view_tenderdetail %}
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'mis_tender_list' %}?q={{ mis_client_q|urlencode }}">Tender</a>
+      {% if perms.mis.add_tenderdetail %}
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'mis_tender_create' %}">Add tender</a>
+      {% endif %}
+    {% endif %}
+    {% if perms.reports.access_reports_menu %}
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'reports_mis' %}?client_id={{ client.client_id|urlencode }}">MIS report</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if perms.mis.view_feesdetail %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Recent fees details</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 110px">Date</th>
+            <th class="text-end">Fees</th>
+            <th class="text-end">GST</th>
+            <th class="text-end">Total</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in mis_fees_rows %}
+            <tr>
+              <td class="small">{{ row.date|date:"d-m-Y" }}</td>
+              <td class="text-end small">{{ row.fees_amount }}</td>
+              <td class="text-end small">{{ row.gst_amount }}</td>
+              <td class="text-end small">{{ row.total_amount }}</td>
+              <td class="small">{{ row.remarks|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-secondary">No fees entries.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{% if perms.mis.view_receipt %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Recent receipts</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 110px">Date</th>
+            <th class="text-end">Fees received</th>
+            <th class="text-end">Expenses received</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in mis_receipt_rows %}
+            <tr>
+              <td class="small">{{ row.date|date:"d-m-Y" }}</td>
+              <td class="text-end small">{{ row.fees_received }}</td>
+              <td class="text-end small">{{ row.expenses_received }}</td>
+              <td class="small">{{ row.remarks|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-secondary">No receipts.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{% if perms.mis.view_expensedetail %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Recent expenses</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 110px">Date</th>
+            <th>Category</th>
+            <th>Payment</th>
+            <th class="text-end">Amount</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in mis_expense_rows %}
+            <tr>
+              <td class="small">{{ row.date|date:"d-m-Y" }}</td>
+              <td class="small">{{ row.category.name }}</td>
+              <td class="small">{{ row.get_payment_mode_display }}</td>
+              <td class="text-end small">{{ row.expenses_paid }}</td>
+              <td class="small">{{ row.remarks|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-secondary">No expense entries.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{% if perms.mis.view_tenderdetail %}
+  <div class="card p-3">
+    <div class="fw-semibold mb-2">Recent tender</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 110px">Date</th>
+            <th class="text-end">Tender fees</th>
+            <th class="text-end">Deposit</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in mis_tender_rows %}
+            <tr>
+              <td class="small">{{ row.date|date:"d-m-Y" }}</td>
+              <td class="text-end small">{{ row.tender_fees }}</td>
+              <td class="text-end small">{{ row.tender_deposit }}</td>
+              <td class="small">{{ row.remarks|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-secondary">No tender entries.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}

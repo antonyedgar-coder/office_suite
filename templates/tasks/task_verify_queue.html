@@ -41,6 +41,39 @@
     {% endif %}
   </div>
 
+  {% if none_client_approve_rows %}
+    <div class="card p-3 mb-3">
+      <h2 class="h6 text-secondary mb-2">Verify without submit</h2>
+      <p class="small text-secondary mb-3">
+        Clients with type New Client cannot be submitted for verification. Open the task to verify directly.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8125rem;">
+          <thead class="table-light">
+            <tr>
+              <th>Client</th>
+              <th>Task</th>
+              <th>Due</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in none_client_approve_rows %}
+              <tr>
+                <td>{{ row.task.client.client_name }}</td>
+                <td><a href="{% url 'task_detail' row.task.pk %}">{{ row.task.title }}</a></td>
+                <td class="text-nowrap">{{ row.task.due_date }}</td>
+                <td class="text-nowrap">
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'task_detail' row.task.pk %}">Review</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
   <div class="card p-3">
     <h2 class="h6 text-secondary mb-2">Work verification</h2>
     <p class="small text-secondary mb-3">Review tasks submitted by users.</p>

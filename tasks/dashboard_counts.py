@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 from .date_presets import PRESET_ALL_TIME, PRESET_CUSTOM
@@ -28,14 +29,14 @@ class TaskDetailCard:
 
 
 def _open_tasks_with_due(qs, *, today: date):
-    return qs.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED]).filter(
+    return qs.exclude(status__in=Task.CLOSED_STATUSES).filter(
         due_date__isnull=False
     )
 
 
 def task_due_bucket_counts(qs, *, today: date | None = None) -> dict[str, int]:
     """
-    Mutually exclusive due-date buckets for open tasks (approved/cancelled excluded).
+    Mutually exclusive due-date buckets for open tasks (complete/cancelled excluded).
 
     Overdue buckets use calendar days from due date through today:
     - overdue_up_to_7: 1–7 days past due
@@ -142,15 +143,25 @@ def task_due_buckets(
 def _my_open_qs(base, user):
     return (
         base.filter(assignments__user=user)
-        .exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
+        .exclude(status__in=Task.DONE_FOR_ASSIGNEE_STATUSES)
         .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
         .distinct()
     )
 
 
+def _document_check_queue_qs(base, user):
+    return base.filter(document_checker=user, status=Task.STATUS_VERIFIED)
+
+
 def _verify_queue_qs(base, user):
+    from masters.models import CLIENT_TYPE_NEW_CLIENT
+
     return base.filter(verifier=user).filter(
-        status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT]
+        Q(status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
+        | Q(
+            client__client_type=CLIENT_TYPE_NEW_CLIENT,
+            status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK],
+        )
     )
 
 
@@ -169,11 +180,12 @@ def _task_detail_cards(
         branch_base.filter(assignments__user=user, status=Task.STATUS_SUBMITTED).distinct().count()
     )
     verify_count = _verify_queue_qs(branch_base, user).count()
+    document_check_count = _document_check_queue_qs(branch_base, user).count()
     cards: list[TaskDetailCard] = []
 
     if office_view:
         total_open = branch_base.exclude(
-            status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED]
+            status__in=Task.CLOSED_STATUSES
         ).count()
         submitted = branch_base.filter(status=Task.STATUS_SUBMITTED).count()
         cards.extend(
@@ -216,6 +228,15 @@ def _task_detail_cards(
                 label="My verify queue",
                 count=verify_count,
                 list_url=reverse("task_verify_queue"),
+            )
+        )
+    if office_view or document_check_count or user.has_perm("tasks.check_documents"):
+        cards.append(
+            TaskDetailCard(
+                key="document_check_queue",
+                label="My document check queue",
+                count=document_check_count,
+                list_url=reverse("task_document_check_queue"),
             )
         )
     return cards

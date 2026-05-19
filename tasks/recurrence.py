@@ -5,6 +5,7 @@ Recurrence period keys and create/due date calculation (Indian FY: Apr–Mar).
 from __future__ import annotations
 
 import calendar
+import re
 from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
@@ -147,10 +148,15 @@ def _parse_period_key(master: TaskMaster, period_key: str, enrollment_started: d
             y = int(period_key[2:].split("-")[0])
             return date(y, 6, 15)
         return date(int(period_key), 6, 15)
-    cycle = int(period_key.replace("cycle-", ""))
-    years = 3 if freq == master.FREQ_EVERY_3_YEARS else 5
-    fy = fy_start_year(enrollment_started) + (cycle - 1) * years
-    return date(fy, 4, 15)
+    m = re.match(r"^(\d{4})-(\d{4})$", period_key)
+    if m:
+        return date(int(m.group(1)), 4, 15)
+    if period_key.startswith("cycle-"):
+        cycle = int(period_key.replace("cycle-", ""))
+        years = 3 if freq == master.FREQ_EVERY_3_YEARS else 5
+        fy = fy_start_year(enrollment_started) + (cycle - 1) * years
+        return date(fy, 4, 15)
+    raise ValueError(f"Unrecognized period key: {period_key}")
 
 
 def compute_create_due_dates(
@@ -202,6 +208,13 @@ def compute_create_due_dates(
         due_d = _clamp_day(y, month, cfg["due_day"])
         return create_d, due_d
 
+    m = re.match(r"^(\d{4})-(\d{4})$", period_key)
+    if m:
+        year_to = int(m.group(2))
+        anchor_y = year_to + 1
+        create_d = _clamp_day(anchor_y, cfg["create_month"], cfg["create_day"])
+        due_d = _clamp_day(anchor_y, cfg["due_month"], cfg["due_day"])
+        return create_d, due_d
     years = 3 if freq == master.FREQ_EVERY_3_YEARS else 5
     cycle = _multi_year_cycle(enrollment_started, ref, years)
     completion_fy = fy_start_year(enrollment_started) + cycle * years
@@ -212,9 +225,14 @@ def compute_create_due_dates(
     return create_d, due_d
 
 
-def should_create_today(master: TaskMaster, today: date, enrollment_started: date) -> tuple[bool, str]:
+def should_create_today(
+    master: TaskMaster,
+    today: date,
+    enrollment_started: date,
+    client=None,
+) -> tuple[bool, str]:
     """Return (should_create, period_key) if today is the scheduled create date."""
-    pk = period_key_for_date(master, today, enrollment_started)
+    pk = period_key_for_date(master, today, enrollment_started, client=client)
     create_d, _ = compute_create_due_dates(master, pk, enrollment_started)
     if create_d == today:
         return True, pk
@@ -245,8 +263,10 @@ def next_period_key(master: TaskMaster, current_period_key: str, enrollment_star
         y = fy_start_year(ref) + 1
         return f"FY{y}-{str(y + 1)[-2:]}"
     years = 3 if freq == master.FREQ_EVERY_3_YEARS else 5
-    cycle = _multi_year_cycle(enrollment_started, ref, years)
-    return f"cycle-{cycle + 1}"
+    from .period_keys import multi_year_span_key
+
+    next_ref = date(fy_start_year(ref) + years, 4, 1)
+    return multi_year_span_key(enrollment_started, next_ref, years)
 
 
 def first_period_key(master: TaskMaster, enrollment_started: date) -> str:

@@ -81,12 +81,22 @@
         <label class="form-label" for="id_verifier">Verifier</label>
         {{ form.verifier }}
         {% if form.verifier.errors %}<div class="text-danger small">{{ form.verifier.errors }}</div>{% endif %}
-        <div class="form-text">Select from list (no typing).</div>
+        <div class="form-text">Approves assignment and verifies submitted work.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="id_document_checker">Document checker</label>
+        {{ form.document_checker }}
+        {% if form.document_checker.errors %}<div class="text-danger small">{{ form.document_checker.errors }}</div>{% endif %}
+        <div class="form-text">Checks documents after verification; only they can mark the task complete.</div>
       </div>
 
       <div class="mb-3 border rounded p-3 bg-light">
         <label class="form-label" for="id_period_type">Filing period</label>
         {{ form.period_type }}
+        <p id="periodTypeLockedHint" class="form-text mb-0" style="display:none">
+          Set automatically from the task master recurrence frequency.
+        </p>
         {% if form.period_type.errors %}<div class="text-danger small">{{ form.period_type.errors }}</div>{% endif %}
 
         <div class="period-panel row g-2 mt-2" data-period-for="monthly">
@@ -148,7 +158,7 @@
 
   {{ staff_users_json|json_script:"task-staff-users" }}
   {{ clients_json|json_script:"task-clients" }}
-  {{ masters_billing_json|json_script:"task-masters-billing" }}
+  {{ masters_meta_json|json_script:"task-masters-meta" }}
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -309,7 +319,8 @@
   var feesWrap = document.getElementById("taskFeesWrap");
   var feesInput = document.getElementById("id_fees_amount");
   var taskMasterSelect = document.getElementById("id_task_master");
-  var mastersBilling = JSON.parse(document.getElementById("task-masters-billing").textContent || "{}");
+  var mastersMeta = JSON.parse(document.getElementById("task-masters-meta").textContent || "{}");
+  var periodLockedHint = document.getElementById("periodTypeLockedHint");
 
   function syncBillableUi() {
     if (!billableCb || !feesWrap) return;
@@ -317,34 +328,49 @@
     if (!billableCb.checked && feesInput) feesInput.value = "";
   }
 
-  var verifierSelect = document.getElementById("id_verifier");
-
-  function applyMasterBillingDefaults() {
+  function applyMasterDefaults() {
     if (!taskMasterSelect) return;
-    var cfg = mastersBilling[taskMasterSelect.value];
+    var cfg = mastersMeta[taskMasterSelect.value];
     if (!cfg) return;
-    if (billableCb) {
-      billableCb.checked = !!cfg.is_billable;
-      if (feesInput) feesInput.value = cfg.fees_amount || "";
-      syncBillableUi();
+    if (periodType) {
+      if (cfg.period_type) {
+        periodType.value = cfg.period_type;
+        periodType.disabled = true;
+        if (periodLockedHint) periodLockedHint.style.display = "block";
+        syncPeriodPanels();
+        if (cfg.period_type === "every_3_years" && yearFrom && yearFrom.value) autoSpanYears(3);
+        if (cfg.period_type === "every_5_years" && yearFrom && yearFrom.value) autoSpanYears(5);
+      } else {
+        periodType.disabled = false;
+        if (periodLockedHint) periodLockedHint.style.display = "none";
+      }
     }
-    if (verifierSelect && cfg.default_verifier_id) {
-      verifierSelect.value = String(cfg.default_verifier_id);
+    if (billableCb && billableCb.checked && feesInput && cfg.default_fees_amount && !feesInput.value) {
+      feesInput.value = cfg.default_fees_amount;
     }
   }
 
   if (billableCb) {
-    billableCb.addEventListener("change", syncBillableUi);
+    billableCb.addEventListener("change", function () {
+      syncBillableUi();
+      if (billableCb.checked && taskMasterSelect) {
+        var cfg = mastersMeta[taskMasterSelect.value];
+        if (cfg && cfg.default_fees_amount && feesInput && !feesInput.value) {
+          feesInput.value = cfg.default_fees_amount;
+        }
+      }
+    });
     syncBillableUi();
   }
   if (taskMasterSelect) {
-    taskMasterSelect.addEventListener("change", applyMasterBillingDefaults);
-    applyMasterBillingDefaults();
+    taskMasterSelect.addEventListener("change", applyMasterDefaults);
+    applyMasterDefaults();
   }
 
   document.getElementById("taskCreateForm").addEventListener("submit", function () {
     syncClientHidden();
     renderAssigneeChips();
+    if (periodType && periodType.disabled) periodType.disabled = false;
   });
 })();
 </script>

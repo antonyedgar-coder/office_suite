@@ -1,7 +1,11 @@
-{% if status == "approved" %}
-  <span class="badge badge-status-approved">{{ label|default:"Approved" }}</span>
+{% if status == "verified" or status == "approved" %}
+  <span class="badge badge-status-verified">{{ label|default:"Verified" }}</span>
+{% elif status == "complete" %}
+  <span class="badge badge-status-complete">{{ label|default:"Complete" }}</span>
 {% elif status == "rework" %}
   <span class="badge badge-status-rework">{{ label|default:"Rework" }}</span>
+{% elif status == "document_rework" %}
+  <span class="badge badge-status-rework">{{ label|default:"Document rework" }}</span>
 {% elif status == "cancelled" %}
   <span class="badge badge-status-cancelled">{{ label|default:"Cancelled" }}</span>
 {% elif status == "submitted" %}

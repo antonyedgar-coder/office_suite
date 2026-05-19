@@ -16,7 +16,8 @@ from core.branch_access import approved_clients_for_user, client_allowed_for_use
 from masters.models import Client
 
 from .models import Task, TaskMaster
-from .period_keys import build_period_key
+from .period_keys import build_period_key, period_type_for_task_master
+from .period_overlap import find_overlapping_task, overlap_error_message
 from .user_labels import staff_users_queryset
 
 User = get_user_model()
@@ -26,6 +27,7 @@ TASK_CSV_COLUMNS = [
     "TASK_MASTER",
     "ASSIGNEE_EMAILS",
     "VERIFIER_EMAIL",
+    "DOCUMENT_CHECKER_EMAIL",
     "PERIOD_TYPE",
     "PERIOD_MONTH",
     "PERIOD_FY",
@@ -116,7 +118,15 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         return [], ["CSV appears to have no header row."]
 
     header_map = {_upper(h): h for h in reader.fieldnames}
-    required = {"CLIENT_ID", "TASK_MASTER", "ASSIGNEE_EMAILS", "VERIFIER_EMAIL", "PERIOD_TYPE", "DUE_DATE"}
+    required = {
+        "CLIENT_ID",
+        "TASK_MASTER",
+        "ASSIGNEE_EMAILS",
+        "VERIFIER_EMAIL",
+        "DOCUMENT_CHECKER_EMAIL",
+        "PERIOD_TYPE",
+        "DUE_DATE",
+    }
     missing = sorted(required - set(header_map))
     if missing:
         return [], [f"Missing required column(s): {', '.join(missing)}"]
@@ -133,6 +143,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         master_raw = _cell(raw, header_map, "TASK_MASTER")
         assignee_raw = _cell(raw, header_map, "ASSIGNEE_EMAILS")
         verifier_email = _cell(raw, header_map, "VERIFIER_EMAIL").lower()
+        document_checker_email = _cell(raw, header_map, "DOCUMENT_CHECKER_EMAIL").lower()
         period_type = _cell(raw, header_map, "PERIOD_TYPE").lower().replace(" ", "_")
         due_raw = _cell(raw, header_map, "DUE_DATE")
 
@@ -170,19 +181,41 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         elif not verifier:
             errors.append(f"Unknown verifier email: {verifier_email}")
 
+        document_checker = (
+            staff_by_email.get(document_checker_email) if document_checker_email else None
+        )
+        if not document_checker_email:
+            errors.append("DOCUMENT_CHECKER_EMAIL is required.")
+        elif not document_checker:
+            errors.append(f"Unknown document checker email: {document_checker_email}")
+
         if user.is_authenticated:
             if verifier and user.pk == verifier.pk:
                 errors.append("Creator cannot be the verifier.")
+            if document_checker and user.pk == document_checker.pk:
+                errors.append("Creator cannot be the document checker.")
             if user.pk in {u.pk for u in assignees}:
                 errors.append("Creator cannot be an assignee.")
             if verifier and verifier.pk in {u.pk for u in assignees}:
                 errors.append("Verifier cannot be an assignee.")
+            if document_checker and document_checker.pk in {u.pk for u in assignees}:
+                errors.append("Document checker cannot be an assignee.")
+            if verifier and document_checker and verifier.pk == document_checker.pk:
+                errors.append("Document checker must be different from the verifier.")
 
         due_date = _parse_due_date(due_raw)
         if not due_raw:
             errors.append("DUE_DATE is required (YYYY-MM-DD or DD-MM-YYYY).")
         elif not due_date:
             errors.append(f"Invalid DUE_DATE: {due_raw}")
+
+        locked_period = period_type_for_task_master(master) if master else None
+        if locked_period:
+            if period_type and period_type != locked_period:
+                errors.append(
+                    f"PERIOD_TYPE must be {locked_period} for this recurring task master."
+                )
+            period_type = locked_period
 
         period_key = ""
         period_type_stored = period_type
@@ -227,20 +260,34 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         if is_billable and fees_amount is None:
             errors.append("FEES_AMOUNT is required when IS_BILLABLE is YES.")
 
-        if client and master and period_key and not errors:
+        if client and master and period_key and period_type and not errors:
             dup_key = (client.pk, master.pk, period_key)
             if dup_key in seen_keys:
                 errors.append("Duplicate row for same client, task master, and period in this file.")
-            elif Task.objects.filter(client=client, task_master=master, period_key=period_key).exists():
-                errors.append("A task for this client, task master, and period already exists.")
             else:
-                seen_keys.add(dup_key)
+                existing = find_overlapping_task(
+                    client=client,
+                    master=master,
+                    period_type=period_type,
+                    period_key=period_key,
+                )
+                if existing:
+                    errors.append(
+                        overlap_error_message(
+                            period_type=period_type,
+                            period_key=period_key,
+                            existing=existing,
+                        )
+                    )
+                else:
+                    seen_keys.add(dup_key)
 
         cleaned = {
             "client": client,
             "task_master": master,
             "assignees": assignees,
             "verifier": verifier,
+            "document_checker": document_checker,
             "period_key": period_key,
             "period_type": period_type_stored,
             "due_date": due_date,

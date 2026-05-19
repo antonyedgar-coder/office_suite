@@ -85,21 +85,39 @@
     }
   }
 
+  function allAccordionItems(root) {
+    return root.querySelectorAll(".nav-accordion-item[data-nav-section]");
+  }
+
+  function closeAllAccordionItems(root, exceptItem) {
+    allAccordionItems(root).forEach(function (item) {
+      if (item !== exceptItem) {
+        setAccordionOpen(item, false);
+      }
+    });
+  }
+
   function bindSidebarAccordion(root) {
     if (!root) return;
     var saved = readNavSections();
+    var items = allAccordionItems(root);
+    var serverOpenItems = [];
 
-    root.querySelectorAll(".nav-accordion-item[data-nav-section]").forEach(function (item) {
-      var section = item.getAttribute("data-nav-section");
-      if (!section) return;
-
-      var serverOpen = item.classList.contains("is-open");
-      if (serverOpen) {
-        saved[section] = true;
-      } else if (saved[section] === true) {
-        setAccordionOpen(item, true);
+    items.forEach(function (item) {
+      if (item.classList.contains("is-open")) {
+        serverOpenItems.push(item);
       }
     });
+
+    closeAllAccordionItems(root, null);
+
+    if (serverOpenItems.length) {
+      var first = serverOpenItems[0];
+      setAccordionOpen(first, true);
+      saved = {};
+      var section = first.getAttribute("data-nav-section");
+      if (section) saved[section] = true;
+    }
 
     root.querySelectorAll(".nav-accordion-toggle").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -109,15 +127,15 @@
         var open = item.classList.contains("is-open");
         if (open) {
           setAccordionOpen(item, false);
+          saved = {};
         } else {
+          closeAllAccordionItems(root, item);
           setAccordionOpen(item, true);
+          saved = {};
+          var section = item.getAttribute("data-nav-section");
+          if (section) saved[section] = true;
         }
-        var section = item.getAttribute("data-nav-section");
-        if (section) {
-          saved = readNavSections();
-          saved[section] = item.classList.contains("is-open");
-          writeNavSections(saved);
-        }
+        writeNavSections(saved);
       });
     });
 

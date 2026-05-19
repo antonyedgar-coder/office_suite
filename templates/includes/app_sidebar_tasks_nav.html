@@ -1,19 +1,19 @@
 {% if enable_task_module and user.is_authenticated %}
   <div
-    class="nav-accordion-item{% if url_name in 'dashboard task_list task_report task_create task_detail task_my_list task_verify_queue task_verify_approve task_verify_rework task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit notification_list notification_mark_read' %} is-open{% endif %}"
+    class="nav-accordion-item{% if url_name in 'dashboard task_list task_report task_create task_detail task_edit task_my_list task_verify_queue task_verify_approve task_verify_rework task_document_check_queue task_document_check_complete task_document_check_send_back task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit task_bulk_import task_bulk_import_template notification_list notification_mark_read' %} is-open{% endif %}"
     data-nav-section="tasks"
   >
     <button
       type="button"
       class="nav-accordion-toggle"
-      aria-expanded="{% if url_name in 'dashboard task_list task_report task_create task_detail task_my_list task_verify_queue task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit notification_list' %}true{% else %}false{% endif %}"
+      aria-expanded="{% if url_name in 'dashboard task_list task_report task_create task_detail task_edit task_my_list task_verify_queue task_document_check_queue task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit task_bulk_import notification_list' %}true{% else %}false{% endif %}"
       aria-controls="nav-panel-{{ nav_prefix }}-tasks"
     >
       <i class="bi bi-check2-square nav-link-icon" aria-hidden="true"></i>
       <span>Tasks</span>
       <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
     </button>
-    <div id="nav-panel-{{ nav_prefix }}-tasks" class="nav-accordion-panel"{% if url_name not in 'dashboard task_list task_report task_create task_detail task_my_list task_verify_queue task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit notification_list' %} hidden{% endif %}>
+    <div id="nav-panel-{{ nav_prefix }}-tasks" class="nav-accordion-panel"{% if url_name not in 'dashboard task_list task_report task_create task_detail task_edit task_my_list task_verify_queue task_document_check_queue task_group_list task_group_create task_group_edit task_master_list task_master_create task_master_edit task_bulk_import notification_list' %} hidden{% endif %}>
       <a class="nav-link {% if url_name in 'notification_list notification_mark_read' %}active{% endif %}" href="{% url 'notification_list' %}">
         <i class="bi bi-bell nav-link-icon" aria-hidden="true"></i>
         <span>Notification</span>
@@ -41,6 +41,13 @@
           <i class="bi bi-patch-check nav-link-icon" aria-hidden="true"></i>
           <span>Verify queue</span>
           {% if task_nav_verify_count %}<span class="badge rounded-pill text-bg-warning ms-auto">{{ task_nav_verify_count }}</span>{% endif %}
+        </a>
+      {% endif %}
+      {% if user.is_superuser or perms.tasks.check_documents %}
+        <a class="nav-link {% if url_name in 'task_document_check_queue task_document_check_complete task_document_check_send_back' %}active{% endif %}" href="{% url 'task_document_check_queue' %}">
+          <i class="bi bi-file-earmark-check nav-link-icon" aria-hidden="true"></i>
+          <span>Document check</span>
+          {% if task_nav_document_check_count %}<span class="badge rounded-pill text-bg-info ms-auto">{{ task_nav_document_check_count }}</span>{% endif %}
         </a>
       {% endif %}
       {% if user.is_superuser or perms.tasks.view_task %}

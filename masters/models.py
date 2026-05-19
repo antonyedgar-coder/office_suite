@@ -10,6 +10,11 @@ BRANCH_CHOICES = [
     ("Nagercoil", "Nagercoil"),
 ]
 
+CLIENT_TYPE_NEW_CLIENT = "New Client"
+CLIENT_TYPE_ONE_OFF = "One Off Client"
+# Legacy DB value before rename (migration 0027 maps this to New Client).
+CLIENT_TYPE_NONE_LEGACY = "None"
+
 CLIENT_TYPES = [
     ("Individual", "Individual"),
     ("Partnership", "Partnership"),
@@ -23,7 +28,8 @@ CLIENT_TYPES = [
     ("Sec 8 Co", "Sec 8 Co"),
     ("Society", "Society"),
     ("Foreign Citizen", "Foreign Citizen"),
-    ("None", "None"),
+    (CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_NEW_CLIENT),
+    (CLIENT_TYPE_ONE_OFF, CLIENT_TYPE_ONE_OFF),
 ]
 
 CIN_APPLICABLE = {
@@ -44,17 +50,27 @@ CLIENT_NAME_TEXT_RE = re.compile(r"^[\w\s\.\,'&()/:+*#%=\-]+$", re.UNICODE)
 PASSPORT_RE = re.compile(r"^[A-Z0-9]{6,24}$")
 AADHAAR_RE = re.compile(r"^[0-9]{12}$")
 
-PAN_OPTIONAL_CLIENT_TYPES = frozenset({"None", "Foreign Citizen"})
+PAN_OPTIONAL_CLIENT_TYPES = frozenset(
+    {CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF, "Foreign Citizen"}
+)
 PASSPORT_AADHAAR_ALLOWED_TYPES = frozenset({"Individual", "Foreign Citizen"})
 
 # 4th PAN character (1-based index 4 → 0-based index 3) constrains allowed client types when PAN is present and valid.
 PAN_FOURTH_CHAR_CLIENT_TYPES: dict[str, frozenset[str]] = {
-    "P": frozenset({"Individual", "None", "Foreign Citizen"}),
-    "T": frozenset({"Trust", "None"}),
+    "P": frozenset({"Individual", CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF, "Foreign Citizen"}),
+    "T": frozenset({"Trust", CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF}),
     "C": frozenset(
-        {"Private Limited", "FPO", "Nidhi Co", "Sec 8 Co", "Public Limited", "None"}
+        {
+            "Private Limited",
+            "FPO",
+            "Nidhi Co",
+            "Sec 8 Co",
+            "Public Limited",
+            CLIENT_TYPE_NEW_CLIENT,
+            CLIENT_TYPE_ONE_OFF,
+        }
     ),
-    "F": frozenset({"LLP", "Partnership", "None"}),
+    "F": frozenset({"LLP", "Partnership", CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF}),
 }
 
 _NAME_KEYWORD_TYPE_PATTERNS: list[tuple[re.Pattern[str], frozenset[str]]] = [
@@ -353,12 +369,12 @@ class Client(models.Model):
         #
         # IMPORTANT business override:
         # If PAN is blank and the name contains keywords like PRIVATE LIMITED/TRUST/FARMER/NIDHI/LLP/LIMITED,
-        # then Client Type must be NONE (do not force company types without PAN).
+        # then Client Type must be New Client (do not force company types without PAN).
         name_type_req = _client_types_required_by_name(self.client_name)
         if not self.pan and name_type_req is not None:
-            if self.client_type != "None":
+            if self.client_type != CLIENT_TYPE_NEW_CLIENT:
                 errors.setdefault("client_type", []).append(
-                    "Since PAN is blank, Client Type must be None (even if the name contains Private Limited / Trust / Farmer / Nidhi / LLP / Limited)."
+                    "Since PAN is blank, Client Type must be New Client (even if the name contains Private Limited / Trust / Farmer / Nidhi / LLP / Limited)."
                 )
         elif name_type_req is not None:
             if not name_type_req:
@@ -404,7 +420,9 @@ class Client(models.Model):
 
         # PAN rules
         if self.client_type not in PAN_OPTIONAL_CLIENT_TYPES and self.client_type != "Branch" and not self.pan:
-            errors.setdefault("pan", []).append("PAN is mandatory (except Client Type None, Foreign Citizen, or Branch).")
+            errors.setdefault("pan", []).append(
+                "PAN is mandatory (except Client Type New Client, One Off Client, Foreign Citizen, or Branch)."
+            )
         if self.pan and not PAN_RE.match(self.pan):
             errors.setdefault("pan", []).append("PAN must be 10 chars in format AAAAA9999A.")
         if self.pan and self.client_type != "Branch":

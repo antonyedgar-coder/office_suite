@@ -17,9 +17,9 @@
         <div class="fw-semibold">Tasks</div>
         <div class="text-secondary small">
           {% if task_dashboard_office_view %}
-            Open tasks in your branch (excludes approved and cancelled). Overdue = days from due date to {{ task_summary_today|date:"d M Y" }}.
+            Open tasks in your branch (excludes complete and cancelled). Overdue = days from due date to {{ task_summary_today|date:"d M Y" }}.
           {% else %}
-            Your assigned tasks (excludes approved and cancelled). Overdue = days from due date to {{ task_summary_today|date:"d M Y" }}.
+            Your assigned tasks (excludes verified, complete, and cancelled). Overdue = days from due date to {{ task_summary_today|date:"d M Y" }}.
           {% endif %}
         </div>
       </div>

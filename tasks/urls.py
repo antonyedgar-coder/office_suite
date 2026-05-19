@@ -31,7 +31,19 @@ urlpatterns = [
     ),
     path("verify/<int:pk>/approve/", views.task_verify_approve, name="task_verify_approve"),
     path("verify/<int:pk>/rework/", views.task_verify_rework, name="task_verify_rework"),
+    path("document-check/", views.task_document_check_queue, name="task_document_check_queue"),
+    path(
+        "document-check/<int:pk>/complete/",
+        views.task_document_check_complete,
+        name="task_document_check_complete",
+    ),
+    path(
+        "document-check/<int:pk>/send-back/",
+        views.task_document_check_send_back,
+        name="task_document_check_send_back",
+    ),
     path("notifications/", views.notification_list, name="notification_list"),
     path("notifications/<int:pk>/read/", views.notification_mark_read, name="notification_mark_read"),
+    path("<int:pk>/edit/", views.task_edit, name="task_edit"),
     path("<int:pk>/", views.task_detail, name="task_detail"),
 ]

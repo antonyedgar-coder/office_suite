@@ -18,7 +18,7 @@
 
   function panRequired() {
     var t = clientType();
-    return t && t !== "None" && t !== "Foreign Citizen";
+    return t && t !== "New Client" && t !== "One Off Client" && t !== "Foreign Citizen";
   }
 
   function setFieldState(el, state, message) {

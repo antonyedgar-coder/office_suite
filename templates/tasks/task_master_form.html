@@ -47,16 +47,11 @@
         <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label" for="id_is_recurring">Recurring</label></div>
       </div>
       <div class="row mb-3">
-        <div class="col-md-4 form-check pt-2">{{ form.default_is_billable }} <label class="form-check-label" for="id_default_is_billable">Default billable</label></div>
-        <div class="col-md-4" id="masterFeesWrap" style="display:none">
-          <label class="form-label" for="id_default_fees_amount">Default fees</label>
+        <div class="col-md-6">
+          <label class="form-label" for="id_default_fees_amount">Suggested fees (optional)</label>
           {{ form.default_fees_amount }}
           {% if form.default_fees_amount.errors %}<div class="text-danger small">{{ form.default_fees_amount.errors }}</div>{% endif %}
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="id_default_verifier">Default verifier</label>
-          {{ form.default_verifier }}
-          {% if form.default_verifier.errors %}<div class="text-danger small">{{ form.default_verifier.errors }}</div>{% endif %}
+          <p class="form-text mb-0">Pre-fills fees when you create a billable task. Billable and verifier are chosen on each new task only.</p>
         </div>
       </div>
       <div class="border rounded p-3 mb-3">
@@ -147,18 +142,6 @@
   var checklistRows = document.getElementById("checklistRows");
   var checklistHidden = document.getElementById("id_checklist_json");
   var checklistLabels = JSON.parse(document.getElementById("checklist-labels-data").textContent || "[]");
-  var defaultBillable = document.getElementById("id_default_is_billable");
-  var masterFeesWrap = document.getElementById("masterFeesWrap");
-
-  function syncMasterFeesUi() {
-    if (!defaultBillable || !masterFeesWrap) return;
-    masterFeesWrap.style.display = defaultBillable.checked ? "block" : "none";
-  }
-  if (defaultBillable) {
-    defaultBillable.addEventListener("change", syncMasterFeesUi);
-    syncMasterFeesUi();
-  }
-
   function addChecklistRow(val) {
     var row = document.createElement("div");
     row.className = "input-group mb-2";

@@ -137,6 +137,42 @@ def _parse_client_detail_task_filters(request, client_id: str) -> dict:
     }
 
 
+# Company types: directors appointed to this client (Director Mapping tab).
+CLIENT_DETAIL_COMPANY_DIRECTOR_TYPES = frozenset(
+    {"Private Limited", "Public Limited", "Nidhi Co", "Sec 8 Co", "FPO"}
+)
+
+
+def _client_detail_show_dsc_tab(client: Client, user) -> bool:
+    return client.client_type == "Individual" and user.has_perm("masters.view_clientdsc")
+
+
+def _client_detail_show_mis_tab(user) -> bool:
+    return any(
+        user.has_perm(code)
+        for code in (
+            "mis.view_feesdetail",
+            "mis.view_receipt",
+            "mis.view_expensedetail",
+            "mis.view_tenderdetail",
+        )
+    )
+
+
+def _client_detail_show_directors_tab(client: Client) -> bool:
+    if client.client_type in CLIENT_DETAIL_COMPANY_DIRECTOR_TYPES:
+        return True
+    return client.client_type in DIRECTOR_ELIGIBLE_CLIENT_TYPES and client.is_director
+
+
+def _client_detail_director_mapping_mode(client: Client) -> str | None:
+    if client.client_type in CLIENT_DETAIL_COMPANY_DIRECTOR_TYPES:
+        return "company"
+    if client.client_type in DIRECTOR_ELIGIBLE_CLIENT_TYPES and client.is_director:
+        return "person"
+    return None
+
+
 def _apply_client_detail_task_filters(qs, filters: dict):
     from django.utils.dateparse import parse_date
 
@@ -166,11 +202,23 @@ def client_detail(request, client_id: str):
     tab = (request.GET.get("tab") or "details").strip().lower()
     show_tasks = task_module_enabled() and request.user.has_perm("tasks.view_task")
     show_passwords = request.user.has_perm("masters.view_clientportalcredential")
+    show_dsc = _client_detail_show_dsc_tab(client, request.user)
+    show_mis = _client_detail_show_mis_tab(request.user)
+    show_directors = _client_detail_show_directors_tab(client) and request.user.has_perm(
+        "masters.view_directormapping"
+    )
+    allowed_tabs = {"details", "tasks", "passwords", "dsc", "mis", "directors"}
     if tab == "tasks" and not show_tasks:
         tab = "details"
     if tab == "passwords" and not show_passwords:
         tab = "details"
-    if tab not in ("details", "tasks", "passwords"):
+    if tab == "dsc" and not show_dsc:
+        tab = "details"
+    if tab == "mis" and not show_mis:
+        tab = "details"
+    if tab == "directors" and not show_directors:
+        tab = "details"
+    if tab not in allowed_tabs:
         tab = "details"
 
     ctx = {
@@ -178,8 +226,13 @@ def client_detail(request, client_id: str):
         "active_tab": tab,
         "show_tasks_tab": show_tasks,
         "show_passwords_tab": show_passwords,
+        "show_dsc_tab": show_dsc,
+        "show_mis_tab": show_mis,
+        "show_directors_tab": show_directors,
         "can_edit_client": request.user.has_perm("masters.change_client"),
         "can_add_password": request.user.has_perm("masters.add_clientportalcredential"),
+        "can_add_dsc": request.user.has_perm("masters.add_clientdsc"),
+        "can_add_director_mapping": request.user.has_perm("masters.add_directormapping"),
     }
 
     if tab == "tasks" and show_tasks:
@@ -210,6 +263,74 @@ def client_detail(request, client_id: str):
             .select_related("portal", "created_by", "updated_by")
             .order_by("portal__name", "portal_username")
         )
+
+    if tab == "dsc" and show_dsc:
+        ctx["dsc_rows"] = (
+            _dsc_qs_for_user(request.user)
+            .filter(client_id=client.pk)
+            .order_by("-expiry_date", "-created_at")
+        )
+        ctx["dsc_inout_rows"] = (
+            _dsc_inout_qs_for_user(request.user)
+            .filter(dsc__client_id=client.pk)
+            .order_by("-in_date", "-pk")[:100]
+        )
+
+    if tab == "mis" and show_mis:
+        from django.db.models import Q
+
+        from core.branch_access import filter_mis_qs
+        from mis.models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
+
+        mis_client = Q(client_id=client.pk)
+        user = request.user
+        ctx["mis_fees_rows"] = []
+        ctx["mis_receipt_rows"] = []
+        ctx["mis_expense_rows"] = []
+        ctx["mis_tender_rows"] = []
+        if user.has_perm("mis.view_feesdetail"):
+            ctx["mis_fees_rows"] = list(
+                filter_mis_qs(FeesDetail.objects.select_related("client"), user)
+                .filter(mis_client)
+                .order_by("-date", "-id")[:50]
+            )
+        if user.has_perm("mis.view_receipt"):
+            ctx["mis_receipt_rows"] = list(
+                filter_mis_qs(Receipt.objects.select_related("client"), user)
+                .filter(mis_client)
+                .order_by("-date", "-id")[:50]
+            )
+        if user.has_perm("mis.view_expensedetail"):
+            ctx["mis_expense_rows"] = list(
+                filter_mis_qs(ExpenseDetail.objects.select_related("client", "category"), user)
+                .filter(mis_client)
+                .order_by("-date", "-id")[:50]
+            )
+        if user.has_perm("mis.view_tenderdetail"):
+            ctx["mis_tender_rows"] = list(
+                filter_mis_qs(TenderDetail.objects.select_related("client"), user)
+                .filter(mis_client)
+                .order_by("-date", "-id")[:50]
+            )
+        ctx["mis_client_q"] = client.client_id
+
+    if tab == "directors" and show_directors:
+        from core.branch_access import filter_director_mapping_qs
+
+        mode = _client_detail_director_mapping_mode(client)
+        ctx["director_mapping_mode"] = mode
+        base = filter_director_mapping_qs(
+            DirectorMapping.objects.select_related("director", "company"),
+            request.user,
+        )
+        if mode == "company":
+            ctx["director_mappings"] = base.filter(company_id=client.pk).order_by(
+                "-appointed_date", "director__client_name"
+            )
+        else:
+            ctx["director_mappings"] = base.filter(director_id=client.pk).order_by(
+                "-appointed_date", "company__client_name"
+            )
 
     if tab == "details":
         if client.client_group_id:

@@ -56,19 +56,21 @@
 
           <div class="fw-bold sidebar-brand-title">CA Office Suite</div>
 
-          <div class="text-secondary small sidebar-brand-tagline">Masters • Tasks • DIR-3 eKYC • MIS • Reports</div>
+          <div class="text-secondary small sidebar-brand-tagline">Masters • Tasks • DSC • MIS • DIR-3 eKYC • Reports</div>
 
         </div>
 
-        <nav class="nav flex-column gap-2 flex-grow-1">
+        <nav class="nav flex-column gap-2 flex-grow-1 min-h-0">
 
           <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 nav-link-icon" aria-hidden="true"></i><span>Dashboard</span></a>
 
-          <div class="nav-accordion" data-sidebar-accordion>
+          <div class="nav-accordion flex-grow-1" data-sidebar-accordion>
 
             {% include "includes/app_sidebar_nav.html" with nav_id_prefix="desktop" %}
 
           </div>
+
+          {% include "includes/app_sidebar_footer.html" %}
 
         </nav>
 
@@ -85,26 +87,6 @@
             <button class="btn btn-sm btn-outline-secondary d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav">
 
               Menu
-
-            </button>
-
-            <button
-
-              type="button"
-
-              class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex align-items-center"
-
-              id="sidebarCollapseToggle"
-
-              aria-label="Collapse sidebar"
-
-              aria-expanded="true"
-
-              title="Collapse sidebar"
-
-            >
-
-              <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
 
             </button>
 
@@ -199,6 +181,8 @@
             {% include "includes/app_sidebar_nav.html" with nav_id_prefix="mobile" %}
 
           </div>
+
+          {% include "includes/app_sidebar_footer.html" %}
 
         </div>
 

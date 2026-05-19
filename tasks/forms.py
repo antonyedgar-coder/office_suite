@@ -7,6 +7,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 
 
 
@@ -21,20 +22,17 @@ from mis.forms import ClientNamePanChoiceField
 from .models import Task, TaskGroup, TaskMaster
 
 from .period_keys import (
-
     HALF_CHOICES,
-
     MONTH_CHOICES,
-
     PERIOD_TYPE_CHOICES,
-
     QUARTER_CHOICES,
-
     build_period_key,
     current_fy_start,
+    period_type_for_task_master,
     task_fy_choices,
 )
 
+from .period_overlap import validate_no_overlapping_task
 from .recurrence_config import validate_recurrence_config
 
 from .user_labels import staff_users_queryset, user_display_label
@@ -117,11 +115,7 @@ class TaskMasterForm(forms.ModelForm):
 
             "frequency",
 
-            "default_is_billable",
-
             "default_fees_amount",
-
-            "default_verifier",
 
         ]
 
@@ -141,11 +135,14 @@ class TaskMasterForm(forms.ModelForm):
 
             "frequency": forms.Select(attrs={"class": "form-select", "id": "id_frequency"}),
 
-            "default_is_billable": forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_default_is_billable"}),
-
-            "default_fees_amount": forms.NumberInput(attrs={"class": "form-control", "id": "id_default_fees_amount", "step": "0.01", "min": "0"}),
-
-            "default_verifier": forms.Select(attrs={"class": "form-select"}),
+            "default_fees_amount": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "id": "id_default_fees_amount",
+                    "step": "0.01",
+                    "min": "0",
+                }
+            ),
 
         }
 
@@ -161,9 +158,7 @@ class TaskMasterForm(forms.ModelForm):
 
         )
 
-        self.fields["default_verifier"].queryset = staff_users_queryset()
-
-        self.fields["default_verifier"].required = False
+        self.fields["default_fees_amount"].required = False
 
         if self.instance and self.instance.pk and self.instance.recurrence_config:
 
@@ -238,14 +233,6 @@ class TaskMasterForm(forms.ModelForm):
         else:
 
             cleaned["checklist_items"] = []
-
-        if cleaned.get("default_is_billable") and cleaned.get("default_fees_amount") is None:
-
-            self.add_error("default_fees_amount", "Enter default fees when billable is enabled.")
-
-        if not cleaned.get("default_is_billable"):
-
-            cleaned["default_fees_amount"] = None
 
         return cleaned
 
@@ -386,6 +373,18 @@ class TaskCreateForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select", "id": "id_verifier"}),
 
         empty_label="Select verifier…",
+
+    )
+
+    document_checker = StaffUserChoiceField(
+
+        queryset=User.objects.none(),
+
+        widget=forms.Select(attrs={"class": "form-select", "id": "id_document_checker"}),
+
+        empty_label="Select document checker…",
+
+        label="Document checker",
 
     )
 
@@ -571,9 +570,39 @@ class TaskCreateForm(forms.Form):
 
         self.fields["verifier"].queryset = staff_qs
 
+        self.fields["document_checker"].queryset = staff_qs
+
         self._staff_qs = staff_qs
 
+        self._apply_locked_period_type_from_master()
 
+    def _master_from_form_data(self) -> TaskMaster | None:
+        raw = None
+        if self.is_bound:
+            raw = self.data.get("task_master")
+        elif self.initial.get("task_master"):
+            raw = self.initial.get("task_master")
+        if not raw:
+            return None
+        try:
+            pk = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return TaskMaster.objects.filter(pk=pk).first()
+
+    def _apply_locked_period_type_from_master(self) -> None:
+        master = self._master_from_form_data()
+        locked = period_type_for_task_master(master)
+        self._locked_period_type = locked
+        if locked:
+            labels = dict(PERIOD_TYPE_CHOICES)
+            self.fields["period_type"].choices = [(locked, labels.get(locked, locked))]
+            self.fields["period_type"].initial = locked
+            self.fields["period_type"].disabled = True
+            self.fields["period_type"].widget.attrs["data-period-locked"] = "1"
+        else:
+            self.fields["period_type"].disabled = False
+            self.fields["period_type"].widget.attrs.pop("data-period-locked", None)
 
     def clean(self):
 
@@ -604,6 +633,7 @@ class TaskCreateForm(forms.Form):
         cleaned["assignees"] = assignees
 
         verifier = cleaned.get("verifier")
+        document_checker = cleaned.get("document_checker")
         user = self._task_user
         if user and user.is_authenticated and assignees and verifier:
             assignee_ids = {u.pk for u in assignees}
@@ -615,9 +645,30 @@ class TaskCreateForm(forms.Form):
                 self.add_error("verifier", "Verifier cannot be one of the assigned users.")
             if len(assignee_ids) < len(assignees):
                 self.add_error("assignee_picker", "Each assigned user must be a different person.")
+        if user and user.is_authenticated and assignees and document_checker:
+            assignee_ids = {u.pk for u in assignees}
+            if user.pk == document_checker.pk:
+                self.add_error("document_checker", "Creator cannot be the document checker.")
+            if document_checker.pk in assignee_ids:
+                self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
+        if verifier and document_checker:
+            if verifier.pk == document_checker.pk:
+                self.add_error("document_checker", "Document checker must be different from the verifier.")
+            assignee_ids = {u.pk for u in assignees} if assignees else set()
+            if document_checker.pk in assignee_ids:
+                self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
 
 
 
+        master = cleaned.get("task_master")
+        locked_period = period_type_for_task_master(master)
+        if locked_period:
+            if cleaned.get("period_type") and cleaned.get("period_type") != locked_period:
+                self.add_error(
+                    "period_type",
+                    "Filing period type is fixed by the task master recurrence frequency.",
+                )
+            cleaned["period_type"] = locked_period
         period_type = cleaned.get("period_type")
 
         try:
@@ -661,25 +712,20 @@ class TaskCreateForm(forms.Form):
 
 
 
-        master = cleaned.get("task_master")
-
-        if client and master and cleaned.get("period_key"):
-
-            if Task.objects.filter(
-
-                client=client,
-
-                task_master=master,
-
-                period_key=cleaned["period_key"],
-
-            ).exists():
-
-                raise forms.ValidationError(
-
-                    "A task for this client, task master, and filing period already exists."
-
+        if client and master and cleaned.get("period_key") and period_type:
+            enr_started = None
+            if master.is_recurring:
+                enr_started = timezone.localdate()
+            try:
+                validate_no_overlapping_task(
+                    client=client,
+                    master=master,
+                    period_type=period_type,
+                    period_key=cleaned["period_key"],
+                    enrollment_started=enr_started,
                 )
+            except DjangoValidationError as exc:
+                raise forms.ValidationError(exc.messages[0] if exc.messages else str(exc)) from exc
 
         if cleaned.get("is_billable") and cleaned.get("fees_amount") is None:
 
@@ -705,6 +751,80 @@ def _int_or_none(value) -> int | None:
 
 
 
+
+
+class TaskEditForm(forms.Form):
+    assignee_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(attrs={"id": "taskAssigneeIdsHidden"}),
+    )
+    assignee_picker = forms.CharField(
+        label="Users",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "taskAssigneeSearch",
+                "placeholder": "Type name or email to add users…",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    verifier = StaffUserChoiceField(
+        queryset=User.objects.none(),
+        widget=forms.Select(attrs={"class": "form-select", "id": "id_verifier"}),
+        empty_label="Select verifier…",
+    )
+    document_checker = StaffUserChoiceField(
+        queryset=User.objects.none(),
+        widget=forms.Select(attrs={"class": "form-select", "id": "id_document_checker"}),
+        empty_label="Select document checker…",
+        label="Document checker",
+    )
+    due_date = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    priority = forms.ChoiceField(
+        choices=TaskMaster.PRIORITY_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, task=None, user=None, **kwargs):
+        self._task = task
+        super().__init__(*args, **kwargs)
+        staff_qs = staff_users_queryset()
+        self.fields["verifier"].queryset = staff_qs
+        self.fields["document_checker"].queryset = staff_qs
+        self._staff_qs = staff_qs
+        if task is not None and not self.is_bound:
+            assignee_ids = list(task.assignments.values_list("user_id", flat=True))
+            self.fields["assignee_ids"].initial = ",".join(str(i) for i in assignee_ids)
+            self.fields["verifier"].initial = task.verifier_id
+            self.fields["document_checker"].initial = task.document_checker_id
+            self.fields["due_date"].initial = task.due_date
+            self.fields["priority"].initial = task.priority
+
+    def clean(self):
+        cleaned = super().clean()
+        raw_ids = (cleaned.get("assignee_ids") or "").strip()
+        ids = [int(x) for x in raw_ids.split(",") if x.strip().isdigit()]
+        assignees = list(self._staff_qs.filter(pk__in=ids))
+        if not assignees or len(assignees) != len(set(ids)):
+            self.add_error("assignee_picker", "Add at least one valid user from the suggestions.")
+        cleaned["assignees"] = assignees
+
+        verifier = cleaned.get("verifier")
+        document_checker = cleaned.get("document_checker")
+        if assignees and verifier:
+            assignee_ids = {u.pk for u in assignees}
+            if verifier.pk in assignee_ids:
+                self.add_error("verifier", "Verifier cannot be one of the assigned users.")
+        if assignees and document_checker:
+            assignee_ids = {u.pk for u in assignees}
+            if document_checker.pk in assignee_ids:
+                self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
+        if verifier and document_checker:
+            if verifier.pk == document_checker.pk:
+                self.add_error("document_checker", "Document checker must be different from the verifier.")
+        return cleaned
 
 
 class TaskRemarkForm(forms.Form):

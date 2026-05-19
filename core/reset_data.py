@@ -151,8 +151,20 @@ def wipe_local_data(options: WipeOptions) -> dict[str, int]:
         deleted["dir3kyc"] = Dir3Kyc.objects.all().delete()[0]
 
     if options.clients:
-        from masters.models import Client, ClientActivityLog, ClientSequence
+        from masters.models import (
+            Client,
+            ClientActivityLog,
+            ClientDSC,
+            ClientPortalCredential,
+            ClientSequence,
+            DSCInOut,
+            DSCNotification,
+        )
 
+        deleted["dsc_notifications"] = DSCNotification.objects.all().delete()[0]
+        deleted["dsc_in_out"] = DSCInOut.objects.all().delete()[0]
+        deleted["client_dsc"] = ClientDSC.objects.all().delete()[0]
+        deleted["portal_credentials"] = ClientPortalCredential.objects.all().delete()[0]
         deleted["client_activity_logs"] = ClientActivityLog.objects.all().delete()[0]
         deleted["client_sequences"] = ClientSequence.objects.all().delete()[0]
         deleted["clients"] = Client.objects.all().delete()[0]

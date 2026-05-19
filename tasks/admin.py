@@ -33,7 +33,7 @@ class TaskMasterAdmin(admin.ModelAdmin):
 
 @admin.register(TaskRecurrenceEnrollment)
 class TaskRecurrenceEnrollmentAdmin(admin.ModelAdmin):
-    list_display = ("client", "task_master", "verifier", "is_active", "is_paused", "started_at")
+    list_display = ("client", "task_master", "verifier", "document_checker", "is_active", "is_paused", "started_at")
     list_filter = ("is_active", "is_paused")
     inlines = [TaskEnrollmentAssigneeInline]
 
@@ -60,6 +60,8 @@ class TaskAdmin(admin.ModelAdmin):
         "period_key",
         "submitted_at",
         "approved_at",
+        "completed_at",
+        "document_checker",
         "auto_created",
     )
     list_filter = ("status", "auto_created", "period_type", "task_master__task_group")

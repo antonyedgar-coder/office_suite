@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Edit task — {{ task.title }}{% endblock %}
+{% block page_title %}Edit task{% endblock %}
+{% block extra_head %}
+<style>
+  .task-suggest-list {
+    position: absolute;
+    z-index: 20;
+    max-height: 220px;
+    overflow-y: auto;
+    width: 100%;
+    display: none;
+  }
+  .task-suggest-list.show { display: block; }
+  .task-suggest-item {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e8eaf1;
+    background: #fff;
+  }
+  .task-suggest-item:hover { background: #eef2ff; }
+  .assignee-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.15rem 0.35rem 0.15rem 0;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #e0e7ff;
+    font-size: 0.875rem;
+  }
+  .assignee-chip button {
+    border: none;
+    background: transparent;
+    line-height: 1;
+    padding: 0;
+    font-size: 1.1rem;
+    color: #475569;
+  }
+  .field-wrap { position: relative; }
+</style>
+{% endblock %}
+{% block content %}
+  <div class="card p-3 col-lg-8 mb-3">
+    <p class="mb-1"><strong>{{ task.title }}</strong></p>
+    <p class="mb-1 text-secondary small">{{ task.client.client_name }} ({{ task.client_id }}) — {{ task.get_status_display }}</p>
+    <p class="mb-0 text-secondary small">Period: {{ period_frequency }} — {{ period_label }}</p>
+    <p class="mb-0 text-secondary small mt-1">Client, task type, and filing period cannot be changed here.</p>
+  </div>
+
+  <div class="card p-3 col-lg-9">
+    <form method="post" id="taskEditForm">{% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="taskAssigneeSearch">Users</label>
+        <input class="form-control" id="taskAssigneeSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />
+        <div id="taskAssigneeSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+        <div id="assigneeChips" class="mt-2"></div>
+        {{ form.assignee_ids }}
+        {% if form.assignee_picker.errors %}<div class="text-danger small">{{ form.assignee_picker.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="id_verifier">Verifier</label>
+        {{ form.verifier }}
+        {% if form.verifier.errors %}<div class="text-danger small">{{ form.verifier.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="id_document_checker">Document checker</label>
+        {{ form.document_checker }}
+        {% if form.document_checker.errors %}<div class="text-danger small">{{ form.document_checker.errors }}</div>{% endif %}
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Due date</label>
+          {{ form.due_date }}
+          {% if form.due_date.errors %}<div class="text-danger small">{{ form.due_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Priority</label>
+          {{ form.priority }}
+        </div>
+      </div>
+
+      {% if task.enrollment_id %}
+        <p class="form-text">This task is on a recurring schedule. User, verifier, and document checker changes apply to this task and update the schedule for future periods.</p>
+      {% endif %}
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save changes</button>
+        <a class="btn btn-outline-secondary" href="{% url 'task_detail' task.pk %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  {{ staff_users_json|json_script:"task-staff-users" }}
+  {{ initial_assignees_json|json_script:"task-initial-assignees" }}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var MIN_CHARS = 2;
+  var staffUsers = JSON.parse(document.getElementById("task-staff-users").textContent || "[]");
+  var initialAssignees = JSON.parse(document.getElementById("task-initial-assignees").textContent || "[]");
+  var assigneeSearch = document.getElementById("taskAssigneeSearch");
+  var assigneeHidden = document.getElementById("taskAssigneeIdsHidden");
+  var assigneeSuggest = document.getElementById("taskAssigneeSuggestions");
+  var assigneeChips = document.getElementById("assigneeChips");
+  var selectedAssignees = {};
+
+  function renderAssigneeChips() {
+    assigneeChips.innerHTML = "";
+    var ids = [];
+    Object.keys(selectedAssignees).forEach(function (id) {
+      ids.push(id);
+      var chip = document.createElement("span");
+      chip.className = "assignee-chip";
+      chip.innerHTML = selectedAssignees[id] + ' <button type="button" data-remove="' + id + '" aria-label="Remove">&times;</button>';
+      assigneeChips.appendChild(chip);
+    });
+    if (assigneeHidden) assigneeHidden.value = ids.join(",");
+  }
+
+  function loadInitialAssignees() {
+    initialAssignees.forEach(function (u) {
+      selectedAssignees[String(u.id)] = u.label;
+    });
+    renderAssigneeChips();
+  }
+
+  function showAssigneeSuggestions(q) {
+    assigneeSuggest.innerHTML = "";
+    var qq = (q || "").trim().toLowerCase();
+    if (qq.length < MIN_CHARS) {
+      assigneeSuggest.classList.remove("show");
+      return;
+    }
+    var shown = 0;
+    staffUsers.forEach(function (u) {
+      if (selectedAssignees[String(u.id)]) return;
+      if (u.label.toLowerCase().indexOf(qq) === -1) return;
+      var item = document.createElement("div");
+      item.className = "task-suggest-item";
+      item.textContent = u.label;
+      item.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        selectedAssignees[String(u.id)] = u.label;
+        assigneeSearch.value = "";
+        assigneeSuggest.classList.remove("show");
+        renderAssigneeChips();
+      });
+      assigneeSuggest.appendChild(item);
+      shown++;
+    });
+    assigneeSuggest.classList.toggle("show", shown > 0);
+  }
+
+  assigneeSearch.addEventListener("input", function () { showAssigneeSuggestions(assigneeSearch.value); });
+  assigneeSearch.addEventListener("blur", function () { setTimeout(function () { assigneeSuggest.classList.remove("show"); }, 150); });
+  assigneeChips.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-remove]");
+    if (!btn) return;
+    delete selectedAssignees[btn.getAttribute("data-remove")];
+    renderAssigneeChips();
+  });
+  loadInitialAssignees();
+
+  document.getElementById("taskEditForm").addEventListener("submit", function () {
+    renderAssigneeChips();
+  });
+})();
+</script>
+{% endblock %}

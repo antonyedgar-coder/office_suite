@@ -1,0 +1,75 @@
+<div class="card p-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      {% if director_mapping_mode == "company" %}
+        <div class="fw-semibold">Directors of this company</div>
+        <p class="text-secondary small mb-0">Director mapping records where this client is the company.</p>
+      {% else %}
+        <div class="fw-semibold">Director appointments</div>
+        <p class="text-secondary small mb-0">Companies where this person is (or was) a director.</p>
+      {% endif %}
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'director_list' %}?q={{ client.client_id|urlencode }}">Open full list</a>
+      {% if can_add_director_mapping %}
+        <a class="btn btn-sm btn-primary" href="{% url 'director_create' %}">Map directors</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          {% if director_mapping_mode == "company" %}
+            <th>Director</th>
+            <th style="width: 110px">DIN</th>
+          {% else %}
+            <th>Company</th>
+            <th style="width: 100px">Client ID</th>
+          {% endif %}
+          <th style="width: 120px">Appointed</th>
+          <th style="width: 120px">Cessation</th>
+          <th style="width: 140px">Reason for cessation</th>
+          <th style="width: 100px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in director_mappings %}
+          <tr>
+            {% if director_mapping_mode == "company" %}
+              <td>
+                <a href="{% url 'client_detail' m.director.client_id %}">{{ m.director.client_name }}</a>
+              </td>
+              <td class="mono small">{{ m.director.din|default:"—" }}</td>
+            {% else %}
+              <td>
+                <a href="{% url 'client_detail' m.company.client_id %}">{{ m.company.client_name }}</a>
+                <div class="small text-secondary">{{ m.company.client_type }}</div>
+              </td>
+              <td class="mono small">{{ m.company.client_id }}</td>
+            {% endif %}
+            <td class="small">{% if m.appointed_date %}{{ m.appointed_date|date:"d-m-Y" }}{% else %}—{% endif %}</td>
+            <td class="small">{% if m.cessation_date %}{{ m.cessation_date|date:"d-m-Y" }}{% else %}—{% endif %}</td>
+            <td class="small">{% if m.reason_for_cessation %}{{ m.get_reason_for_cessation_display }}{% else %}—{% endif %}</td>
+            <td class="text-end">
+              {% if perms.masters.change_directormapping %}
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'director_edit' m.pk %}">Edit</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-secondary">
+              {% if director_mapping_mode == "company" %}
+                No directors mapped to this company yet.
+              {% else %}
+                No company appointments recorded for this director.
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

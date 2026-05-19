@@ -49,22 +49,33 @@ def dsc_nav_counts(request):
 def task_nav_counts(request):
     if not task_module_enabled() or not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}
+    from django.db.models import Q
+
     from core.branch_access import approved_clients_for_user
+    from masters.models import CLIENT_TYPE_NEW_CLIENT
     from tasks.models import Task, TaskNotification
 
     client_ids = approved_clients_for_user(request.user).values_list("pk", flat=True)
     base = Task.objects.filter(client_id__in=client_ids)
     return {
         "task_nav_my_count": base.filter(assignments__user=request.user)
-        .exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
+        .exclude(status__in=Task.DONE_FOR_ASSIGNEE_STATUSES)
         .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
         .distinct()
         .count(),
         "task_nav_verify_count": base.filter(verifier=request.user)
         .filter(
-            status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT],
+            Q(status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
+            | Q(
+                client__client_type=CLIENT_TYPE_NEW_CLIENT,
+                status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK],
+            )
         )
         .count(),
+        "task_nav_document_check_count": base.filter(
+            document_checker=request.user,
+            status=Task.STATUS_VERIFIED,
+        ).count(),
         "task_nav_notification_count": TaskNotification.objects.filter(
             user=request.user,
             is_read=False,

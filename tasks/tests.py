@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group
 from django.test import TestCase, modify_settings
 
@@ -18,7 +19,12 @@ from tasks.models import (
     TaskRecurrenceEnrollment,
 )
 from tasks.period_display import format_period_display
-from tasks.period_keys import build_period_key, current_fy_start
+from tasks.period_keys import (
+    build_period_key,
+    current_fy_start,
+    next_multi_year_span_after_last,
+)
+from tasks.period_overlap import find_overlapping_task, period_interval, validate_no_overlapping_task
 from tasks.user_labels import build_short_codes_for_users, short_code_for_user, user_person_name
 from tasks.dashboard_counts import build_task_dashboard_context, task_due_bucket_counts
 from tasks.recurrence import compute_create_due_dates
@@ -27,9 +33,14 @@ from tasks.services import (
     approve_task,
     approve_task_assignment,
     cancel_task,
+    complete_task,
     create_task_from_master,
+    task_team_is_editable,
+    update_task_team,
+    send_back_for_document_correction,
     submit_task,
     try_create_recurring_for_enrollment,
+    verify_task,
 )
 
 User = get_user_model()
@@ -40,6 +51,7 @@ class TaskWorkflowTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="staff@example.com", password="pass12345")
         self.verifier = User.objects.create_user(email="verify@example.com", password="pass12345")
+        self.document_checker = User.objects.create_user(email="docs@example.com", password="pass12345")
         grp = ClientGroup.objects.create(name="TEST GROUP")
         self.client = Client.objects.create(
             client_name="TEST CLIENT",
@@ -47,6 +59,7 @@ class TaskWorkflowTests(TestCase):
             branch="Trivandrum",
             client_group=grp,
             approval_status=Client.APPROVED,
+            pan="ABCDE1234F",
         )
         tg = TaskGroup.objects.create(name="GST", sort_order=1)
         self.master = TaskMaster.objects.create(
@@ -61,6 +74,7 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=self.user,
             period_key="2026-08",
             due_date=date(2026, 8, 20),
@@ -74,13 +88,64 @@ class TaskWorkflowTests(TestCase):
         self.assertGreaterEqual(logs.count(), 1)
         self.assertIn("GSTR-1", logs.first().activity)
 
-    def test_submit_and_approve_workflow(self):
+    def test_update_task_team_changes_roles(self):
+        new_assignee = User.objects.create_user(email="newuser@example.com", password="pass12345")
+        new_verifier = User.objects.create_user(email="newverify@example.com", password="pass12345")
+        new_doc = User.objects.create_user(email="newdocs@example.com", password="pass12345")
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="2026-06",
+            due_date=date(2026, 6, 15),
+            auto_created=True,
+        )
+        update_task_team(
+            task,
+            assignee_users=[new_assignee],
+            verifier=new_verifier,
+            document_checker=new_doc,
+            due_date=date(2026, 6, 20),
+            priority=task.priority,
+            actor=self.user,
+        )
+        task.refresh_from_db()
+        self.assertEqual(task.verifier_id, new_verifier.pk)
+        self.assertEqual(task.document_checker_id, new_doc.pk)
+        self.assertEqual(task.due_date, date(2026, 6, 20))
+        self.assertEqual(
+            list(task.assignments.values_list("user_id", flat=True)),
+            [new_assignee.pk],
+        )
+
+    def test_complete_task_cannot_edit_team(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="2026-07",
+            due_date=date(2026, 7, 15),
+            auto_created=True,
+        )
+        submit_task(task, self.user)
+        verify_task(task, self.verifier)
+        complete_task(task, self.document_checker)
+        self.assertFalse(task_team_is_editable(task))
+
+    def test_submit_verify_and_document_check_workflow(self):
         creator = User.objects.create_user(email="creator@example.com", password="pass12345")
         task = create_task_from_master(
             master=self.master,
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=creator,
             period_key="2026-05",
             due_date=date(2026, 5, 20),
@@ -92,14 +157,121 @@ class TaskWorkflowTests(TestCase):
         self.assertEqual(task.status, Task.STATUS_SUBMITTED)
         self.assertIsNotNone(task.submitted_at)
         self.assertEqual(task.submitted_by_id, self.user.pk)
-        approve_task(task, self.verifier)
+        verify_task(task, self.verifier)
         task.refresh_from_db()
-        self.assertEqual(task.status, Task.STATUS_APPROVED)
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
         self.assertIsNotNone(task.approved_at)
         self.assertEqual(task.approved_by_id, self.verifier.pk)
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
+        self.assertIsNotNone(task.completed_at)
+        self.assertEqual(task.completed_by_id, self.document_checker.pk)
+
+    def test_new_client_cannot_submit_verifier_can_verify_directly(self):
+        none_grp = ClientGroup.objects.create(name="NONE GRP")
+        none_client = Client.objects.create(
+            client_name="NONE CLIENT",
+            client_type="New Client",
+            branch="Trivandrum",
+            client_group=none_grp,
+            approval_status=Client.APPROVED,
+        )
+        tg = TaskGroup.objects.create(name="General", sort_order=2)
+        master = TaskMaster.objects.create(task_group=tg, name="GSTR-3B", is_recurring=False)
+
+        task = create_task_from_master(
+            master=master,
+            client=none_client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="none-1",
+            due_date=date(2026, 6, 1),
+            auto_created=True,
+        )
+        with self.assertRaises(ValidationError):
+            submit_task(task, self.user)
+
+        verify_task(task, self.verifier)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
+        self.assertIsNone(task.submitted_at)
+        self.assertEqual(task.approved_by_id, self.verifier.pk)
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
+
+    def test_only_document_checker_can_complete(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="2026-09",
+            due_date=date(2026, 9, 20),
+            auto_created=True,
+        )
+        submit_task(task, self.user)
+        verify_task(task, self.verifier)
+        with self.assertRaises(ValidationError):
+            complete_task(task, self.verifier)
+        with self.assertRaises(ValidationError):
+            complete_task(task, self.user)
+
+    def test_document_checker_send_back_resubmit_skips_verifier(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="2026-10",
+            due_date=date(2026, 10, 20),
+            auto_created=True,
+        )
+        submit_task(task, self.user)
+        verify_task(task, self.verifier)
+        task.refresh_from_db()
+        verifier_notify_before = TaskNotification.objects.filter(
+            user=self.verifier, task=task
+        ).count()
+
+        send_back_for_document_correction(task, self.document_checker)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_DOCUMENT_REWORK)
+        self.assertEqual(
+            TaskNotification.objects.filter(user=self.verifier, task=task).count(),
+            verifier_notify_before,
+        )
+        self.assertTrue(
+            TaskNotification.objects.filter(user=self.user, task=task, kind=TaskNotification.KIND_REWORK).exists()
+        )
+
+        submit_task(task, self.user)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
+        self.assertEqual(
+            TaskNotification.objects.filter(user=self.verifier, task=task).count(),
+            verifier_notify_before,
+        )
+        self.assertTrue(
+            TaskNotification.objects.filter(
+                user=self.document_checker,
+                task=task,
+                kind=TaskNotification.KIND_DOCUMENT_CHECK,
+            ).exists()
+        )
+
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
 
     def test_fees_snapshot_not_updated_on_master_change(self):
-        self.master.default_is_billable = True
         self.master.default_fees_amount = Decimal("100.00")
         self.master.save()
         task_old = create_task_from_master(
@@ -107,6 +279,7 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=self.user,
             period_key="2026-04",
             due_date=date(2026, 4, 20),
@@ -121,9 +294,12 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=self.user,
             period_key="2026-06",
             due_date=date(2026, 6, 20),
+            is_billable=True,
+            fees_amount=Decimal("250.00"),
             auto_created=True,
         )
         task_old.refresh_from_db()
@@ -138,6 +314,7 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=self.user,
             period_key="2026-07",
             due_date=date(2026, 7, 20),
@@ -162,6 +339,7 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             task_master=self.master,
             verifier=self.verifier,
+            document_checker=self.document_checker,
             started_at=date(2026, 5, 1),
             created_by=self.user,
             is_active=True,
@@ -172,6 +350,7 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=self.user,
             period_key="2026-05",
             enrollment=enrollment,
@@ -189,6 +368,7 @@ class TaskWorkflowTests(TestCase):
             client=self.client,
             assignee_users=[self.user],
             verifier=self.verifier,
+            document_checker=self.document_checker,
             created_by=creator,
             period_key="2026-08",
             due_date=date(2026, 8, 20),
@@ -249,6 +429,16 @@ class PeriodKeyTests(TestCase):
         labels = [label for _, label in task_fy_choices(today=date(2026, 5, 1))]
         self.assertEqual(labels[0], "2024-25")
         self.assertIn("2026-27", labels)
+        self.assertEqual(labels[-1], "2030-31")
+
+    def test_fy_choices_extend_when_current_fy_advances(self):
+        from tasks.period_keys import task_fy_choices
+
+        labels_before = [label for _, label in task_fy_choices(today=date(2027, 3, 31))]
+        labels_after = [label for _, label in task_fy_choices(today=date(2027, 4, 1))]
+        self.assertEqual(labels_before[-1], "2030-31")
+        self.assertEqual(labels_after[-1], "2031-32")
+        self.assertNotIn("2031-32", labels_before)
 
     def test_quarterly_period_key(self):
         self.assertEqual(build_period_key("quarterly", quarter="Q1", fy_start=2025), "2025-Q1")
@@ -262,6 +452,138 @@ class PeriodKeyTests(TestCase):
             build_period_key("every_3_years", year_from=2023, year_to=2025),
             "2023-2025",
         )
+
+    def test_five_year_allows_partial_span(self):
+        self.assertEqual(
+            build_period_key("every_5_years", year_from=2026, year_to=2027),
+            "2026-2027",
+        )
+
+    def test_five_year_rejects_more_than_five(self):
+        with self.assertRaises(ValidationError):
+            build_period_key("every_5_years", year_from=2020, year_to=2026)
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class PeriodOverlapTests(TestCase):
+    def setUp(self):
+        grp = ClientGroup.objects.create(name="OV GROUP")
+        self.client = Client.objects.create(
+            client_name="OV CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="ABCDE1234A",
+        )
+        tg = TaskGroup.objects.create(name="OV TG")
+        self.master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Overlap task",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_MONTHLY,
+            recurrence_config={"month_anchor": "same_month", "create_day": 1, "due_day": 20},
+        )
+
+    def _create(self, period_key: str, *, period_type: str = "monthly"):
+        return Task.objects.create(
+            client=self.client,
+            task_master=self.master,
+            title="T",
+            status=Task.STATUS_ASSIGNED,
+            due_date=date(2026, 5, 20),
+            verifier=User.objects.create_user(email=f"v-{period_key}@ex.com", password="pass12345"),
+            document_checker=User.objects.create_user(
+                email=f"d-{period_key}@ex.com", password="pass12345"
+            ),
+            period_key=period_key,
+            period_type=period_type,
+        )
+
+    def test_monthly_overlap_blocks_same_month(self):
+        self._create("2026-05")
+        with self.assertRaises(ValidationError):
+            validate_no_overlapping_task(
+                client=self.client,
+                master=self.master,
+                period_type="monthly",
+                period_key="2026-05",
+            )
+
+    def test_three_year_blocks_until_next_period(self):
+        master = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="3Y"),
+            name="3y task",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_EVERY_3_YEARS,
+            recurrence_config={
+                "create_month": 4,
+                "create_day": 1,
+                "due_month": 7,
+                "due_day": 15,
+            },
+        )
+        Task.objects.create(
+            client=self.client,
+            task_master=master,
+            title="3y",
+            status=Task.STATUS_ASSIGNED,
+            due_date=date(2026, 7, 5),
+            verifier=User.objects.create_user(email="v3y@ex.com", password="pass12345"),
+            document_checker=User.objects.create_user(email="d3y@ex.com", password="pass12345"),
+            period_key="2026-2028",
+            period_type="every_3_years",
+        )
+        with self.assertRaises(ValidationError):
+            validate_no_overlapping_task(
+                client=self.client,
+                master=master,
+                period_type="every_3_years",
+                period_key="2027-2029",
+            )
+        validate_no_overlapping_task(
+            client=self.client,
+            master=master,
+            period_type="every_3_years",
+            period_key="2029-2031",
+        )
+
+    def test_next_multi_year_span_after_partial_five_year(self):
+        master = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="5Y"),
+            name="5y task",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_EVERY_5_YEARS,
+            recurrence_config={
+                "create_month": 4,
+                "create_day": 1,
+                "due_month": 7,
+                "due_day": 15,
+            },
+        )
+        Task.objects.create(
+            client=self.client,
+            task_master=master,
+            title="5y",
+            status=Task.STATUS_ASSIGNED,
+            due_date=date(2026, 7, 5),
+            verifier=User.objects.create_user(email="v5y@ex.com", password="pass12345"),
+            document_checker=User.objects.create_user(email="d5y@ex.com", password="pass12345"),
+            period_key="2026-2027",
+            period_type="every_5_years",
+        )
+        nxt = next_multi_year_span_after_last(
+            client=self.client,
+            master=master,
+            years=5,
+            enrollment_started=date(2026, 7, 5),
+            ref=date(2028, 4, 1),
+        )
+        self.assertEqual(nxt, "2028-2032")
+
+    def test_three_year_interval_end_march_2029(self):
+        iv = period_interval("every_3_years", "2026-2028")
+        self.assertEqual(iv.end, date(2029, 3, 31))
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
@@ -346,6 +668,7 @@ class RecurringCreateTests(TestCase):
             branch="Trivandrum",
             client_group=grp,
             approval_status=Client.APPROVED,
+            pan="ABCDE1234B",
         )
         tg = TaskGroup.objects.create(name="ROC")
         self.master = TaskMaster.objects.create(
@@ -355,10 +678,12 @@ class RecurringCreateTests(TestCase):
             frequency=TaskMaster.FREQ_MONTHLY,
             recurrence_config={"month_anchor": "same_month", "create_day": 1, "due_day": 15},
         )
+        self.document_checker = User.objects.create_user(email="docs@example.com", password="pass12345")
         self.enrollment = TaskRecurrenceEnrollment.objects.create(
             client=self.client,
             task_master=self.master,
             verifier=self.verifier,
+            document_checker=self.document_checker,
             started_at=date(2026, 5, 1),
             created_by=self.admin,
         )
@@ -385,6 +710,7 @@ class TaskDashboardDueBucketTests(TestCase):
             branch="Trivandrum",
             client_group=grp,
             approval_status=Client.APPROVED,
+            pan="ABCDE1234C",
         )
         tg = TaskGroup.objects.create(name="Dash TG")
         self.master = TaskMaster.objects.create(task_group=tg, name="Dash task")
@@ -397,6 +723,7 @@ class TaskDashboardDueBucketTests(TestCase):
             status=status,
             due_date=due,
             verifier=self.user,
+            document_checker=self.user,
             period_key=period_key or f"one-time-{due.isoformat()}-{status}",
             created_by=self.user,
         )
@@ -409,7 +736,7 @@ class TaskDashboardDueBucketTests(TestCase):
         self._task(today - timedelta(days=2))
         self._task(today - timedelta(days=10))
         self._task(today - timedelta(days=40))
-        self._task(today, status=Task.STATUS_APPROVED)
+        self._task(today, status=Task.STATUS_COMPLETE)
 
         c = task_due_bucket_counts(Task.objects.all(), today=today)
         self.assertEqual(c["due_today"], 1)
@@ -440,6 +767,7 @@ class TaskDashboardContextTests(TestCase):
             branch="Trivandrum",
             client_group=grp,
             approval_status=Client.APPROVED,
+            pan="ABCDE1234D",
         )
         tg = TaskGroup.objects.create(name="CTX TG")
         self.master = TaskMaster.objects.create(task_group=tg, name="Ctx task")
@@ -452,6 +780,7 @@ class TaskDashboardContextTests(TestCase):
             status=Task.STATUS_ASSIGNED,
             due_date=date(2026, 6, 1),
             verifier=self.verifier,
+            document_checker=self.verifier,
             period_key="ctx-1",
             created_by=self.verifier,
         )
@@ -483,9 +812,7 @@ class TaskMasterFormTests(TestCase):
                 "is_active": "on",
                 "is_recurring": "",
                 "frequency": "",
-                "default_is_billable": "",
                 "default_fees_amount": "",
-                "default_verifier": "",
                 "recurrence_config_json": "{}",
                 "checklist_json": "[]",
             }
@@ -502,6 +829,7 @@ class TaskCsvImportTests(TestCase):
         self.creator = User.objects.create_user(email="creator@example.com", password="pass12345")
         self.assignee = User.objects.create_user(email="assign@example.com", password="pass12345")
         self.verifier = User.objects.create_user(email="verify@example.com", password="pass12345")
+        self.document_checker = User.objects.create_user(email="docs@example.com", password="pass12345")
         grp = ClientGroup.objects.create(name="CSV GRP")
         self.client_row = Client.objects.create(
             client_name="CSV CLIENT",
@@ -510,6 +838,7 @@ class TaskCsvImportTests(TestCase):
             client_group=grp,
             client_id="CSV001",
             approval_status=Client.APPROVED,
+            pan="ABCDE1234E",
         )
         tg = TaskGroup.objects.create(name="CSV TG")
         self.master = TaskMaster.objects.create(task_group=tg, name="CSV Master")
@@ -518,10 +847,10 @@ class TaskCsvImportTests(TestCase):
         from tasks.task_csv_import import parse_tasks_csv
 
         csv_text = (
-            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,PERIOD_TYPE,"
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
             "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
             "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
-            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,monthly,"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,monthly,"
             "5,2026,,,,,18-05-2026,normal,NO,\n"
         )
         rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)

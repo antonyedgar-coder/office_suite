@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load task_labels %}
+{% block title %}Document check queue — CA Office Suite{% endblock %}
+{% block page_title %}{{ list_title }}{% endblock %}
+{% block content %}
+  <div class="card p-3">
+    <h2 class="h6 text-secondary mb-2">Document checking</h2>
+    <p class="small text-secondary mb-3">
+      Tasks verified by the verifier and waiting for document check. Mark complete or send back to users for correction (verifier is not notified). Add remarks on the task page if needed.
+    </p>
+    {% if document_check_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8125rem;">
+          <thead class="table-light">
+            <tr>
+              <th>Client</th>
+              <th>Task</th>
+              <th>Due</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in document_check_rows %}
+              <tr>
+                <td>{{ row.task.client.client_name }}</td>
+                <td><a href="{% url 'task_detail' row.task.pk %}">{{ row.task.title }}</a></td>
+                <td class="text-nowrap">{{ row.task.due_date }}</td>
+                <td class="text-nowrap">
+                  <a class="btn btn-sm btn-outline-primary me-1" href="{% url 'task_detail' row.task.pk %}">Review</a>
+                  <form method="post" action="{% url 'task_document_check_complete' row.task.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success">Complete</button>
+                  </form>
+                  <form method="post" action="{% url 'task_document_check_send_back' row.task.pk %}" class="d-inline ms-1" onsubmit="return confirm('Send this task back to users for document correction?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-warning">Send back</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% comment %}close table-responsive{% endcomment %}
+      </div>
+    {% else %}
+      <p class="text-secondary small mb-0">No tasks awaiting document check.</p>
+    {% endif %}
+  </div>
+{% endblock %}

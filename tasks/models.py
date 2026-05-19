@@ -60,22 +60,14 @@ class TaskMaster(models.Model):
     is_recurring = models.BooleanField(default=False)
     frequency = models.CharField(max_length=32, choices=FREQUENCY_CHOICES, blank=True)
     recurrence_config = models.JSONField(default=dict, blank=True)
-    default_is_billable = models.BooleanField(default=False)
     default_fees_amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Default fee for new task instances (each task stores its own copy).",
+        help_text="Suggested fee when creating a billable task (each task stores its own copy).",
     )
     default_currency = models.CharField(max_length=8, default=CURRENCY_INR)
-    default_verifier = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="task_masters_default_verifier",
-    )
     archived_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -132,6 +124,11 @@ class TaskRecurrenceEnrollment(models.Model):
         on_delete=models.PROTECT,
         related_name="task_enrollments_as_verifier",
     )
+    document_checker = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="task_enrollments_as_document_checker",
+    )
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="TaskEnrollmentAssignee",
@@ -184,17 +181,27 @@ class Task(models.Model):
     STATUS_PENDING_ASSIGNMENT = "pending_assignment"
     STATUS_ASSIGNED = "assigned"
     STATUS_SUBMITTED = "submitted"
-    STATUS_APPROVED = "approved"
+    STATUS_VERIFIED = "verified"
+    STATUS_COMPLETE = "complete"
     STATUS_REWORK = "rework"
+    STATUS_DOCUMENT_REWORK = "document_rework"
     STATUS_CANCELLED = "cancelled"
+    # Legacy DB/activity value (migrated to verified).
+    STATUS_APPROVED = STATUS_VERIFIED
     STATUS_CHOICES = [
         (STATUS_PENDING_ASSIGNMENT, "Awaiting assignment approval"),
         (STATUS_ASSIGNED, "Pending"),
         (STATUS_SUBMITTED, "Submitted"),
-        (STATUS_APPROVED, "Approved"),
+        (STATUS_VERIFIED, "Verified"),
+        (STATUS_COMPLETE, "Complete"),
         (STATUS_REWORK, "Rework"),
+        (STATUS_DOCUMENT_REWORK, "Document rework"),
         (STATUS_CANCELLED, "Cancelled"),
     ]
+    CLOSED_STATUSES = frozenset({STATUS_COMPLETE, STATUS_CANCELLED})
+    DONE_FOR_ASSIGNEE_STATUSES = frozenset(
+        {STATUS_VERIFIED, STATUS_COMPLETE, STATUS_CANCELLED}
+    )
 
     client = models.ForeignKey("masters.Client", on_delete=models.PROTECT, related_name="tasks")
     task_master = models.ForeignKey(TaskMaster, on_delete=models.PROTECT, related_name="tasks")
@@ -214,6 +221,11 @@ class Task(models.Model):
         on_delete=models.PROTECT,
         related_name="tasks_to_verify",
     )
+    document_checker = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="tasks_to_document_check",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -232,13 +244,26 @@ class Task(models.Model):
         blank=True,
         related_name="tasks_submitted",
     )
-    approved_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Set when the verifier marks the task as verified.",
+    )
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="tasks_approved",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks_completed",
     )
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancelled_by = models.ForeignKey(
@@ -268,6 +293,7 @@ class Task(models.Model):
         permissions = [
             ("assign_task", "Can assign task"),
             ("verify_task", "Can verify task"),
+            ("check_documents", "Can check task documents"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -282,6 +308,7 @@ class Task(models.Model):
         indexes = [
             models.Index(fields=["client", "status"]),
             models.Index(fields=["verifier", "status"]),
+            models.Index(fields=["document_checker", "status"]),
             models.Index(fields=["due_date", "status"]),
         ]
 
@@ -298,6 +325,8 @@ class Task(models.Model):
             return "Awaiting assignment approval"
         if code in (cls.STATUS_ASSIGNED, cls.STATUS_IN_PROGRESS, cls.STATUS_DRAFT):
             return "Pending"
+        if code == "approved":
+            return "Verified"
         return dict(cls.STATUS_CHOICES).get(code, code or "")
 
     def clean(self):
@@ -397,6 +426,7 @@ class TaskNotification(models.Model):
     KIND_VERIFY = "verify"
     KIND_REWORK = "rework"
     KIND_APPROVED = "approved"
+    KIND_DOCUMENT_CHECK = "document_check"
     KIND_RECURRING_FAIL = "recurring_fail"
     KIND_GENERAL = "general"
     KIND_CHOICES = [
@@ -404,7 +434,8 @@ class TaskNotification(models.Model):
         (KIND_ASSIGNMENT_APPROVAL, "Assignment approval"),
         (KIND_VERIFY, "Verification"),
         (KIND_REWORK, "Rework"),
-        (KIND_APPROVED, "Approved"),
+        (KIND_APPROVED, "Verified"),
+        (KIND_DOCUMENT_CHECK, "Document check"),
         (KIND_RECURRING_FAIL, "Recurring failure"),
         (KIND_GENERAL, "General"),
     ]

@@ -2,10 +2,12 @@ import csv
 import json
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -14,7 +16,14 @@ from django.views.decorators.http import require_POST
 from core.branch_access import approved_clients_for_user
 from core.decorators import require_perm
 
-from .forms import TaskCreateForm, TaskGroupForm, TaskMasterForm, TaskRemarkForm, TaskVerifyForm
+from .forms import (
+    TaskCreateForm,
+    TaskEditForm,
+    TaskGroupForm,
+    TaskMasterForm,
+    TaskRemarkForm,
+    TaskVerifyForm,
+)
 from .models import Task, TaskActivity, TaskGroup, TaskMaster, TaskNotification
 from .export import task_list_csv_response
 from .listing import (
@@ -27,15 +36,26 @@ from .listing import (
 )
 from .checklist import master_checklist_labels, toggle_task_checklist_item
 from .user_labels import user_person_name
+from masters.models import CLIENT_TYPE_NEW_CLIENT
+
+from .client_type_rules import (
+    may_submit_for_client_type,
+    none_client_submit_block_message,
+    verifier_may_approve_without_submit,
+)
 from .services import (
-    approve_task,
     approve_task_assignment,
+    complete_task,
     create_task_from_master,
     rework_task,
     start_enrollment_if_recurring,
     cancel_task,
     delete_task,
+    send_back_for_document_correction,
     submit_task,
+    task_team_is_editable,
+    update_task_team,
+    verify_task,
 )
 
 
@@ -187,7 +207,7 @@ def task_list(request):
     base = tasks_for_user(request.user)
     filters = parse_task_list_filters(request)
     if request.GET.get("open") == "1" and not filters.status:
-        base = base.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
+        base = base.exclude(status__in=Task.CLOSED_STATUSES)
     return render(
         request,
         "tasks/task_list.html",
@@ -236,12 +256,14 @@ def task_create(request):
             client = form.cleaned_data["client"]
             assignees = list(form.cleaned_data["assignees"])
             verifier = form.cleaned_data["verifier"]
+            document_checker = form.cleaned_data["document_checker"]
             due_date = form.cleaned_data["due_date"]
             enrollment = start_enrollment_if_recurring(
                 master=master,
                 client=client,
                 assignee_users=assignees,
                 verifier=verifier,
+                document_checker=document_checker,
                 created_by=request.user,
             )
             task = create_task_from_master(
@@ -249,6 +271,7 @@ def task_create(request):
                 client=client,
                 assignee_users=assignees,
                 verifier=verifier,
+                document_checker=document_checker,
                 created_by=request.user,
                 period_key=form.cleaned_data["period_key"],
                 period_type=form.cleaned_data.get("period_type") or "",
@@ -281,14 +304,15 @@ def task_create(request):
         pan = (c.pan or "").strip().upper()
         label = f"{c.client_name} — {pan}" if pan else c.client_name
         clients.append({"id": c.pk, "label": label, "search": f"{c.client_name} {pan} {c.pk}".lower()})
-    masters_billing = {
+    from .period_keys import period_type_for_task_master
+
+    masters_meta = {
         str(m.pk): {
-            "is_billable": m.default_is_billable,
-            "fees_amount": str(m.default_fees_amount) if m.default_fees_amount is not None else "",
-            "default_verifier_id": m.default_verifier_id,
+            "period_type": period_type_for_task_master(m) or "",
+            "default_fees_amount": str(m.default_fees_amount) if m.default_fees_amount is not None else "",
         }
         for m in TaskMaster.objects.filter(is_active=True, archived_at__isnull=True).only(
-            "pk", "default_is_billable", "default_fees_amount", "default_verifier_id"
+            "pk", "is_recurring", "frequency", "default_fees_amount"
         )
     }
     return render(
@@ -298,7 +322,7 @@ def task_create(request):
             "form": form,
             "staff_users_json": staff_users,
             "clients_json": clients,
-            "masters_billing_json": masters_billing,
+            "masters_meta_json": masters_meta,
         },
     )
 
@@ -329,11 +353,13 @@ def task_bulk_import(request):
             client = d["client"]
             assignees = d["assignees"]
             verifier = d["verifier"]
+            document_checker = d["document_checker"]
             enrollment = start_enrollment_if_recurring(
                 master=master,
                 client=client,
                 assignee_users=assignees,
                 verifier=verifier,
+                document_checker=document_checker,
                 created_by=request.user,
             )
             task = create_task_from_master(
@@ -341,6 +367,7 @@ def task_bulk_import(request):
                 client=client,
                 assignee_users=assignees,
                 verifier=verifier,
+                document_checker=document_checker,
                 created_by=request.user,
                 period_key=d["period_key"],
                 period_type=d.get("period_type") or "",
@@ -414,6 +441,7 @@ def task_bulk_import_template(request):
             "GST|GSTR-1",
             "staff@example.com",
             "verify@example.com",
+            "docs@example.com",
             "monthly",
             "4",
             "2026",
@@ -430,16 +458,87 @@ def task_bulk_import_template(request):
     return response
 
 
+def can_edit_task_team(user, task: Task) -> bool:
+    if not task_team_is_editable(task):
+        return False
+    return (
+        user.is_superuser
+        or user.has_perm("tasks.change_task")
+        or user.has_perm("tasks.add_task")
+        or task.created_by_id == user.pk
+    )
+
+
+@login_required
+def task_edit(request, pk: int):
+    task = get_object_or_404(task_detail_queryset(request.user), pk=pk)
+    if not can_edit_task_team(request.user, task):
+        raise PermissionDenied
+
+    if request.method == "POST":
+        form = TaskEditForm(request.POST, task=task, user=request.user)
+        if form.is_valid():
+            try:
+                update_task_team(
+                    task,
+                    assignee_users=form.cleaned_data["assignees"],
+                    verifier=form.cleaned_data["verifier"],
+                    document_checker=form.cleaned_data["document_checker"],
+                    due_date=form.cleaned_data["due_date"],
+                    priority=form.cleaned_data["priority"],
+                    actor=request.user,
+                )
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0] if exc.messages else str(exc))
+            else:
+                messages.success(request, "Task updated.")
+                return redirect("task_detail", pk=task.pk)
+    else:
+        form = TaskEditForm(task=task, user=request.user)
+
+    from .user_labels import staff_users_queryset, user_display_label
+
+    staff_users = [
+        {"id": u.pk, "label": user_display_label(u)}
+        for u in staff_users_queryset()
+    ]
+    initial_assignees = [
+        {"id": a.user_id, "label": user_display_label(a.user)}
+        for a in task.assignments.select_related("user", "user__employee_profile")
+    ]
+    from .period_display import format_period_display
+
+    period_cols = format_period_display(
+        task.period_key,
+        period_type=task.period_type or "",
+        master=task.task_master,
+    )
+    return render(
+        request,
+        "tasks/task_edit.html",
+        {
+            "form": form,
+            "task": task,
+            "staff_users_json": staff_users,
+            "initial_assignees_json": initial_assignees,
+            "period_frequency": period_cols.frequency,
+            "period_label": period_cols.period,
+        },
+    )
+
+
 @login_required
 def task_detail(request, pk: int):
     task = get_object_or_404(task_detail_queryset(request.user), pk=pk)
     is_assignee = task.assignments.filter(user=request.user).exists()
     is_verifier = task.verifier_id == request.user.pk
+    is_document_checker = task.document_checker_id == request.user.pk
     is_creator = task.created_by_id == request.user.pk
     can_view_task = (
         request.user.is_superuser
         or request.user.has_perm("tasks.view_task")
         or is_verifier
+        or is_document_checker
         or is_creator
         or (is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT)
     )
@@ -448,29 +547,56 @@ def task_detail(request, pk: int):
 
     remark_form = TaskRemarkForm()
     assignee_active = is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT
-    can_submit = assignee_active and task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
-    can_verify = is_verifier and task.status == Task.STATUS_SUBMITTED
+    none_client_can_submit = may_submit_for_client_type(task)
+    can_submit = assignee_active and (
+        (
+            task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
+            and none_client_can_submit
+        )
+        or task.status == Task.STATUS_DOCUMENT_REWORK
+    )
+    submit_button_label = (
+        "Resubmit for document check"
+        if task.status == Task.STATUS_DOCUMENT_REWORK
+        else "Submit for verification"
+    )
+    can_verify = is_verifier and (
+        task.status == Task.STATUS_SUBMITTED or verifier_may_approve_without_submit(task)
+    )
+    can_verify_rework = is_verifier and task.status == Task.STATUS_SUBMITTED
+    can_complete_documents = (
+        is_document_checker or request.user.is_superuser
+    ) and task.status == Task.STATUS_VERIFIED
+    can_send_back_documents = can_complete_documents
     can_approve_assignment = (
         is_verifier or request.user.is_superuser
     ) and task.status == Task.STATUS_PENDING_ASSIGNMENT
-    can_toggle_checklist = assignee_active and task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
+    can_toggle_checklist = assignee_active and task.status in (
+        Task.STATUS_ASSIGNED,
+        Task.STATUS_REWORK,
+        Task.STATUS_DOCUMENT_REWORK,
+    )
     can_manage_task = (
         assignee_active
         or is_creator
         or is_verifier
+        or is_document_checker
         or request.user.has_perm("tasks.change_task")
     )
     can_cancel = can_manage_task and task.status in (
         Task.STATUS_PENDING_ASSIGNMENT,
         Task.STATUS_ASSIGNED,
         Task.STATUS_REWORK,
+        Task.STATUS_DOCUMENT_REWORK,
         Task.STATUS_SUBMITTED,
+        Task.STATUS_VERIFIED,
     )
     can_delete = request.user.has_perm("tasks.delete_task") and task.status in (
         Task.STATUS_PENDING_ASSIGNMENT,
         Task.STATUS_ASSIGNED,
         Task.STATUS_CANCELLED,
     )
+    can_edit = can_edit_task_team(request.user, task)
     checklist_items = list(task.checklist_items.all())
 
     if request.method == "POST":
@@ -499,8 +625,16 @@ def task_detail(request, pk: int):
             messages.success(request, "Assignment approved. Assigned users have been notified.")
             return redirect("task_detail", pk=pk)
         if action == "submit" and can_submit:
-            submit_task(task, request.user)
-            messages.success(request, "Task submitted for verification.")
+            resubmit_for_documents = task.status == Task.STATUS_DOCUMENT_REWORK
+            try:
+                submit_task(task, request.user)
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0] if exc.messages else str(exc))
+            else:
+                if resubmit_for_documents:
+                    messages.success(request, "Task resubmitted for document check.")
+                else:
+                    messages.success(request, "Task submitted for verification.")
             return redirect("task_detail", pk=pk)
         if action == "remark":
             remark_form = TaskRemarkForm(request.POST)
@@ -542,14 +676,22 @@ def task_detail(request, pk: int):
             "activity_rows": activity_rows,
             "assignees": assignees,
             "verifier_label": user_person_name(task.verifier),
+            "document_checker_label": user_person_name(task.document_checker),
             "remark_form": remark_form,
             "can_submit": can_submit,
             "can_verify": can_verify,
+            "none_client_can_submit": none_client_can_submit,
+            "none_client_submit_message": none_client_submit_block_message(),
+            "can_verify_rework": can_verify_rework,
+            "can_complete_documents": can_complete_documents,
+            "can_send_back_documents": can_send_back_documents,
+            "submit_button_label": submit_button_label,
             "can_approve_assignment": can_approve_assignment,
             "checklist_items": checklist_items,
             "can_toggle_checklist": can_toggle_checklist,
             "can_cancel": can_cancel,
             "can_delete": can_delete,
+            "can_edit": can_edit,
             "assignment_pending": task.status == Task.STATUS_PENDING_ASSIGNMENT,
         },
     )
@@ -564,7 +706,7 @@ def task_my_list(request):
     )
     filters = parse_task_list_filters(request)
     if not filters.status:
-        base = base.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
+        base = base.exclude(status__in=Task.DONE_FOR_ASSIGNEE_STATUSES)
     return render(
         request,
         "tasks/task_my_list.html",
@@ -587,7 +729,7 @@ def task_my_list_csv(request):
     )
     filters = parse_task_list_filters(request)
     if not filters.status:
-        base = base.exclude(status__in=[Task.STATUS_APPROVED, Task.STATUS_CANCELLED])
+        base = base.exclude(status__in=Task.DONE_FOR_ASSIGNEE_STATUSES)
     return task_list_csv_response(
         request,
         request.user,
@@ -608,6 +750,11 @@ def task_verify_queue(request):
         status=Task.STATUS_SUBMITTED,
         verifier=user,
     )
+    none_client_approve_base = tasks_for_user(user).filter(
+        verifier=user,
+        client__client_type=CLIENT_TYPE_NEW_CLIENT,
+        status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK],
+    )
     filters = parse_task_list_filters(request)
     ctx = filter_context(user, filters)
     ctx.update(
@@ -617,6 +764,9 @@ def task_verify_queue(request):
             ),
             "submitted_rows": prepare_task_list_rows(
                 get_filtered_tasks(user, filters, base_qs=submitted_base)
+            ),
+            "none_client_approve_rows": prepare_task_list_rows(
+                get_filtered_tasks(user, filters, base_qs=none_client_approve_base)
             ),
             "list_title": "Verification queue",
         }
@@ -645,14 +795,80 @@ def task_assignment_approve(request, pk: int):
 @require_POST
 def task_verify_approve(request, pk: int):
     task = get_object_or_404(
-        tasks_for_user(request.user).filter(status=Task.STATUS_SUBMITTED, verifier=request.user),
+        tasks_for_user(request.user).filter(verifier=request.user),
+        pk=pk,
+    )
+    if task.status != Task.STATUS_SUBMITTED and not verifier_may_approve_without_submit(task):
+        raise Http404
+    form = TaskVerifyForm(request.POST)
+    message = form.cleaned_data["message"] if form.is_valid() else ""
+    try:
+        verify_task(task, request.user, message=message)
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0] if exc.messages else str(exc))
+        return redirect("task_detail", pk=pk)
+    messages.success(request, "Task verified. Sent to document checker.")
+    return redirect("task_verify_queue")
+
+
+@require_perm("tasks.check_documents")
+def task_document_check_queue(request):
+    user = request.user
+    base = tasks_for_user(user).filter(
+        status=Task.STATUS_VERIFIED,
+        document_checker=user,
+    )
+    filters = parse_task_list_filters(request)
+    ctx = filter_context(user, filters)
+    ctx.update(
+        {
+            "document_check_rows": prepare_task_list_rows(
+                get_filtered_tasks(user, filters, base_qs=base)
+            ),
+            "list_title": "Document check queue",
+        }
+    )
+    return render(request, "tasks/task_document_check_queue.html", ctx)
+
+
+@require_perm("tasks.check_documents")
+@require_POST
+def task_document_check_complete(request, pk: int):
+    task = get_object_or_404(
+        tasks_for_user(request.user).filter(
+            status=Task.STATUS_VERIFIED,
+            document_checker=request.user,
+        ),
         pk=pk,
     )
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""
-    approve_task(task, request.user, message=message)
-    messages.success(request, "Task approved.")
-    return redirect("task_verify_queue")
+    try:
+        complete_task(task, request.user, message=message)
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0] if exc.messages else str(exc))
+        return redirect("task_detail", pk=pk)
+    messages.success(request, "Document check complete. Task is now complete.")
+    return redirect("task_document_check_queue")
+
+
+@require_perm("tasks.check_documents")
+@require_POST
+def task_document_check_send_back(request, pk: int):
+    task = get_object_or_404(
+        tasks_for_user(request.user).filter(
+            status=Task.STATUS_VERIFIED,
+            document_checker=request.user,
+        ),
+        pk=pk,
+    )
+    try:
+        send_back_for_document_correction(task, request.user)
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0] if exc.messages else str(exc))
+        return redirect("task_detail", pk=pk)
+    messages.success(request, "Task sent back to users for document correction.")
+    return redirect("task_document_check_queue")
 
 
 @require_perm("tasks.verify_task")

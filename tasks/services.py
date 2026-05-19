@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .checklist import copy_checklist_to_task
+from .client_type_rules import validate_submit_for_client_type, verifier_may_approve_without_submit
 from .models import (
     Task,
     TaskActivity,
@@ -94,8 +95,10 @@ def _set_assignees(task: Task, assignee_ids: list[int], *, actor=None):
 
 
 def resolve_task_billing(*, master: TaskMaster, is_billable=None, fees_amount=None):
-    billable = master.default_is_billable if is_billable is None else bool(is_billable)
-    fees = master.default_fees_amount if fees_amount is None else fees_amount
+    billable = False if is_billable is None else bool(is_billable)
+    fees = fees_amount
+    if fees is None and billable:
+        fees = master.default_fees_amount
     if not billable:
         fees = None
     return billable, fees
@@ -103,7 +106,11 @@ def resolve_task_billing(*, master: TaskMaster, is_billable=None, fees_amount=No
 
 @transaction.atomic
 def transition_task_status(task: Task, new_status: str, *, user, message: str = "") -> Task:
-    validate_transition(task, new_status)
+    direct_none_verify = (
+        new_status == Task.STATUS_VERIFIED and verifier_may_approve_without_submit(task)
+    )
+    if not direct_none_verify:
+        validate_transition(task, new_status)
     old = task.status
     if old == new_status:
         return task
@@ -119,10 +126,14 @@ def transition_task_status(task: Task, new_status: str, *, user, message: str = 
         task.submitted_at = now
         task.submitted_by = user
         update_fields.extend(["submitted_at", "submitted_by"])
-    elif new_status == Task.STATUS_APPROVED:
+    elif new_status == Task.STATUS_VERIFIED:
         task.approved_at = now
         task.approved_by = user
         update_fields.extend(["approved_at", "approved_by"])
+    elif new_status == Task.STATUS_COMPLETE:
+        task.completed_at = now
+        task.completed_by = user
+        update_fields.extend(["completed_at", "completed_by"])
     elif new_status == Task.STATUS_CANCELLED:
         task.cancelled_at = now
         task.cancelled_by = user
@@ -147,6 +158,7 @@ def create_task_from_master(
     client,
     assignee_users,
     verifier,
+    document_checker,
     created_by,
     period_key: str | None = None,
     period_type: str = "",
@@ -181,6 +193,7 @@ def create_task_from_master(
         priority=master.default_priority,
         due_date=due_date,
         verifier=verifier,
+        document_checker=document_checker,
         created_by=created_by,
         period_key=pk,
         period_type=period_type or "",
@@ -204,7 +217,11 @@ def create_task_from_master(
         )
         + (" (auto)" if auto_created else ""),
         new_status=task.status,
-        metadata={"assignee_ids": ids, "verifier_id": verifier.pk},
+        metadata={
+            "assignee_ids": ids,
+            "verifier_id": verifier.pk,
+            "document_checker_id": document_checker.pk,
+        },
     )
     if needs_assignment_approval:
         notify_user(
@@ -253,6 +270,7 @@ def start_enrollment_if_recurring(
     client,
     assignee_users,
     verifier,
+    document_checker,
     created_by,
     started_at=None,
 ) -> TaskRecurrenceEnrollment | None:
@@ -264,6 +282,7 @@ def start_enrollment_if_recurring(
         task_master=master,
         defaults={
             "verifier": verifier,
+            "document_checker": document_checker,
             "started_at": started,
             "created_by": created_by,
             "is_active": True,
@@ -276,7 +295,8 @@ def start_enrollment_if_recurring(
     for u in assignee_users:
         TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=u)
     enrollment.verifier = verifier
-    enrollment.save(update_fields=["verifier", "updated_at"])
+    enrollment.document_checker = document_checker
+    enrollment.save(update_fields=["verifier", "document_checker", "updated_at"])
     return enrollment
 
 
@@ -286,6 +306,11 @@ def assignees_active(assignee_users) -> bool:
 
 @transaction.atomic
 def submit_task(task: Task, user) -> Task:
+    if not hasattr(task, "client") or not hasattr(task, "task_master"):
+        task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
+    if task.status == Task.STATUS_DOCUMENT_REWORK:
+        return resubmit_for_document_check(task, user)
+    validate_submit_for_client_type(task)
     transition_task_status(task, Task.STATUS_SUBMITTED, user=user)
     notify_user(
         task.verifier,
@@ -298,12 +323,70 @@ def submit_task(task: Task, user) -> Task:
 
 
 @transaction.atomic
-def approve_task(task: Task, user, message: str = "") -> Task:
-    transition_task_status(task, Task.STATUS_APPROVED, user=user, message=message)
+def resubmit_for_document_check(task: Task, user, message: str = "") -> Task:
+    if task.status != Task.STATUS_DOCUMENT_REWORK:
+        raise ValidationError("This task is not awaiting document correction.")
+    transition_task_status(
+        task,
+        Task.STATUS_VERIFIED,
+        user=user,
+        message=message or "Resubmitted for document check.",
+    )
+    now = timezone.now()
+    task.submitted_at = now
+    task.submitted_by = user
+    task.save(update_fields=["submitted_at", "submitted_by", "updated_at"])
+    notify_user(
+        task.document_checker,
+        f"Document check (resubmitted): {task.display_title} — {task.client_id}",
+        kind=TaskNotification.KIND_DOCUMENT_CHECK,
+        link=f"/tasks/{task.pk}/",
+        task=task,
+    )
+    return task
+
+
+@transaction.atomic
+def send_back_for_document_correction(task: Task, user, message: str = "") -> Task:
+    if task.document_checker_id != user.pk and not user.is_superuser:
+        raise ValidationError("Only the designated document checker can send this task back.")
+    if task.status != Task.STATUS_VERIFIED:
+        raise ValidationError("Only verified tasks can be sent back for document correction.")
+    transition_task_status(
+        task,
+        Task.STATUS_DOCUMENT_REWORK,
+        user=user,
+        message=message or "Sent back for document correction.",
+    )
     for a in task.assignments.select_related("user"):
         notify_user(
             a.user,
-            f"Task approved: {task.display_title} — {task.client_id}",
+            f"Documents need correction: {task.display_title} — {task.client_id}",
+            kind=TaskNotification.KIND_REWORK,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
+    return task
+
+
+@transaction.atomic
+def verify_task(task: Task, user, message: str = "") -> Task:
+    if task.verifier_id != user.pk and not user.is_superuser:
+        raise ValidationError("Only the designated verifier can verify this task.")
+    if not hasattr(task, "client") or not hasattr(task, "task_master"):
+        task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
+    transition_task_status(task, Task.STATUS_VERIFIED, user=user, message=message or "Task verified.")
+    notify_user(
+        task.document_checker,
+        f"Document check required: {task.display_title} — {task.client_id}",
+        kind=TaskNotification.KIND_DOCUMENT_CHECK,
+        link=f"/tasks/{task.pk}/",
+        task=task,
+    )
+    for a in task.assignments.select_related("user"):
+        notify_user(
+            a.user,
+            f"Task verified: {task.display_title} — {task.client_id}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -311,12 +394,51 @@ def approve_task(task: Task, user, message: str = "") -> Task:
     if task.created_by_id:
         notify_user(
             task.created_by,
-            f"Task approved: {task.display_title} — {task.client_id}",
+            f"Task verified: {task.display_title} — {task.client_id}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
         )
     return task
+
+
+@transaction.atomic
+def complete_task(task: Task, user, message: str = "") -> Task:
+    if task.document_checker_id != user.pk and not user.is_superuser:
+        raise ValidationError("Only the designated document checker can mark this task complete.")
+    if task.status != Task.STATUS_VERIFIED:
+        raise ValidationError("Task must be verified before document checking can be completed.")
+    transition_task_status(task, Task.STATUS_COMPLETE, user=user, message=message or "Document check complete.")
+    for a in task.assignments.select_related("user"):
+        notify_user(
+            a.user,
+            f"Task complete: {task.display_title} — {task.client_id}",
+            kind=TaskNotification.KIND_APPROVED,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
+    if task.created_by_id:
+        notify_user(
+            task.created_by,
+            f"Task complete: {task.display_title} — {task.client_id}",
+            kind=TaskNotification.KIND_APPROVED,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
+    if task.verifier_id and task.verifier_id != user.pk:
+        notify_user(
+            task.verifier,
+            f"Task complete: {task.display_title} — {task.client_id}",
+            kind=TaskNotification.KIND_APPROVED,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
+    return task
+
+
+def approve_task(task: Task, user, message: str = "") -> Task:
+    """Backward-compatible alias for verify_task."""
+    return verify_task(task, user, message=message)
 
 
 @transaction.atomic
@@ -369,6 +491,119 @@ def rework_task(task: Task, user, message: str = "") -> Task:
     return task
 
 
+EDITABLE_TEAM_STATUSES = frozenset(
+    {
+        Task.STATUS_PENDING_ASSIGNMENT,
+        Task.STATUS_ASSIGNED,
+        Task.STATUS_SUBMITTED,
+        Task.STATUS_VERIFIED,
+        Task.STATUS_REWORK,
+        Task.STATUS_DOCUMENT_REWORK,
+    }
+)
+
+
+def task_team_is_editable(task: Task) -> bool:
+    return task.status in EDITABLE_TEAM_STATUSES
+
+
+@transaction.atomic
+def update_task_team(
+    task: Task,
+    *,
+    assignee_users,
+    verifier,
+    document_checker,
+    due_date,
+    priority,
+    actor,
+) -> Task:
+    if not task_team_is_editable(task):
+        raise ValidationError("This task cannot be edited in its current status.")
+
+    old_verifier_id = task.verifier_id
+    old_doc_id = task.document_checker_id
+    old_assignee_ids = set(task.assignments.values_list("user_id", flat=True))
+    new_assignee_ids = {u.pk for u in assignee_users}
+
+    task.verifier = verifier
+    task.document_checker = document_checker
+    task.due_date = due_date
+    task.priority = priority
+    task.save(update_fields=["verifier", "document_checker", "due_date", "priority", "updated_at"])
+
+    changes: list[str] = []
+    if old_verifier_id != verifier.pk:
+        changes.append(f"Verifier set to {user_person_name(verifier)}.")
+    if old_doc_id != document_checker.pk:
+        changes.append(f"Document checker set to {user_person_name(document_checker)}.")
+    if changes:
+        _log_activity(task, actor, TaskActivity.TYPE_REMARK, message=" ".join(changes))
+
+    new_ids = [u.pk for u in assignee_users]
+    _set_assignees(task, new_ids, actor=actor)
+
+    if task.enrollment_id:
+        enrollment = task.enrollment
+        enrollment.verifier = verifier
+        enrollment.document_checker = document_checker
+        enrollment.save(update_fields=["verifier", "document_checker", "updated_at"])
+        TaskEnrollmentAssignee.objects.filter(enrollment=enrollment).delete()
+        for u in assignee_users:
+            TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=u)
+        sibling_qs = Task.objects.filter(
+            enrollment=enrollment,
+            status__in=(
+                Task.STATUS_ASSIGNED,
+                Task.STATUS_REWORK,
+                Task.STATUS_DOCUMENT_REWORK,
+            ),
+        ).exclude(pk=task.pk)
+        for sibling in sibling_qs:
+            _set_assignees(sibling, new_ids, actor=actor)
+
+    added_assignees = new_assignee_ids - old_assignee_ids
+    if added_assignees and task.status != Task.STATUS_PENDING_ASSIGNMENT:
+        for uid in added_assignees:
+            u = User.objects.get(pk=uid)
+            notify_user(
+                u,
+                f"You were assigned: {task.display_title} — {task.client_id}",
+                kind=TaskNotification.KIND_ASSIGNED,
+                link=f"/tasks/{task.pk}/",
+                task=task,
+            )
+
+    if old_verifier_id != verifier.pk:
+        if task.status == Task.STATUS_PENDING_ASSIGNMENT:
+            notify_user(
+                verifier,
+                f"Approve task assignment: {task.display_title} — {task.client_id}",
+                kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
+                link=f"/tasks/{task.pk}/",
+                task=task,
+            )
+        elif task.status == Task.STATUS_SUBMITTED:
+            notify_user(
+                verifier,
+                f"Task submitted for verification: {task.display_title} — {task.client_id}",
+                kind=TaskNotification.KIND_VERIFY,
+                link=f"/tasks/{task.pk}/",
+                task=task,
+            )
+
+    if old_doc_id != document_checker.pk and task.status == Task.STATUS_VERIFIED:
+        notify_user(
+            document_checker,
+            f"Document check required: {task.display_title} — {task.client_id}",
+            kind=TaskNotification.KIND_DOCUMENT_CHECK,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
+
+    return task
+
+
 @transaction.atomic
 def change_enrollment_assignees(enrollment: TaskRecurrenceEnrollment, assignee_users, *, actor) -> None:
     TaskEnrollmentAssignee.objects.filter(enrollment=enrollment).delete()
@@ -376,7 +611,7 @@ def change_enrollment_assignees(enrollment: TaskRecurrenceEnrollment, assignee_u
         TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=u)
     open_tasks = Task.objects.filter(
         enrollment=enrollment,
-        status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK],
+        status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK, Task.STATUS_DOCUMENT_REWORK],
     )
     for t in open_tasks:
         _set_assignees(t, [u.pk for u in assignee_users], actor=actor)
@@ -412,7 +647,9 @@ def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, to
         notify_admins(msg, link="/tasks/")
         return None
 
-    ok, period_key = should_create_today(master, today, enrollment.started_at)
+    ok, period_key = should_create_today(
+        master, today, enrollment.started_at, client=enrollment.client
+    )
     if not ok:
         return None
 
@@ -429,6 +666,7 @@ def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, to
         client=enrollment.client,
         assignee_users=assignees,
         verifier=enrollment.verifier,
+        document_checker=enrollment.document_checker,
         created_by=enrollment.created_by,
         period_key=period_key,
         enrollment=enrollment,

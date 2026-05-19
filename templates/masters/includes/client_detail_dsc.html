@@ -1,0 +1,73 @@
+<div class="card p-3 mb-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="fw-semibold">Digital signature certificates</div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'dsc_list' %}?q={{ client.client_id|urlencode }}">Open DSC list</a>
+      {% if can_add_dsc %}
+        <a class="btn btn-sm btn-primary" href="{% url 'dsc_create' %}">Add DSC</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width: 110px">Issue</th>
+          <th style="width: 110px">Expiry</th>
+          <th style="width: 90px">Notify</th>
+          <th>Password</th>
+          <th style="width: 100px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in dsc_rows %}
+          <tr>
+            <td class="small">{{ row.issue_date|date:"d-m-Y" }}</td>
+            <td class="small">
+              {{ row.expiry_date|date:"d-m-Y" }}
+              {% if row.is_expired %}<span class="badge text-bg-secondary ms-1">Expired</span>{% endif %}
+            </td>
+            <td class="small">{% if row.expiry_notification %}Yes{% else %}No{% endif %}</td>
+            <td class="mono small">{{ row.dsc_password|default:"—" }}</td>
+            <td class="text-end">
+              {% if perms.masters.change_clientdsc %}
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'dsc_edit' row.pk %}">Edit</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-secondary">No DSC records for this client.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card p-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="fw-semibold">DSC in-out</div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'dsc_inout_list' %}?q={{ client.client_id|urlencode }}">Open in-out list</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width: 110px">In date</th>
+          <th style="width: 110px">Out date</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in dsc_inout_rows %}
+          <tr>
+            <td class="small">{{ row.in_date|date:"d-m-Y" }}</td>
+            <td class="small">{% if row.out_date %}{{ row.out_date|date:"d-m-Y" }}{% else %}—{% endif %}</td>
+            <td class="small">{{ row.remarks|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" class="text-secondary">No in-out records.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

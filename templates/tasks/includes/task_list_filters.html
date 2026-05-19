@@ -47,7 +47,7 @@
 
   {% include "tasks/includes/task_date_range_field.html" with prefix="created" label="Task created" preset=filters.created_preset from_name="created_from" to_name="created_to" from_value=filters.created_from to_value=filters.created_to display_id="taskCreatedRangeDisplay" %}
   {% include "tasks/includes/task_date_range_field.html" with prefix="due" label="Due date" preset=filters.due_preset from_name="due_from" to_name="due_to" from_value=filters.due_from to_value=filters.due_to display_id="taskDueRangeDisplay" %}
-  {% include "tasks/includes/task_date_range_field.html" with prefix="approved" label="Approved date" preset=filters.approved_preset from_name="approved_from" to_name="approved_to" from_value=filters.approved_from to_value=filters.approved_to display_id="taskApprovedRangeDisplay" %}
+  {% include "tasks/includes/task_date_range_field.html" with prefix="approved" label="Verified date" preset=filters.approved_preset from_name="approved_from" to_name="approved_to" from_value=filters.approved_from to_value=filters.approved_to display_id="taskApprovedRangeDisplay" %}
 
   <div class="col-12 col-md-auto d-flex flex-wrap gap-2 align-items-center">
     <button class="btn btn-outline-secondary btn-sm" type="submit">Apply filters</button>

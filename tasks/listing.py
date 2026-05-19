@@ -80,6 +80,8 @@ def tasks_queryset_for_user(user):
         "task_master__task_group",
         "verifier",
         "verifier__employee_profile",
+        "document_checker",
+        "document_checker__employee_profile",
         "created_by",
         "created_by__employee_profile",
         "submitted_by",

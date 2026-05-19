@@ -6,6 +6,9 @@ def cleanup_partial_0014(apps, schema_editor):
     Remove leftover indexes/columns from a failed 0014 run on Postgres
     (e.g. master_clientgroup_group_id_*_like already exists).
     """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
     connection = schema_editor.connection
     with connection.cursor() as cursor:
         cursor.execute(
