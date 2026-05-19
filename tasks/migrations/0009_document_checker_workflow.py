@@ -1,4 +1,6 @@
 # Generated manually for document checker workflow.
+# atomic = False and schema-before-data ordering avoid SQLite
+# "pending trigger events" when altering tasks_task after updates.
 
 from django.conf import settings
 from django.db import migrations, models
@@ -11,6 +13,8 @@ def migrate_approved_to_verified(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+
+    atomic = False
 
     dependencies = [
         ("tasks", "0008_remove_taskmaster_default_billable_verifier"),
@@ -54,7 +58,6 @@ class Migration(migrations.Migration):
                 to=settings.AUTH_USER_MODEL,
             ),
         ),
-        migrations.RunPython(migrate_approved_to_verified, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="task",
             name="status",
@@ -73,6 +76,7 @@ class Migration(migrations.Migration):
                 max_length=20,
             ),
         ),
+        migrations.RunPython(migrate_approved_to_verified, migrations.RunPython.noop),
         migrations.RunSQL(
             sql=(
                 "UPDATE tasks_task SET document_checker_id = verifier_id "

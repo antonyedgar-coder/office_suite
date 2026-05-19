@@ -5,6 +5,8 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    atomic = False
+
     dependencies = [
         ('tasks', '0010_task_document_rework_status'),
     ]
