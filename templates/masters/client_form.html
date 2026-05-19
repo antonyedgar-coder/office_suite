@@ -58,7 +58,7 @@
               <div class="col-12 col-md-6">
                 <label class="form-label" for="{{ form.file_no.id_for_label }}">{{ form.file_no.label }}</label>
                 {{ form.file_no }}
-                {% if form.file_no.errors %}<div class="text-danger small">{{ form.file_no.errors }}</div>
+                {% if form.file_no.errors %}<div class="text-danger small">{{ form.file_no.errors }}</div>{% endif %}
               </div>
             </div>
           </div>
