@@ -2,6 +2,7 @@ import base64
 
 from django.db import transaction, IntegrityError
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
@@ -9,9 +10,9 @@ from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 
 from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
 
@@ -21,7 +22,19 @@ from .director_mapping_import import (
     parse_director_mappings_csv,
     validate_director_mapping_import_active_uniqueness_in_file,
 )
-from .forms import ClientForm, ClientGroupForm, DirectorCompanyPickForm, DirectorForm, DirectorMappingRowFormSet
+from .forms import (
+    ClientDSCForm,
+    ClientForm,
+    ClientGroupForm,
+    ClientPortalCredentialForm,
+    DSCInOutForm,
+    DirectorCompanyPickForm,
+    DirectorForm,
+    DirectorMappingRowFormSet,
+    ExpenseCategoryForm,
+    individual_clients_for_user,
+)
+from .dsc_expiry_notifications import reset_dsc_expiry_notification_schedule
 from .client_activity import (
     CLIENT_ACTIVITY_DATE_PRESET_CHOICES,
     apply_client_activity_log_filters,
@@ -38,8 +51,13 @@ from .models import (
     DIRECTOR_ELIGIBLE_CLIENT_TYPES,
     Client,
     ClientActivityLog,
+    ClientDSC,
     ClientGroup,
+    ClientPortalCredential,
+    DSCInOut,
     DirectorMapping,
+    ExpenseCategory,
+    PortalName,
 )
 from .csv_import import parse_clients_csv, CSV_COLUMNS
 from .group_csv_import import GROUP_CSV_COLUMNS, parse_client_groups_csv
@@ -76,6 +94,15 @@ def _apply_new_client_approval(client, user):
         client.approved_at = None
 
 
+def user_may_approve_pending_client(user, client: Client) -> bool:
+    """Creators cannot approve/reject their own pending client; superuser can."""
+    if user.is_superuser:
+        return True
+    if client.created_by_id and client.created_by_id == user.pk:
+        return False
+    return True
+
+
 def _apply_updated_client_approval(client, user):
     now = timezone.now()
     if user.is_superuser:
@@ -93,6 +120,115 @@ def _group_options_for_client_form(client: Client | None = None) -> list[dict[st
     if client and getattr(client, "client_group_id", None):
         qs = ClientGroup.objects.filter(Q(is_active=True) | Q(pk=client.client_group_id)).order_by("name")
     return [{"id": str(g.pk), "label": f"{g.name} — {g.group_id}"} for g in qs]
+
+
+def _parse_client_detail_task_filters(request, client_id: str) -> dict:
+    from tasks.listing import _parse_preset_block
+
+    d_preset, d_from, d_to = _parse_preset_block(request, "due")
+    return {
+        "client_id": client_id,
+        "group_id": (request.GET.get("group") or "").strip(),
+        "master_id": (request.GET.get("master") or "").strip(),
+        "assignee_id": (request.GET.get("assignee") or "").strip(),
+        "due_preset": d_preset,
+        "due_from": d_from,
+        "due_to": d_to,
+    }
+
+
+def _apply_client_detail_task_filters(qs, filters: dict):
+    from django.utils.dateparse import parse_date
+
+    if filters.get("group_id"):
+        qs = qs.filter(task_master__task_group_id=filters["group_id"])
+    if filters.get("master_id"):
+        qs = qs.filter(task_master_id=filters["master_id"])
+    if filters.get("assignee_id"):
+        qs = qs.filter(assignments__user_id=filters["assignee_id"])
+    d_from = parse_date(filters.get("due_from") or "")
+    d_to = parse_date(filters.get("due_to") or "")
+    if d_from:
+        qs = qs.filter(due_date__gte=d_from)
+    if d_to:
+        qs = qs.filter(due_date__lte=d_to)
+    return qs.distinct()
+
+
+@require_perm("masters.view_client")
+def client_detail(request, client_id: str):
+    client = get_object_or_404(
+        client_master_queryset_for_user(request.user).select_related(
+            "client_group", "created_by", "approved_by"
+        ),
+        pk=client_id,
+    )
+    tab = (request.GET.get("tab") or "details").strip().lower()
+    show_tasks = task_module_enabled() and request.user.has_perm("tasks.view_task")
+    show_passwords = request.user.has_perm("masters.view_clientportalcredential")
+    if tab == "tasks" and not show_tasks:
+        tab = "details"
+    if tab == "passwords" and not show_passwords:
+        tab = "details"
+    if tab not in ("details", "tasks", "passwords"):
+        tab = "details"
+
+    ctx = {
+        "client": client,
+        "active_tab": tab,
+        "show_tasks_tab": show_tasks,
+        "show_passwords_tab": show_passwords,
+        "can_edit_client": request.user.has_perm("masters.change_client"),
+        "can_add_password": request.user.has_perm("masters.add_clientportalcredential"),
+    }
+
+    if tab == "tasks" and show_tasks:
+        from tasks.listing import prepare_task_list_rows
+        from tasks.listing import tasks_queryset_for_user
+        from tasks.date_presets import DATE_PRESET_CHOICES
+        from tasks.models import TaskGroup, TaskMaster
+        from tasks.user_labels import staff_users_queryset
+
+        task_filters = _parse_client_detail_task_filters(request, client_id)
+        qs = tasks_queryset_for_user(request.user).filter(client_id=client_id)
+        qs = _apply_client_detail_task_filters(qs, task_filters)
+        ctx["task_rows"] = prepare_task_list_rows(qs[:500], include_assignees=True)
+        ctx["task_filters"] = task_filters
+        ctx["date_preset_choices"] = DATE_PRESET_CHOICES
+        ctx["task_groups"] = TaskGroup.objects.filter(is_active=True).order_by("sort_order", "name")
+        masters_qs = TaskMaster.objects.filter(is_active=True, archived_at__isnull=True).select_related(
+            "task_group"
+        )
+        if task_filters.get("group_id"):
+            masters_qs = masters_qs.filter(task_group_id=task_filters["group_id"])
+        ctx["task_masters"] = masters_qs.order_by("task_group__sort_order", "name")
+        ctx["staff_users"] = staff_users_queryset()
+
+    if tab == "passwords" and show_passwords:
+        ctx["portal_passwords"] = (
+            ClientPortalCredential.objects.filter(client_id=client_id)
+            .select_related("portal", "created_by", "updated_by")
+            .order_by("portal__name", "portal_username")
+        )
+
+    if tab == "details":
+        if client.client_group_id:
+            g = client.client_group
+            ctx["group_display"] = f"{g.name} ({g.group_id})"
+        else:
+            ctx["group_display"] = "—"
+        ctx["dob_display"] = client.dob.strftime("%d-%m-%Y") if client.dob else "—"
+        created = timezone.localtime(client.created_at).strftime("%d-%m-%Y %H:%M")
+        if client.created_by_id:
+            created += f" — {user_display_name(client.created_by)}"
+        ctx["created_display"] = created
+        if client.approved_at:
+            approved = timezone.localtime(client.approved_at).strftime("%d-%m-%Y %H:%M")
+            if client.approved_by_id:
+                approved += f" — {user_display_name(client.approved_by)}"
+            ctx["approved_display"] = approved
+
+    return render(request, "masters/client_detail.html", ctx)
 
 
 @require_perm("masters.view_client")
@@ -317,6 +453,9 @@ def client_approve(request, client_id: str):
     if request.method != "POST":
         return redirect("client_pending_list")
     client = get_object_or_404(Client, pk=client_id, approval_status=Client.PENDING)
+    if not user_may_approve_pending_client(request.user, client):
+        messages.error(request, "You cannot approve a client record that you created. Another approver must review it.")
+        return redirect("client_pending_list")
     now = timezone.now()
     client.approval_status = Client.APPROVED
     client.approved_by = request.user
@@ -330,6 +469,36 @@ def client_approve(request, client_id: str):
         remarks=client.remarks,
     )
     messages.success(request, f"Client {client.client_id} approved.")
+    return redirect("client_pending_list")
+
+
+@require_perm("masters.approve_client")
+def client_reject(request, client_id: str):
+    if request.method != "POST":
+        return redirect("client_pending_list")
+    client = get_object_or_404(Client, pk=client_id, approval_status=Client.PENDING)
+    if not user_may_approve_pending_client(request.user, client):
+        messages.error(request, "You cannot reject a client record that you created. Another approver must review it.")
+        return redirect("client_pending_list")
+    cid = client.client_id
+    cname = client.client_name
+    log_client_activity(
+        client=client,
+        user=request.user,
+        category=ClientActivityLog.CATEGORY_CLIENT,
+        activity="Client master rejected and removed from approval queue.",
+        remarks=(request.POST.get("reject_remarks") or "").strip() or client.remarks,
+    )
+    try:
+        client.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f"Cannot reject {cid}: this client is already used in MIS, director mapping, or DIR-3 KYC. "
+            "Remove or change those links first, or edit the client record instead.",
+        )
+        return redirect("client_pending_list")
+    messages.success(request, f"Client {cid} ({cname}) rejected and removed from pending approvals.")
     return redirect("client_pending_list")
 
 
@@ -1151,4 +1320,406 @@ def client_group_bulk_import_template(request):
     resp = HttpResponse(content, content_type="text/csv; charset=utf-8")
     resp["Content-Disposition"] = 'attachment; filename="group-master-template.csv"'
     return resp
+
+
+def _portal_password_qs_for_user(user):
+    qs = ClientPortalCredential.objects.select_related("portal", "client", "created_by", "updated_by")
+    client_ids = client_master_queryset_for_user(user).values_list("pk", flat=True)
+    return qs.filter(client_id__in=client_ids)
+
+
+@require_perm("masters.view_clientportalcredential")
+def portal_password_list(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = _portal_password_qs_for_user(request.user)
+    if q:
+        qu = q.upper()
+        qs = qs.filter(
+            Q(client__client_name__icontains=q)
+            | Q(client__pan__icontains=qu)
+            | Q(client__client_id__icontains=qu)
+            | Q(portal__name__icontains=q)
+            | Q(portal_username__icontains=q)
+        )
+    rows = qs.order_by("-updated_at")[:500]
+    return render(
+        request,
+        "masters/portal_password_list.html",
+        {
+            "rows": rows,
+            "q": q,
+            "breadcrumbs": ui_breadcrumbs(("Password management",)),
+        },
+    )
+
+
+@require_perm("masters.add_clientportalcredential")
+def portal_password_create(request):
+    if request.method == "POST":
+        form = ClientPortalCredentialForm(request.POST, user=request.user)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.created_by = request.user
+            obj.updated_by = request.user
+            obj.save()
+            messages.success(request, "Portal password saved.")
+            return redirect("portal_password_list")
+    else:
+        form = ClientPortalCredentialForm(user=request.user)
+    return render(
+        request,
+        "masters/portal_password_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("portal_password_list"),
+            "can_add_portal_name": request.user.is_superuser or request.user.has_perm("masters.add_portalname"),
+            "breadcrumbs": ui_breadcrumbs(
+                ("Password management", "portal_password_list"),
+                ("New entry",),
+            ),
+        },
+    )
+
+
+@require_perm("masters.change_clientportalcredential")
+def portal_password_edit(request, pk: int):
+    obj = get_object_or_404(_portal_password_qs_for_user(request.user), pk=pk)
+    if request.method == "POST":
+        form = ClientPortalCredentialForm(request.POST, instance=obj, user=request.user)
+        if form.is_valid():
+            row = form.save(commit=False)
+            row.updated_by = request.user
+            row.save()
+            messages.success(request, "Portal password updated.")
+            return redirect("portal_password_list")
+    else:
+        form = ClientPortalCredentialForm(instance=obj, user=request.user)
+        if obj.client_id:
+            pan = (obj.client.pan or "").strip().upper()
+            name = obj.client.client_name or ""
+            form.fields["client_search"].initial = f"{name} — {pan}" if pan else name
+    return render(
+        request,
+        "masters/portal_password_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("portal_password_list"),
+            "can_add_portal_name": request.user.is_superuser or request.user.has_perm("masters.add_portalname"),
+            "breadcrumbs": ui_breadcrumbs(
+                ("Password management", "portal_password_list"),
+                (f"Edit {obj.portal.name}",),
+            ),
+        },
+    )
+
+
+@require_perm("masters.add_portalname")
+def portal_name_create_api(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required."}, status=405)
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "Portal name is required."}, status=400)
+    existing = PortalName.objects.filter(name__iexact=name).first()
+    if existing:
+        if not existing.is_active:
+            existing.is_active = True
+            existing.save(update_fields=["is_active"])
+        return JsonResponse({"id": existing.pk, "name": existing.name, "created": False})
+    portal = PortalName.objects.create(name=name)
+    return JsonResponse({"id": portal.pk, "name": portal.name, "created": True})
+
+
+@require_perm("masters.delete_clientportalcredential")
+def portal_password_delete(request, pk: int):
+    obj = get_object_or_404(_portal_password_qs_for_user(request.user), pk=pk)
+    if request.method == "POST":
+        label = str(obj)
+        obj.delete()
+        messages.success(request, f"Deleted: {label}.")
+        return redirect("portal_password_list")
+    return render(request, "masters/portal_password_confirm_delete.html", {"obj": obj})
+
+
+def _dsc_client_ids_for_user(user):
+    return individual_clients_for_user(user).values_list("pk", flat=True)
+
+
+def _dsc_qs_for_user(user):
+    return ClientDSC.objects.select_related("client", "created_by", "updated_by").filter(
+        client_id__in=_dsc_client_ids_for_user(user)
+    )
+
+
+def _dsc_inout_qs_for_user(user):
+    return DSCInOut.objects.select_related("dsc", "dsc__client").filter(dsc__client_id__in=_dsc_client_ids_for_user(user))
+
+
+@require_perm("masters.view_clientdsc")
+def dsc_list(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = _dsc_qs_for_user(request.user)
+    if q:
+        qu = q.upper()
+        qs = qs.filter(
+            Q(client__client_name__icontains=q)
+            | Q(client__pan__icontains=qu)
+            | Q(client__client_id__icontains=qu)
+        )
+    rows = qs.order_by("-created_at")[:500]
+    return render(
+        request,
+        "masters/dsc_list.html",
+        {
+            "rows": rows,
+            "q": q,
+            "breadcrumbs": ui_breadcrumbs(("DSC Management",), ("New DSC",)),
+        },
+    )
+
+
+@require_perm("masters.add_clientdsc")
+def dsc_create(request):
+    if request.method == "POST":
+        form = ClientDSCForm(request.POST, user=request.user)
+        if form.is_valid():
+            with transaction.atomic():
+                obj = form.save(commit=False)
+                obj.created_by = request.user
+                obj.updated_by = request.user
+                obj.save()
+                DSCInOut.objects.create(dsc=obj, in_date=timezone.localdate(obj.created_at))
+            messages.success(request, "DSC saved. In-out record created with in date set to the creation date.")
+            return redirect("dsc_list")
+    else:
+        form = ClientDSCForm(user=request.user)
+    return render(
+        request,
+        "masters/dsc_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("dsc_list"),
+            "breadcrumbs": ui_breadcrumbs(
+                ("DSC Management",),
+                ("New DSC", "dsc_list"),
+                ("Add",),
+            ),
+        },
+    )
+
+
+@require_perm("masters.change_clientdsc")
+def dsc_edit(request, pk: int):
+    obj = get_object_or_404(_dsc_qs_for_user(request.user), pk=pk)
+    if request.method == "POST":
+        was_notify = obj.expiry_notification
+        form = ClientDSCForm(request.POST, instance=obj, user=request.user)
+        if form.is_valid():
+            row = form.save(commit=False)
+            row.updated_by = request.user
+            row.save()
+            if row.expiry_notification and not was_notify:
+                reset_dsc_expiry_notification_schedule(row)
+            messages.success(request, "DSC updated.")
+            return redirect("dsc_list")
+    else:
+        form = ClientDSCForm(instance=obj, user=request.user)
+        if obj.client_id:
+            pan = (obj.client.pan or "").strip().upper()
+            name = obj.client.client_name or ""
+            form.fields["client_search"].initial = f"{name} — {pan}" if pan else name
+    return render(
+        request,
+        "masters/dsc_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("dsc_list"),
+            "breadcrumbs": ui_breadcrumbs(
+                ("DSC Management",),
+                ("New DSC", "dsc_list"),
+                (obj.client.client_name,),
+            ),
+        },
+    )
+
+
+@require_perm("masters.delete_clientdsc")
+def dsc_delete(request, pk: int):
+    obj = get_object_or_404(_dsc_qs_for_user(request.user), pk=pk)
+    if request.method == "POST":
+        label = str(obj)
+        obj.delete()
+        messages.success(request, f"Deleted: {label}.")
+        return redirect("dsc_list")
+    return render(request, "masters/dsc_confirm_delete.html", {"obj": obj})
+
+
+@require_perm("masters.view_dscinout")
+def dsc_inout_list(request):
+    q = (request.GET.get("q") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    today = timezone.localdate()
+    qs = _dsc_inout_qs_for_user(request.user)
+    if q:
+        qu = q.upper()
+        qs = qs.filter(
+            Q(dsc__client__client_name__icontains=q)
+            | Q(dsc__client__pan__icontains=qu)
+            | Q(dsc__client__client_id__icontains=qu)
+        )
+    if status == "in_office":
+        qs = qs.filter(out_date__isnull=True)
+    elif status == "with_client":
+        qs = qs.filter(out_date__isnull=False)
+    elif status == "active_dsc":
+        qs = qs.filter(dsc__expiry_date__gt=today)
+    rows = qs.order_by("-in_date", "-pk")[:500]
+    return render(
+        request,
+        "masters/dsc_inout_list.html",
+        {
+            "rows": rows,
+            "q": q,
+            "status": status,
+            "today": today,
+            "breadcrumbs": ui_breadcrumbs(("DSC Management",), ("DSC In-Out",)),
+        },
+    )
+
+
+@require_perm("masters.change_dscinout")
+def dsc_inout_edit(request, pk: int):
+    obj = get_object_or_404(_dsc_inout_qs_for_user(request.user), pk=pk)
+    if request.method == "POST":
+        form = DSCInOutForm(request.POST, instance=obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "DSC in-out updated.")
+            return redirect("dsc_inout_list")
+    else:
+        form = DSCInOutForm(instance=obj)
+    return render(
+        request,
+        "masters/dsc_inout_form.html",
+        {
+            "form": form,
+            "obj": obj,
+            "cancel_url": reverse("dsc_inout_list"),
+            "breadcrumbs": ui_breadcrumbs(
+                ("DSC Management",),
+                ("DSC In-Out", "dsc_inout_list"),
+                (obj.dsc.client.client_name,),
+            ),
+        },
+    )
+
+
+@login_required
+def dsc_notification_list(request):
+    from .models import DSCNotification
+
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("masters.view_clientdsc")
+        or getattr(getattr(request.user, "employee_profile", None), "receive_dsc_expiry_notifications", False)
+    ):
+        raise PermissionDenied
+    qs = DSCNotification.objects.filter(user=request.user).select_related("dsc", "dsc__client")[:200]
+    return render(request, "masters/dsc_notification_list.html", {"notifications": qs})
+
+
+@login_required
+@require_POST
+def dsc_notification_mark_read(request, pk: int):
+    from .models import DSCNotification
+
+    n = get_object_or_404(DSCNotification, pk=pk, user=request.user)
+    n.is_read = True
+    n.read_at = timezone.now()
+    n.save(update_fields=["is_read", "read_at"])
+    if n.link:
+        return redirect(n.link)
+    return redirect("dsc_notification_list")
+
+
+@require_perm("masters.view_expensecategory")
+def expense_category_list(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = ExpenseCategory.objects.all()
+    if q:
+        qs = qs.filter(name__icontains=q)
+    rows = qs.order_by("name")[:500]
+    return render(
+        request,
+        "masters/expense_category_list.html",
+        {"rows": rows, "q": q},
+    )
+
+
+@require_perm("masters.add_expensecategory")
+def expense_category_create(request):
+    if request.method == "POST":
+        form = ExpenseCategoryForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Expense category saved.")
+            return redirect("expense_category_list")
+    else:
+        form = ExpenseCategoryForm()
+    return render(
+        request,
+        "masters/expense_category_form.html",
+        {
+            "form": form,
+            "mode": "create",
+            "cancel_url": reverse("expense_category_list"),
+        },
+    )
+
+
+@require_perm("masters.change_expensecategory")
+def expense_category_edit(request, pk: int):
+    obj = get_object_or_404(ExpenseCategory, pk=pk)
+    if request.method == "POST":
+        form = ExpenseCategoryForm(request.POST, instance=obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Expense category updated.")
+            return redirect("expense_category_list")
+    else:
+        form = ExpenseCategoryForm(instance=obj)
+    return render(
+        request,
+        "masters/expense_category_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("expense_category_list"),
+        },
+    )
+
+
+@require_perm("masters.delete_expensecategory")
+def expense_category_delete(request, pk: int):
+    obj = get_object_or_404(ExpenseCategory, pk=pk)
+    if request.method == "POST":
+        try:
+            label = str(obj)
+            obj.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "This category cannot be deleted because it is used on MIS expense entries.",
+            )
+            return redirect("expense_category_list")
+        messages.success(request, f"Deleted: {label}.")
+        return redirect("expense_category_list")
+    return render(request, "masters/expense_category_confirm_delete.html", {"obj": obj})
 

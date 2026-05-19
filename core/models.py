@@ -101,6 +101,10 @@ class Employee(models.Model):
         default="",
         help_text="All branches, or restrict to Trivandrum or Nagercoil only.",
     )
+    receive_dsc_expiry_notifications = models.BooleanField(
+        default=False,
+        help_text="Receive DSC expiry reminders (in addition to users with DSC Management view access).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

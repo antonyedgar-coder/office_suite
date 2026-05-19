@@ -64,6 +64,7 @@ class EmployeeCreateForm(forms.ModelForm):
             "contact_person",
             "aadhar_no",
             "branch_access",
+            "receive_dsc_expiry_notifications",
         ]
         widgets = {
             "user_type": forms.Select(attrs={"class": "form-select", "id": "id_user_type"}),
@@ -202,11 +203,19 @@ class EmployeeEditForm(forms.ModelForm):
             "contact_person",
             "aadhar_no",
             "branch_access",
+            "receive_dsc_expiry_notifications",
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["user_permissions"].queryset = manageable_permissions()
+        self.fields["receive_dsc_expiry_notifications"].widget.attrs.setdefault(
+            "class", "form-check-input"
+        )
+        self.fields["receive_dsc_expiry_notifications"].label = "DSC expiry notifications"
+        self.fields["receive_dsc_expiry_notifications"].help_text = (
+            "If checked, this user receives DSC expiry reminders (along with users who can view DSC Management)."
+        )
         user = getattr(self.instance, "user", None)
         if user:
             self.fields["is_active"].initial = user.is_active
@@ -228,6 +237,7 @@ class EmployeeEditForm(forms.ModelForm):
                 "contact_person",
                 "aadhar_no",
                 "branch_access",
+                "receive_dsc_expiry_notifications",
             ):
                 if name in self.fields:
                     self.fields[name].disabled = True

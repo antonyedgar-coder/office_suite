@@ -6,7 +6,7 @@
   <div class="card p-3">
     <p class="mb-2">
       Delete expense for <strong>{{ obj.client.client_name }}</strong> on <strong>{{ obj.date }}</strong>
-      ({{ obj.expenses_paid }})?
+      ({{ obj.category.name }}, {{ obj.get_payment_mode_display }}, {{ obj.expenses_paid }})?
     </p>
     <p class="text-secondary small mb-3">This cannot be undone.</p>
     <form method="post" class="d-inline-flex gap-2 flex-wrap">

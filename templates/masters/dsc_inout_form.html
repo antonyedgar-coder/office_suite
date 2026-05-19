@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}DSC In-Out — CA Office Suite{% endblock %}
+{% block page_title %}DSC handover{% endblock %}
+
+{% block content %}
+  {% include "includes/page_header.html" with title="DSC handover" subtitle="Set out date when the DSC is given to the client." %}
+
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Client</label>
+          <input class="form-control" readonly disabled value="{{ obj.dsc.client.client_name }}" />
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">PAN</label>
+          <input class="form-control mono" readonly disabled value="{{ obj.dsc.client.pan|default:'—' }}" />
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Issue date</label>
+          <input class="form-control" readonly disabled value="{{ obj.dsc.issue_date|date:'d-m-Y' }}" />
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Expiry date</label>
+          <input class="form-control" readonly disabled value="{{ obj.dsc.expiry_date|date:'d-m-Y' }}" />
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">In date</label>
+          <input class="form-control" readonly disabled value="{{ obj.in_date|date:'d-m-Y' }}" />
+          <div class="form-field-hint">Set when the DSC was created in New DSC.</div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.out_date.id_for_label }}">Out date (date of giving)</label>
+          {{ form.out_date }}
+          {% if form.out_date.errors %}<div class="text-danger small">{{ form.out_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="{{ form.remarks.id_for_label }}">Remarks</label>
+          {{ form.remarks }}
+          {% if form.remarks.errors %}<div class="text-danger small">{{ form.remarks.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
+{% endblock %}

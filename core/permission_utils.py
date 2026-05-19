@@ -10,6 +10,10 @@ def _managed_models() -> tuple[tuple[str, str], ...]:
     models: list[tuple[str, str]] = [
         ("masters", "client"),
         ("masters", "clientgroup"),
+        ("masters", "clientportalcredential"),
+        ("masters", "portalname"),
+        ("masters", "clientdsc"),
+        ("masters", "dscinout"),
         ("masters", "directormapping"),
         ("core", "employee"),
         ("reports", "reportpolicy"),

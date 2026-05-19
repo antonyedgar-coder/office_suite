@@ -33,7 +33,8 @@
               <th class="text-end">Fees</th>
               <th class="text-end">GST</th>
             {% elif mode == "receipts" %}
-              <th class="text-end">Amount received</th>
+              <th class="text-end">Fees received</th>
+              <th class="text-end">Expenses received</th>
             {% else %}
               <th class="text-end">Fees amount</th>
               <th class="text-end">Expenses amount</th>
@@ -52,7 +53,8 @@
                 <td class="text-end mono">{{ r.data.fees_amount }}</td>
                 <td class="text-end mono">{{ r.data.gst_amount }}</td>
               {% elif mode == "receipts" %}
-                <td class="text-end mono">{{ r.data.amount_received }}</td>
+                <td class="text-end mono">{{ r.data.fees_received }}</td>
+                <td class="text-end mono">{{ r.data.expenses_received }}</td>
               {% else %}
                 <td class="text-end mono">{{ r.data.fees_amount }}</td>
                 <td class="text-end mono">{{ r.data.expenses_paid }}</td>
@@ -60,7 +62,7 @@
               <td class="text-danger small">{% if r.errors %}{{ r.errors|join:", " }}{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="8" class="text-secondary">No rows found in file.</td></tr>
+            <tr><td colspan="9" class="text-secondary">No rows found in file.</td></tr>
           {% endfor %}
         </tbody>
       </table>

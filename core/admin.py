@@ -71,7 +71,14 @@ class UserAdmin(DjangoUserAdmin):
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ("full_name", "user_type", "user", "linked_client", "date_of_joining", "contact_no")
+    list_display = (
+        "full_name",
+        "user_type",
+        "user",
+        "receive_dsc_expiry_notifications",
+        "linked_client",
+        "date_of_joining",
+    )
     search_fields = ("full_name", "user__email", "aadhar_no")
     list_select_related = ("user", "linked_client")
     list_filter = ("user_type",)

@@ -1,39 +1,96 @@
 {% extends "base.html" %}
+
 {% block title %}Expenses — CA Office Suite{% endblock %}
+
 {% block page_title %}{% if mode == "create" %}New expense{% else %}Edit expense{% endif %}{% endblock %}
 
+
+
 {% block content %}
+
   {% if mode == "create" %}
-    {% include "includes/page_header.html" with title="New expense" subtitle="Record expenses paid for a client." %}
+
+    {% include "includes/page_header.html" with title="New expense" subtitle="Record an expense for a client." %}
+
   {% else %}
+
     {% include "includes/page_header.html" with title="Edit expense" subtitle="Update expense details for this client." %}
+
   {% endif %}
 
+
+
   <form method="post" class="app-form-with-sticky-bar">
+
     {% csrf_token %}
+
     <div class="card p-3 mb-3">
+
       <div class="row g-3">
+
         {% include "mis/includes/client_autocomplete_fields.html" %}
 
+
+
         <div class="col-12 col-md-4">
-          <label class="form-label required-field" for="{{ form.expenses_paid.id_for_label }}">Expenses paid</label>
+
+          <label class="form-label required-field" for="{{ form.category.id_for_label }}">Category</label>
+
+          {{ form.category }}
+
+          {% if form.category.errors %}<div class="text-danger small">{{ form.category.errors }}</div>{% endif %}
+
+          <div class="form-field-hint">
+
+            Categories are maintained under
+
+            <a href="{% url 'expense_category_list' %}">Masters → Expense categories</a>.
+
+          </div>
+
+        </div>
+
+        <div class="col-12 col-md-4">
+
+          <label class="form-label required-field" for="{{ form.payment_mode.id_for_label }}">Payment mode</label>
+
+          {{ form.payment_mode }}
+
+          {% if form.payment_mode.errors %}<div class="text-danger small">{{ form.payment_mode.errors }}</div>{% endif %}
+
+        </div>
+
+        <div class="col-12 col-md-4">
+
+          <label class="form-label required-field" for="{{ form.expenses_paid.id_for_label }}">Amount</label>
+
           {{ form.expenses_paid }}
+
           {% if form.expenses_paid.errors %}<div class="text-danger small">{{ form.expenses_paid.errors }}</div>{% endif %}
+
         </div>
-        <div class="col-12">
-          <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
-          {{ form.notes }}
-          {% if form.notes.errors %}<div class="text-danger small">{{ form.notes.errors }}</div>{% endif %}
-        </div>
+
+
 
         {% include "includes/activity_remarks_field.html" with field=form.remarks %}
 
+
+
         {% if form.non_field_errors %}
+
           <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+
         {% endif %}
+
       </div>
+
     </div>
 
+
+
     {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+
   </form>
+
 {% endblock %}
+

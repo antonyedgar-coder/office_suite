@@ -25,7 +25,8 @@
             <th>Date</th>
             <th>Client</th>
             <th>PAN</th>
-            <th class="text-end">Amount received</th>
+            <th class="text-end">Fees received</th>
+            <th class="text-end">Expenses received</th>
             <th></th>
           </tr>
         </thead>
@@ -35,7 +36,8 @@
               <td>{{ r.date }}</td>
               <td>{{ r.client.client_name }}</td>
               <td class="mono">{{ r.pan_no }}</td>
-              <td class="text-end mono fw-semibold">{{ r.amount_received }}</td>
+              <td class="text-end mono fw-semibold">{{ r.fees_received }}</td>
+              <td class="text-end mono fw-semibold">{{ r.expenses_received }}</td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
                   {% if perms.mis.change_receipt %}
@@ -48,7 +50,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="5" class="text-secondary">No receipts.</td></tr>
+            <tr><td colspan="6" class="text-secondary">No receipts.</td></tr>
           {% endfor %}
         </tbody>
       </table>

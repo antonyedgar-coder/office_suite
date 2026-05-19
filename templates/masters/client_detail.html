@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ client.client_name }} — CA Office Suite{% endblock %}
+{% block page_title %}{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block extra_head %}
+  {% if active_tab == "tasks" %}
+    {% include "tasks/includes/task_date_range_assets.html" %}
+    <style>
+      .client-detail-task-filters .form-label { font-size: 0.75rem; }
+    </style>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if active_tab == "tasks" %}
+    {% include "tasks/includes/task_date_range_init.html" %}
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <h1 class="client-detail-heading h4 mb-0">
+      {{ client.client_name }}
+      {% if client.pan %}
+        <span class="client-detail-heading-pan mono">· PAN {{ client.pan|upper }}</span>
+      {% endif %}
+    </h1>
+    <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+      {% if can_edit_client %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'client_edit' client.client_id %}">Edit client</a>
+      {% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'client_list' %}">Back to list</a>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs client-detail-tabs mb-3" role="tablist">
+    <li class="nav-item" role="presentation">
+      <a
+        class="nav-link{% if active_tab == 'details' %} active{% endif %}"
+        href="{% url 'client_detail' client.client_id %}?tab=details"
+        role="tab"
+      >Details</a>
+    </li>
+    {% if show_tasks_tab %}
+      <li class="nav-item" role="presentation">
+        <a
+          class="nav-link{% if active_tab == 'tasks' %} active{% endif %}"
+          href="{% url 'client_detail' client.client_id %}?tab=tasks"
+          role="tab"
+        >Tasks</a>
+      </li>
+    {% endif %}
+    {% if show_passwords_tab %}
+      <li class="nav-item" role="presentation">
+        <a
+          class="nav-link{% if active_tab == 'passwords' %} active{% endif %}"
+          href="{% url 'client_detail' client.client_id %}?tab=passwords"
+          role="tab"
+        >Password</a>
+      </li>
+    {% endif %}
+  </ul>
+
+  {% if active_tab == "details" %}
+    {% include "masters/includes/client_detail_details.html" %}
+  {% elif active_tab == "tasks" %}
+    {% include "masters/includes/client_detail_tasks.html" %}
+  {% elif active_tab == "passwords" %}
+    {% include "masters/includes/client_detail_passwords.html" %}
+  {% endif %}
+{% endblock %}

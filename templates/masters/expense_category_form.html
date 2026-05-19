@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Expense category — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New expense category{% else %}Edit expense category{% endif %}{% endblock %}
+
+{% block content %}
+  <form method="post" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label required-field" for="{{ form.name.id_for_label }}">Name</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-6 d-flex align-items-end">
+          <div class="form-check">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
+{% endblock %}

@@ -22,6 +22,12 @@ urlpatterns = [
     ),
     path("dir3-kyc/", views.dir3kyc_report, name="reports_dir3kyc"),
     path("dir3-kyc/download.csv", views.dir3kyc_report_csv, name="reports_dir3kyc_csv"),
+    path("portal-passwords/", views.portal_password_report, name="reports_portal_password"),
+    path(
+        "portal-passwords/download.csv",
+        views.portal_password_report_csv,
+        name="reports_portal_password_csv",
+    ),
 
     # Backward-compatible links (old MIS report URLs)
     path("mis/period/", views.mis_report, name="reports_mis_period"),

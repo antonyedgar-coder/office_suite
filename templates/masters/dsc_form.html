@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "create" %}New DSC{% else %}Edit DSC{% endif %} — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New DSC{% else %}Edit DSC{% endif %}{% endblock %}
+
+{% block content %}
+  {% if mode == "create" %}
+    {% include "includes/page_header.html" with title="New DSC" subtitle="Individual clients only. An in-out record is created automatically." %}
+  {% else %}
+    {% include "includes/page_header.html" with title="Edit DSC" subtitle="Update issue, expiry, or password for this certificate." %}
+  {% endif %}
+
+  <form method="post" class="app-form-with-sticky-bar" id="dscForm">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label required-field" for="dscClientSearch">Client name</label>
+          {{ form.client_search }}
+          <datalist id="dscClientSuggestions"></datalist>
+          {{ form.client }}
+          {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
+          {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
+          <div class="form-field-hint">Approved Individual clients only (search by name or PAN).</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="dscPanDisplay">PAN</label>
+          <input class="form-control" id="dscPanDisplay" readonly disabled placeholder="Select a client" />
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label required-field" for="{{ form.issue_date.id_for_label }}">Issue date</label>
+          {{ form.issue_date }}
+          {% if form.issue_date.errors %}<div class="text-danger small">{{ form.issue_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label required-field" for="{{ form.expiry_date.id_for_label }}">Expiry date</label>
+          {{ form.expiry_date }}
+          {% if form.expiry_date.errors %}<div class="text-danger small">{{ form.expiry_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12">
+          <label class="form-label required-field">Expiry notification</label>
+          <div class="d-flex flex-wrap gap-3">
+            {% for radio in form.expiry_notification %}
+              <div class="form-check">
+                {{ radio.tag }}
+                <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+              </div>
+            {% endfor %}
+          </div>
+          {% if form.expiry_notification.help_text %}<div class="form-field-hint">{{ form.expiry_notification.help_text }}</div>{% endif %}
+          {% if form.expiry_notification.errors %}<div class="text-danger small">{{ form.expiry_notification.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label{% if mode == 'create' %} required-field{% endif %}" for="{{ form.dsc_password.id_for_label }}">DSC password</label>
+          {{ form.dsc_password }}
+          {% if form.dsc_password.help_text %}<div class="form-field-hint">{{ form.dsc_password.help_text }}</div>{% endif %}
+          {% if form.dsc_password.errors %}<div class="text-danger small">{{ form.dsc_password.errors }}</div>{% endif %}
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
+        {% endif %}
+      </div>
+    </div>
+    {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
+  </form>
+
+  <script>
+    (function () {
+      var search = document.getElementById("dscClientSearch");
+      var hidden = document.querySelector("input[data-dsc-client-hidden='1']");
+      var panEl = document.getElementById("dscPanDisplay");
+      var list = document.getElementById("dscClientSuggestions");
+      if (!search || !hidden || !list) return;
+
+      var clients = [];
+      {% for opt in form.fields.client.queryset %}
+        clients.push({
+          id: "{{ opt.pk|escapejs }}",
+          label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}",
+          pan: "{{ opt.pan|upper|escapejs }}"
+        });
+      {% endfor %}
+
+      function setPan(match) {
+        if (!panEl) return;
+        panEl.value = match && match.pan ? match.pan : "";
+      }
+
+      function renderSuggestions(q) {
+        list.innerHTML = "";
+        var qq = (q || "").toLowerCase().trim();
+        var shown = 0;
+        for (var i = 0; i < clients.length; i++) {
+          var c = clients[i];
+          var t = (c.label || "").toLowerCase();
+          if (!qq || t.indexOf(qq) !== -1) {
+            var o = document.createElement("option");
+            o.value = c.label;
+            list.appendChild(o);
+            shown++;
+            if (shown >= 50) break;
+          }
+        }
+      }
+
+      function syncHiddenFromLabel() {
+        var v = (search.value || "").trim();
+        var match = null;
+        for (var i = 0; i < clients.length; i++) {
+          if (clients[i].label === v) {
+            match = clients[i];
+            break;
+          }
+        }
+        hidden.value = match ? match.id : "";
+        setPan(match);
+      }
+
+      if (hidden.value) {
+        for (var j = 0; j < clients.length; j++) {
+          if (String(clients[j].id) === String(hidden.value)) {
+            search.value = clients[j].label;
+            setPan(clients[j]);
+            break;
+          }
+        }
+      }
+
+      renderSuggestions("");
+      search.addEventListener("input", function () {
+        hidden.value = "";
+        setPan(null);
+        renderSuggestions(search.value);
+      });
+      search.addEventListener("change", syncHiddenFromLabel);
+      search.addEventListener("blur", syncHiddenFromLabel);
+    })();
+  </script>
+{% endblock %}

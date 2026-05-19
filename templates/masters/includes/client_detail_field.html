@@ -1,0 +1,12 @@
+{# icon, label, value, mono (optional), full_width (optional) #}
+<div class="{% if full_width %}col-12{% else %}col-12 col-md-6{% endif %}">
+  <div class="client-detail-field h-100{% if full_width %} client-detail-field--stacked{% endif %}">
+    <div class="client-detail-field-icon" aria-hidden="true">
+      <i class="bi bi-{{ icon }}"></i>
+    </div>
+    <div class="client-detail-field-body">
+      <div class="client-detail-field-label">{{ label }}</div>
+      <div class="client-detail-field-value{% if mono %} mono{% endif %}">{% if value %}{{ value }}{% else %}—{% endif %}</div>
+    </div>
+  </div>
+</div>

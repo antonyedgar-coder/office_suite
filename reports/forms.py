@@ -4,7 +4,8 @@ from django import forms
 
 from core.branch_access import branch_access_for_user
 from dirkyc.fy import fy_start_year, mis_report_financial_year_choices
-from masters.models import BRANCH_CHOICES, CLIENT_TYPES, Client
+from masters.forms import ClientNamePanChoiceField
+from masters.models import BRANCH_CHOICES, CLIENT_TYPES, Client, PortalName
 
 
 class ClientMasterReportFilterForm(forms.Form):
@@ -102,11 +103,20 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
 
     DETAILS_ALL = "ALL"
     DETAILS_FEES = "FEES"
-    DETAILS_GST = "GST"
-    DETAILS_RECEIPTS = "RECEIPTS"
+    DETAILS_RECEIPT = "RECEIPT"
     DETAILS_EXPENSES = "EXPENSES"
-    DETAILS_TENDER_FEES = "TENDER_FEES"
-    DETAILS_TENDER_DEPOSIT = "TENDER_DEPOSIT"
+    DETAILS_TENDER = "TENDER"
+
+    # Internal column keys (used by report views/templates)
+    _MIS_ALL_DETAIL_KEYS = [
+        "FEES",
+        "GST",
+        "FEES_RECEIVED",
+        "EXPENSES_RECEIVED",
+        "EXPENSES",
+        "TENDER_FEES",
+        "TENDER_DEPOSIT",
+    ]
 
     report_view = forms.ChoiceField(
         choices=[
@@ -139,13 +149,11 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
     details = forms.ChoiceField(
         required=False,
         choices=[
-            (DETAILS_ALL, "ALL"),
+            (DETAILS_ALL, "All"),
             (DETAILS_FEES, "Fees"),
-            (DETAILS_GST, "GST"),
-            (DETAILS_RECEIPTS, "Receipts"),
+            (DETAILS_RECEIPT, "Receipt"),
             (DETAILS_EXPENSES, "Expenses"),
-            (DETAILS_TENDER_FEES, "Tender fees"),
-            (DETAILS_TENDER_DEPOSIT, "Tender deposit"),
+            (DETAILS_TENDER, "Tender"),
         ],
         initial=DETAILS_ALL,
         widget=forms.Select(attrs={"class": "form-select"}),
@@ -221,20 +229,26 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
         return data
 
     def selected_details(self) -> list[str]:
-        all_details = [
-            self.DETAILS_FEES,
-            self.DETAILS_GST,
-            self.DETAILS_RECEIPTS,
-            self.DETAILS_EXPENSES,
-            self.DETAILS_TENDER_FEES,
-            self.DETAILS_TENDER_DEPOSIT,
-        ]
         if not self.is_valid():
-            return all_details
-        v = self.cleaned_data.get("details") or self.DETAILS_ALL
-        if v == self.DETAILS_ALL:
-            return all_details
-        return [v]
+            return list(self._MIS_ALL_DETAIL_KEYS)
+        v = (self.cleaned_data.get("details") or self.DETAILS_ALL).strip()
+        # Older saved links/bookmarks may still pass single metric keys
+        legacy_group = {
+            "GST": self.DETAILS_FEES,
+            "FEES_RECEIVED": self.DETAILS_RECEIPT,
+            "EXPENSES_RECEIVED": self.DETAILS_RECEIPT,
+            "TENDER_FEES": self.DETAILS_TENDER,
+            "TENDER_DEPOSIT": self.DETAILS_TENDER,
+        }
+        v = legacy_group.get(v, v)
+        groups = {
+            self.DETAILS_ALL: self._MIS_ALL_DETAIL_KEYS,
+            self.DETAILS_FEES: ["FEES", "GST"],
+            self.DETAILS_RECEIPT: ["FEES_RECEIVED", "EXPENSES_RECEIVED"],
+            self.DETAILS_EXPENSES: ["EXPENSES"],
+            self.DETAILS_TENDER: ["TENDER_FEES", "TENDER_DEPOSIT"],
+        }
+        return list(groups.get(v, self._MIS_ALL_DETAIL_KEYS))
 
 
 class DirectorMappingReportForm(forms.Form):
@@ -420,3 +434,43 @@ class Dir3KycReportForm(forms.Form):
 
     def is_compliance_view(self) -> bool:
         return bool(self.is_valid() and self.cleaned_data.get("view_mode") == self.VIEW_COMPLIANCE)
+
+
+class PortalPasswordReportFilterForm(forms.Form):
+    created_from = forms.DateField(
+        label="Date created from",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+    )
+    created_to = forms.DateField(
+        label="Date created to",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+    )
+    client = ClientNamePanChoiceField(
+        label="Client name (with PAN)",
+        queryset=Client.approved_objects().order_by("client_name"),
+        required=False,
+        empty_label="— Any client —",
+        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+    )
+    portal_name = forms.ModelChoiceField(
+        label="Portal",
+        queryset=PortalName.objects.filter(is_active=True).order_by("name"),
+        required=False,
+        empty_label="— Any portal —",
+        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+    )
+
+    def __init__(self, *args, client_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if client_queryset is not None:
+            self.fields["client"].queryset = client_queryset.order_by("client_name")
+
+    def clean(self):
+        data = super().clean()
+        f = data.get("created_from")
+        t = data.get("created_to")
+        if f and t and f > t:
+            self.add_error("created_to", "End date must be on or after start date.")
+        return data

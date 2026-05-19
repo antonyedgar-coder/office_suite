@@ -95,7 +95,7 @@ def dashboard_view(request):
         or user.has_perm("mis.add_receipt")
         or user.has_perm("mis.add_expensedetail")
     )
-    fees_sum = mis_fy_receipts = mis_fy_expenses = Decimal("0")
+    fees_sum = mis_fy_fees_received = mis_fy_expenses_received = mis_fy_expenses = Decimal("0")
     if show_mis_dashboard:
         mis_filter = {"date__gte": fy_start, "date__lte": fy_end}
         mis_fy_fees = FeesDetail.objects.filter(**mis_filter).aggregate(
@@ -103,9 +103,12 @@ def dashboard_view(request):
             gst=Sum("gst_amount"),
         )
         fees_sum = (mis_fy_fees["total"] or Decimal("0")) + (mis_fy_fees["gst"] or Decimal("0"))
-        mis_fy_receipts = Receipt.objects.filter(**mis_filter).aggregate(total=Sum("amount_received"))[
-            "total"
-        ] or Decimal("0")
+        rec_totals = Receipt.objects.filter(**mis_filter).aggregate(
+            fees_received=Sum("fees_received"),
+            expenses_received=Sum("expenses_received"),
+        )
+        mis_fy_fees_received = rec_totals["fees_received"] or Decimal("0")
+        mis_fy_expenses_received = rec_totals["expenses_received"] or Decimal("0")
         mis_fy_expenses = ExpenseDetail.objects.filter(**mis_filter).aggregate(total=Sum("expenses_paid"))[
             "total"
         ] or Decimal("0")
@@ -128,7 +131,8 @@ def dashboard_view(request):
         "mis_fy_period_start": fy_start,
         "mis_fy_period_end": fy_end,
         "mis_fy_fees": fees_sum,
-        "mis_fy_receipts": mis_fy_receipts,
+        "mis_fy_fees_received": mis_fy_fees_received,
+        "mis_fy_expenses_received": mis_fy_expenses_received,
         "mis_fy_expenses": mis_fy_expenses,
         "director_mapping_count": DirectorMapping.objects.count(),
         "show_mis_dashboard": show_mis_dashboard,

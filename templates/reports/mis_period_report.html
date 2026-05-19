@@ -33,7 +33,8 @@
               <th>Client name</th>
               <th class="text-end">Fees</th>
               <th class="text-end">GST</th>
-              <th class="text-end">Receipts</th>
+                <th class="text-end">Fees received</th>
+                <th class="text-end">Expenses received</th>
               <th class="text-end">Expenses</th>
             </tr>
           </thead>
@@ -45,7 +46,8 @@
                 <td>{{ r.client_name }}</td>
                 <td class="text-end mono">{{ r.fees }}</td>
                 <td class="text-end mono">{{ r.gst }}</td>
-                <td class="text-end mono">{{ r.receipts }}</td>
+                <td class="text-end mono">{{ r.fees_received }}</td>
+                <td class="text-end mono">{{ r.expenses_received }}</td>
                 <td class="text-end mono">{{ r.expenses }}</td>
               </tr>
             {% empty %}
@@ -56,7 +58,8 @@
                 <td colspan="3" class="text-end">Total</td>
                 <td class="text-end mono">{{ totals.fees }}</td>
                 <td class="text-end mono">{{ totals.gst }}</td>
-                <td class="text-end mono">{{ totals.receipts }}</td>
+                <td class="text-end mono">{{ totals.fees_received }}</td>
+                <td class="text-end mono">{{ totals.expenses_received }}</td>
                 <td class="text-end mono">{{ totals.expenses }}</td>
               </tr>
             {% endif %}

@@ -672,3 +672,218 @@ class ClientActivityLog(models.Model):
     def __str__(self) -> str:
         return f"{self.client_id} — {self.get_category_display()} — {self.created_at:%Y-%m-%d %H:%M}"
 
+
+class ExpenseCategory(models.Model):
+    """Master list of expense categories for MIS Expenses Details."""
+
+    name = models.CharField(max_length=120, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "expense category"
+        verbose_name_plural = "expense categories"
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.name = (self.name or "").strip()
+        super().save(*args, **kwargs)
+
+
+class PortalName(models.Model):
+    """Master list of portal names (GST, MCA, etc.) for password management."""
+
+    name = models.CharField(max_length=120, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "portal name"
+        verbose_name_plural = "portal names"
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.name = (self.name or "").strip()
+        super().save(*args, **kwargs)
+
+
+class ClientPortalCredential(models.Model):
+    """Portal login credentials for a client (Password Management under Masters)."""
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.PROTECT,
+        related_name="portal_credentials",
+    )
+    portal = models.ForeignKey(
+        PortalName,
+        on_delete=models.PROTECT,
+        related_name="credentials",
+        verbose_name="Portal name",
+    )
+    portal_username = models.CharField(max_length=120)
+    portal_password = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="portal_credentials_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="portal_credentials_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "client portal password"
+        verbose_name_plural = "client portal passwords"
+        indexes = [
+            models.Index(fields=["portal"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.client_id} — {self.portal.name}"
+
+    @property
+    def pan_display(self) -> str:
+        return (self.client.pan or "").strip().upper()
+
+
+class ClientDSC(models.Model):
+    """Digital signature certificate for an Individual client (New DSC)."""
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.PROTECT,
+        related_name="dsc_records",
+    )
+    issue_date = models.DateField()
+    expiry_date = models.DateField()
+    expiry_notification = models.BooleanField(
+        default=False,
+        help_text="If yes, send expiry reminders (30 days before expiry, every 7 days) until stopped.",
+    )
+    last_expiry_notification_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time an expiry reminder was sent for this DSC record.",
+    )
+    dsc_password = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="client_dsc_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="client_dsc_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "client DSC"
+        verbose_name_plural = "client DSC records"
+        indexes = [
+            models.Index(fields=["expiry_date"]),
+            models.Index(fields=["client", "expiry_date"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.client.client_name} — exp. {self.expiry_date:%d-%m-%Y}"
+
+    def clean(self):
+        super().clean()
+        if self.client_id and self.client.client_type != "Individual":
+            raise ValidationError({"client": "DSC can only be created for Individual clients."})
+        if self.issue_date and self.expiry_date and self.expiry_date < self.issue_date:
+            raise ValidationError({"expiry_date": "Expiry date must be on or after issue date."})
+
+    @property
+    def is_expired(self) -> bool:
+        from django.utils import timezone
+
+        return self.expiry_date <= timezone.localdate()
+
+    def display_label(self) -> str:
+        pan = (self.client.pan or "").strip().upper()
+        name = self.client.client_name or ""
+        if pan:
+            return f"{name} — {pan} — exp. {self.expiry_date:%d-%m-%Y}"
+        return f"{name} — exp. {self.expiry_date:%d-%m-%Y}"
+
+
+class DSCInOut(models.Model):
+    """In/out tracking for a DSC (auto-created when New DSC is saved)."""
+
+    dsc = models.OneToOneField(
+        ClientDSC,
+        on_delete=models.CASCADE,
+        related_name="in_out",
+    )
+    in_date = models.DateField()
+    out_date = models.DateField(null=True, blank=True)
+    remarks = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-in_date", "-pk"]
+        verbose_name = "DSC in-out"
+        verbose_name_plural = "DSC in-out records"
+
+    def __str__(self) -> str:
+        return f"{self.dsc} — in {self.in_date:%d-%m-%Y}"
+
+    def clean(self):
+        super().clean()
+        if self.out_date and self.in_date and self.out_date < self.in_date:
+            raise ValidationError({"out_date": "Out date cannot be before in date."})
+
+
+class DSCNotification(models.Model):
+    """In-app DSC expiry reminder for a user."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dsc_notifications",
+    )
+    dsc = models.ForeignKey(
+        ClientDSC,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    message = models.TextField()
+    link = models.CharField(max_length=512, blank=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "is_read", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} — {self.message[:60]}"
+

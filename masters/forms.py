@@ -5,11 +5,33 @@ from django.forms import BaseFormSet, formset_factory
 
 from core.activity_remarks import ACTIVITY_REMARKS_MAX_LENGTH
 
-from .models import CESSATION_REASON_CHOICES, Client, ClientGroup, DIRECTOR_COMPANY_TYPES, DIRECTOR_ELIGIBLE_CLIENT_TYPES, DirectorMapping
+from .models import (
+    CESSATION_REASON_CHOICES,
+    Client,
+    ClientDSC,
+    ClientGroup,
+    ClientPortalCredential,
+    DSCInOut,
+    ExpenseCategory,
+    PortalName,
+    DIRECTOR_COMPANY_TYPES,
+    DIRECTOR_ELIGIBLE_CLIENT_TYPES,
+    DirectorMapping,
+)
 
 REMARKS_WIDGET = forms.Textarea(
     attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
 )
+
+
+class ExpenseCategoryForm(forms.ModelForm):
+    class Meta:
+        model = ExpenseCategory
+        fields = ["name", "is_active"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Category name"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 
 class ClientGroupForm(forms.ModelForm):
@@ -333,3 +355,178 @@ DirectorMappingRowFormSet = formset_factory(
     min_num=0,
     can_delete=False,
 )
+
+
+class ClientNamePanChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj: Client) -> str:
+        name = (obj.client_name or "").strip()
+        pan = (obj.pan or "").strip().upper()
+        if pan:
+            return f"{name} — {pan}"
+        return name
+
+
+class ClientPortalCredentialForm(forms.ModelForm):
+    client_search = forms.CharField(
+        required=False,
+        label="Client name",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "portalClientSearch",
+                "list": "portalClientSuggestions",
+                "placeholder": "Type client name or PAN…",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
+    class Meta:
+        model = ClientPortalCredential
+        fields = ["client", "portal", "portal_username", "portal_password"]
+        widgets = {
+            "portal": forms.Select(attrs={"class": "form-select", "id": "id_portal"}),
+            "portal_username": forms.TextInput(attrs={"class": "form-control"}),
+            "portal_password": forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from core.branch_access import approved_clients_for_user
+
+        qs = approved_clients_for_user(user).order_by("client_name") if user else Client.approved_objects().order_by("client_name")
+        self.fields["client"] = ClientNamePanChoiceField(
+            queryset=qs,
+            label="Client",
+            widget=forms.HiddenInput(attrs={"data-portal-client-hidden": "1"}),
+        )
+        self.fields["client"].required = True
+        self.fields["portal"].queryset = PortalName.objects.filter(is_active=True).order_by("name")
+        self.fields["portal"].label = "Portal name"
+        self.fields["portal"].required = True
+        self.fields["portal_username"].required = True
+        if self.instance and self.instance.pk:
+            self.fields["portal_password"].required = False
+            self.fields["portal_password"].help_text = "Leave blank to keep the current password."
+        else:
+            self.fields["portal_password"].required = True
+
+    def clean_portal_password(self):
+        value = (self.cleaned_data.get("portal_password") or "").strip()
+        if self.instance and self.instance.pk and not value:
+            return self.instance.portal_password
+        if not value:
+            raise ValidationError("Password is required.")
+        return value
+
+    def clean(self):
+        data = super().clean()
+        client = data.get("client")
+        search = (data.get("client_search") or "").strip()
+        if client is None and search:
+            self.add_error("client_search", "Select a client from the suggestions.")
+        return data
+
+
+def individual_clients_for_user(user):
+    from core.branch_access import approved_clients_for_user
+
+    return approved_clients_for_user(user).filter(client_type="Individual").order_by("client_name")
+
+
+class ClientDSCForm(forms.ModelForm):
+    client_search = forms.CharField(
+        required=False,
+        label="Client name",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "dscClientSearch",
+                "list": "dscClientSuggestions",
+                "placeholder": "Type client name or PAN…",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
+    class Meta:
+        model = ClientDSC
+        fields = ["client", "issue_date", "expiry_date", "expiry_notification", "dsc_password"]
+        widgets = {
+            "issue_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "expiry_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "expiry_notification": forms.RadioSelect(
+                choices=[(True, "Yes"), (False, "No")],
+                attrs={"class": "form-check-input"},
+            ),
+            "dsc_password": forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = individual_clients_for_user(user) if user else Client.approved_objects().filter(client_type="Individual")
+        self.fields["client"] = ClientNamePanChoiceField(
+            queryset=qs,
+            label="Client",
+            widget=forms.HiddenInput(attrs={"data-dsc-client-hidden": "1"}),
+        )
+        self.fields["client"].required = True
+        self.fields["issue_date"].required = True
+        self.fields["expiry_date"].required = True
+        self.fields["expiry_notification"].label = "Expiry notification"
+        self.fields["expiry_notification"].required = True
+        self.fields["expiry_notification"].help_text = (
+            "If Yes, reminders are sent from 30 days before expiry every 7 days "
+            "(for this client's latest DSC only). Stops when set to No or a newer DSC is added."
+        )
+        if self.instance and self.instance.pk:
+            self.fields["dsc_password"].required = False
+            self.fields["dsc_password"].help_text = "Leave blank to keep the current password."
+        else:
+            self.fields["dsc_password"].required = True
+
+    def clean_client(self):
+        client = self.cleaned_data.get("client")
+        if client and client.client_type != "Individual":
+            raise ValidationError("DSC can only be created for Individual clients.")
+        return client
+
+    def clean_dsc_password(self):
+        value = (self.cleaned_data.get("dsc_password") or "").strip()
+        if self.instance and self.instance.pk and not value:
+            return self.instance.dsc_password
+        if not value:
+            raise ValidationError("DSC password is required.")
+        return value
+
+    def clean(self):
+        data = super().clean()
+        client = data.get("client")
+        search = (data.get("client_search") or "").strip()
+        if client is None and search:
+            self.add_error("client_search", "Select a client from the suggestions (Individual only).")
+        issue = data.get("issue_date")
+        expiry = data.get("expiry_date")
+        if issue and expiry and expiry < issue:
+            self.add_error("expiry_date", "Expiry date must be on or after issue date.")
+        return data
+
+
+class DSCInOutForm(forms.ModelForm):
+    """Record handover: out date and remarks (in date is set when New DSC is created)."""
+
+    class Meta:
+        model = DSCInOut
+        fields = ["out_date", "remarks"]
+        widgets = {
+            "out_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "remarks": REMARKS_WIDGET,
+        }
+
+    def clean(self):
+        data = super().clean()
+        out_d = data.get("out_date")
+        if self.instance and self.instance.pk and self.instance.in_date and out_d and out_d < self.instance.in_date:
+            self.add_error("out_date", "Out date cannot be before in date.")
+        return data
+

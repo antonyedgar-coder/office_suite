@@ -4,7 +4,7 @@
 
 {% block content %}
   {% if mode == "create" %}
-    {% include "includes/page_header.html" with title="New receipt" subtitle="Record an amount received from a client." %}
+    {% include "includes/page_header.html" with title="New receipt" subtitle="Record fees and/or expenses received from a client." %}
   {% else %}
     {% include "includes/page_header.html" with title="Edit receipt" subtitle="Update receipt details for this client." %}
   {% endif %}
@@ -15,10 +15,16 @@
       <div class="row g-3">
         {% include "mis/includes/client_autocomplete_fields.html" %}
 
-        <div class="col-12 col-md-4">
-          <label class="form-label required-field" for="{{ form.amount_received.id_for_label }}">Amount received</label>
-          {{ form.amount_received }}
-          {% if form.amount_received.errors %}<div class="text-danger small">{{ form.amount_received.errors }}</div>{% endif %}
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.fees_received.id_for_label }}">Fees received</label>
+          {{ form.fees_received }}
+          {% if form.fees_received.errors %}<div class="text-danger small">{{ form.fees_received.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.expenses_received.id_for_label }}">Expenses received</label>
+          {{ form.expenses_received }}
+          {% if form.expenses_received.errors %}<div class="text-danger small">{{ form.expenses_received.errors }}</div>{% endif %}
+          <div class="form-field-hint">At least one amount must be greater than zero.</div>
         </div>
 
         {% include "includes/activity_remarks_field.html" with field=form.remarks %}

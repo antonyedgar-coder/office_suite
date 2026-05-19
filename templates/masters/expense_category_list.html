@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Expense categories — CA Office Suite{% endblock %}
+{% block page_title %}Expense categories{% endblock %}
+
+{% block content %}
+  {% include "includes/page_header.html" with title="Expense categories" subtitle="Master list used on MIS Expenses Details." %}
+
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-8">
+        <label class="form-label" for="catQ">Search</label>
+        <input class="form-control" id="catQ" name="q" value="{{ q }}" placeholder="Category name" />
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Search</button>
+        <a class="btn btn-outline-secondary" href="{% url 'expense_category_list' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card data-table-card">
+    <div class="p-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+      <div class="fw-semibold">Categories</div>
+      {% if perms.masters.add_expensecategory %}
+        <a class="btn btn-sm btn-primary" href="{% url 'expense_category_create' %}">New category</a>
+      {% endif %}
+    </div>
+    <div class="data-table-wrap">
+      <table class="table table-sm table-striped data-table mb-0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Active</th>
+            <th style="width: 120px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.name }}</td>
+              <td>{% if row.is_active %}Yes{% else %}No{% endif %}</td>
+              <td class="text-end">
+                {% if perms.masters.change_expensecategory %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'expense_category_edit' row.pk %}">Edit</a>
+                {% endif %}
+                {% if perms.masters.delete_expensecategory %}
+                  <a class="btn btn-sm btn-outline-danger" href="{% url 'expense_category_delete' row.pk %}">Delete</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-secondary">No categories yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

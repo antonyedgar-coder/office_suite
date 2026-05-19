@@ -39,6 +39,17 @@
       </li>
       <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
         <div>
+          <div class="fw-medium">Portal password report</div>
+          <div class="text-secondary small">Portal logins with date, client, and portal filters; includes passwords.</div>
+        </div>
+        {% if perms.reports.view_portal_password_report %}
+          <a class="btn btn-sm btn-primary" href="{% url 'reports_portal_password' %}">Open</a>
+        {% else %}
+          <span class="text-secondary small">No access</span>
+        {% endif %}
+      </li>
+      <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
+        <div>
           <div class="fw-medium">DIR-3 KYC Report</div>
           <div class="text-secondary small">DIR-3 / DIR e-KYC filings with optional director and date filters.</div>
         </div>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Delete expense category — CA Office Suite{% endblock %}
+{% block page_title %}Delete expense category{% endblock %}
+
+{% block content %}
+  <div class="card p-3">
+    <p class="mb-2">Delete expense category <strong>{{ obj.name }}</strong>?</p>
+    <p class="text-secondary small mb-3">This cannot be undone. Categories in use on MIS expenses cannot be deleted.</p>
+    <form method="post" class="d-inline-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Delete</button>
+      <a class="btn btn-outline-secondary" href="{% url 'expense_category_list' %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

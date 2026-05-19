@@ -1,0 +1,58 @@
+<div class="card p-3 p-md-4 client-detail-card">
+  <section class="client-detail-section mb-4 pb-4 border-bottom">
+    <h2 class="client-detail-section-title h6 mb-3">
+      <i class="bi bi-person-vcard me-2" aria-hidden="true"></i>Identity &amp; classification
+    </h2>
+    <div class="row g-3">
+      {% include "masters/includes/client_detail_field.html" with icon="upc-scan" label="Client ID" value=client.client_id mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="tags" label="Client type" value=client.client_type %}
+      {% include "masters/includes/client_detail_field.html" with icon="geo-alt" label="Branch" value=client.branch %}
+      {% include "masters/includes/client_detail_field.html" with icon="building" label="Client name" value=client.client_name %}
+      {% include "masters/includes/client_detail_field.html" with icon="collection" label="Group" value=group_display %}
+      {% include "masters/includes/client_detail_field.html" with icon="folder2" label="File no" value=client.file_no mono=True %}
+    </div>
+  </section>
+
+  <section class="client-detail-section mb-4 pb-4 border-bottom">
+    <h2 class="client-detail-section-title h6 mb-3">
+      <i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Tax &amp; registration IDs
+    </h2>
+    <div class="row g-3">
+      {% include "masters/includes/client_detail_field.html" with icon="credit-card-2" label="PAN" value=client.pan mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="passport" label="Passport no" value=client.passport_no mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="fingerprint" label="Aadhaar no" value=client.aadhaar_no mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="receipt" label="GSTIN" value=client.gstin mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="calendar-event" label="DOB" value=dob_display %}
+      {% include "masters/includes/client_detail_field.html" with icon="briefcase" label="LLPIN" value=client.llpin mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="bank" label="CIN" value=client.cin mono=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="person-badge" label="Is director" value=client.is_director|yesno:"Yes,No" %}
+      {% include "masters/includes/client_detail_field.html" with icon="hash" label="DIN" value=client.din mono=True %}
+    </div>
+  </section>
+
+  <section class="client-detail-section mb-4 pb-4 border-bottom">
+    <h2 class="client-detail-section-title h6 mb-3">
+      <i class="bi bi-telephone me-2" aria-hidden="true"></i>Contact
+    </h2>
+    <div class="row g-3">
+      {% include "masters/includes/client_detail_field.html" with icon="geo-alt-fill" label="Address" value=client.address|default:"—"|linebreaksbr full_width=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="person-lines-fill" label="Contact person" value=client.contact_person %}
+      {% include "masters/includes/client_detail_field.html" with icon="phone" label="Mobile" value=client.mobile %}
+      {% include "masters/includes/client_detail_field.html" with icon="envelope" label="Email" value=client.email %}
+    </div>
+  </section>
+
+  <section class="client-detail-section mb-0">
+    <h2 class="client-detail-section-title h6 mb-3">
+      <i class="bi bi-journal-text me-2" aria-hidden="true"></i>Notes &amp; audit
+    </h2>
+    <div class="row g-3">
+      {% include "masters/includes/client_detail_field.html" with icon="chat-left-text" label="Remarks" value=client.remarks|default:"—"|linebreaksbr full_width=True %}
+      {% include "masters/includes/client_detail_field.html" with icon="clock-history" label="Created" value=created_display %}
+      {% if client.approved_at %}
+        {% include "masters/includes/client_detail_field.html" with icon="patch-check" label="Approved" value=approved_display %}
+      {% endif %}
+      {% include "masters/includes/client_detail_field.html" with icon="arrow-repeat" label="Last updated" value=client.updated_at|date:"d-m-Y H:i" %}
+    </div>
+  </section>
+</div>

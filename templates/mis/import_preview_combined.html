@@ -25,7 +25,8 @@
             <th>Date</th>
             <th class="text-end">Fees</th>
             <th class="text-end">GST</th>
-            <th class="text-end">Receipts</th>
+            <th class="text-end">Fees received</th>
+            <th class="text-end">Expenses received</th>
             <th class="text-end">Expenses</th>
             <th>Errors</th>
           </tr>
@@ -39,7 +40,8 @@
               <td>{{ r.data.date }}</td>
               <td class="text-end mono">{{ r.data.fees_amount }}</td>
               <td class="text-end mono">{{ r.data.gst_amount }}</td>
-              <td class="text-end mono">{{ r.data.receipts_amount }}</td>
+              <td class="text-end mono">{{ r.data.fees_received_amount }}</td>
+              <td class="text-end mono">{{ r.data.expenses_received_amount }}</td>
               <td class="text-end mono">{{ r.data.expenses_amount }}</td>
               <td class="text-danger small">{% if r.errors %}{{ r.errors|join:", " }}{% endif %}</td>
             </tr>

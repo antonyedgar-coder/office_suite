@@ -204,6 +204,107 @@ body {
   --bs-btn-active-border-color: var(--app-primary-hover);
 }
 
+/* Client detail hub */
+.client-detail-tabs .nav-link {
+  font-weight: 600;
+  color: #475569;
+}
+
+.client-detail-tabs .nav-link.active {
+  color: var(--app-primary-hover);
+}
+
+.client-detail-card {
+  background: #fff;
+}
+
+.client-detail-section-title {
+  color: var(--app-section-heading-color);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+
+.client-detail-section-title .bi {
+  color: var(--app-primary);
+  font-size: 1.1rem;
+}
+
+.client-detail-heading {
+  color: var(--app-section-heading-color);
+  font-weight: 700;
+}
+
+.client-detail-heading-pan {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.client-detail-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  min-height: 2.75rem;
+}
+
+.client-detail-field--stacked {
+  align-items: flex-start;
+  min-height: auto;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.client-detail-field--stacked .client-detail-field-body {
+  align-items: start;
+}
+
+.client-detail-field-icon {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background: #e0f2fe;
+  color: var(--app-primary-hover);
+  font-size: 1rem;
+}
+
+.client-detail-field-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 42%) 1fr;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+}
+
+.client-detail-field-label {
+  color: var(--app-label-color);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  margin-bottom: 0;
+}
+
+.client-detail-field-value {
+  color: #334155;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  word-break: break-word;
+  text-align: left;
+}
+
+.client-detail-field-value.mono {
+  letter-spacing: 0.02em;
+}
+
 /* Page header */
 .page-header {
   margin-bottom: 1rem;

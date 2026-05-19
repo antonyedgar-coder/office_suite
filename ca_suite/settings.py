@@ -69,6 +69,7 @@ TEMPLATES = [
                 "core.context_processors.enable_task_module",
                 "core.context_processors.topbar_user",
                 "core.context_processors.task_nav_counts",
+                "core.context_processors.dsc_nav_counts",
             ],
         },
     },

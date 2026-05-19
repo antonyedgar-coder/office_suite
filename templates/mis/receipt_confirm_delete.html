@@ -6,7 +6,7 @@
   <div class="card p-3">
     <p class="mb-2">
       Delete receipt for <strong>{{ obj.client.client_name }}</strong> on <strong>{{ obj.date }}</strong>
-      ({{ obj.amount_received }})?
+      (fees {{ obj.fees_received }}, expenses received {{ obj.expenses_received }})?
     </p>
     <p class="text-secondary small mb-3">This cannot be undone.</p>
     <form method="post" class="d-inline-flex gap-2 flex-wrap">

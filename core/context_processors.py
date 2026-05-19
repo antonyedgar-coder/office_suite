@@ -24,6 +24,28 @@ def topbar_user(request):
     }
 
 
+def dsc_nav_counts(request):
+    if not getattr(request, "user", None) or not request.user.is_authenticated:
+        return {}
+    emp = getattr(request.user, "employee_profile", None)
+    may_see = (
+        request.user.is_superuser
+        or request.user.has_perm("masters.view_clientdsc")
+        or (emp and emp.receive_dsc_expiry_notifications)
+    )
+    if not may_see:
+        return {}
+    from masters.models import DSCNotification
+
+    return {
+        "may_view_dsc_alerts": True,
+        "dsc_nav_notification_count": DSCNotification.objects.filter(
+            user=request.user,
+            is_read=False,
+        ).count(),
+    }
+
+
 def task_nav_counts(request):
     if not task_module_enabled() or not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}

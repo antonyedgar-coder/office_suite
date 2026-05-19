@@ -169,7 +169,7 @@
               <tr>
                 {% for spec in mis_multi_column_specs %}
                   <th class="text-end small text-secondary {% if spec.group_start %}border-start{% endif %}">
-                    {% if spec.dk == "FEES" %}Fees{% elif spec.dk == "GST" %}GST{% elif spec.dk == "RECEIPTS" %}Receipts{% elif spec.dk == "EXPENSES" %}Expenses{% elif spec.dk == "TENDER_FEES" %}Tender fees{% elif spec.dk == "TENDER_DEPOSIT" %}Tender deposit{% else %}{{ spec.dk }}{% endif %}
+                    {% if spec.dk == "FEES" %}Fees amount{% elif spec.dk == "GST" %}GST amount{% elif spec.dk == "FEES_RECEIVED" %}Fees received{% elif spec.dk == "EXPENSES_RECEIVED" %}Expenses received{% elif spec.dk == "EXPENSES" %}Expenses{% elif spec.dk == "TENDER_FEES" %}Tender fees{% elif spec.dk == "TENDER_DEPOSIT" %}Tender deposit{% else %}{{ spec.dk }}{% endif %}
                   </th>
                 {% endfor %}
               </tr>
@@ -200,9 +200,10 @@
             <thead>
               <tr>
                 <th>Month</th>
-                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
-                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees amount</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST amount</th>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<th class="text-end">Fees received</th>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<th class="text-end">Expenses received</th>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<th class="text-end">Tender fees</th>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<th class="text-end">Tender deposit</th>{% endif %}
@@ -214,7 +215,8 @@
                   <td>{{ r.month_label }}</td>
                   {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
                   {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
-                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.fees_received }}</td>{% endif %}
+                  {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses_received }}</td>{% endif %}
                   {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
                   {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_fees }}</td>{% endif %}
                   {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_deposit }}</td>{% endif %}
@@ -224,7 +226,8 @@
                 <td class="text-end">Total</td>
                 {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
                 {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees_received }}</td>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses_received }}</td>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_fees }}</td>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_deposit }}</td>{% endif %}
@@ -235,40 +238,62 @@
             <p class="text-secondary mb-0">No non-zero values for the selected FY and filters.</p>
           {% endif %}
         {% elif report_view == "type_wise" %}
-          <p class="small text-secondary mb-2">Only client types and amount columns with non-zero values are shown.</p>
+          {% if mis_expenses_detail_mode %}
+            <p class="small text-secondary mb-2">Totals by expense category for the selected period.</p>
+          {% else %}
+            <p class="small text-secondary mb-2">Only client types and amount columns with non-zero values are shown.</p>
+          {% endif %}
           {% if rows %}
           <table class="table table-sm align-middle mb-0">
             <thead>
               <tr>
+                {% if mis_expenses_detail_mode %}
+                  <th>Expense category</th>
+                  <th class="text-end">Amount</th>
+                {% else %}
                 <th>Type of client</th>
-                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
-                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees amount</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST amount</th>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<th class="text-end">Fees received</th>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<th class="text-end">Expenses received</th>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<th class="text-end">Tender fees</th>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<th class="text-end">Tender deposit</th>{% endif %}
+                {% endif %}
               </tr>
             </thead>
             <tbody>
               {% for r in rows %}
                 <tr>
+                  {% if mis_expenses_detail_mode %}
+                    <td>{{ r.expense_category }}</td>
+                    <td class="text-end mono">{{ r.expenses }}</td>
+                  {% else %}
                   <td>{{ r.client_type }}</td>
                   {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
                   {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
-                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.fees_received }}</td>{% endif %}
+                  {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses_received }}</td>{% endif %}
                   {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
                   {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_fees }}</td>{% endif %}
                   {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_deposit }}</td>{% endif %}
+                  {% endif %}
                 </tr>
               {% endfor %}
               <tr class="table-light fw-semibold">
+                {% if mis_expenses_detail_mode %}
+                  <td class="text-end">Total</td>
+                  <td class="text-end mono">{{ totals.expenses }}</td>
+                {% else %}
                 <td class="text-end">Total</td>
                 {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
                 {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees_received }}</td>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses_received }}</td>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_fees }}</td>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_deposit }}</td>{% endif %}
+                {% endif %}
               </tr>
             </tbody>
           </table>
@@ -276,7 +301,11 @@
             <p class="text-secondary mb-0">No non-zero values for the selected filters.</p>
           {% endif %}
         {% elif report_view == "client_wise" %}
-          <p class="small text-secondary mb-2">Only clients and amount columns with non-zero values are shown.</p>
+          {% if mis_expenses_detail_mode %}
+            <p class="small text-secondary mb-2">Expense totals by client and category for the selected period.</p>
+          {% else %}
+            <p class="small text-secondary mb-2">Only clients and amount columns with non-zero values are shown.</p>
+          {% endif %}
           {% if rows %}
           <table class="table table-sm align-middle mb-0">
             <thead>
@@ -284,11 +313,16 @@
                 <th>Client ID</th>
                 <th>Client name</th>
                 <th>PAN</th>
-                <th>Type</th>
+                {% if mis_expenses_detail_mode %}
+                  <th>Expense category</th>
+                {% else %}
+                  <th>Type</th>
+                {% endif %}
                 <th>Branch</th>
-                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
-                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees amount</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST amount</th>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<th class="text-end">Fees received</th>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<th class="text-end">Expenses received</th>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<th class="text-end">Tender fees</th>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<th class="text-end">Tender deposit</th>{% endif %}
@@ -300,11 +334,16 @@
                   <td class="mono">{{ r.client_id }}</td>
                   <td>{{ r.client_name }}</td>
                   <td class="mono">{{ r.pan }}</td>
-                  <td>{{ r.client_type }}</td>
+                  {% if mis_expenses_detail_mode %}
+                    <td>{{ r.expense_category }}</td>
+                  {% else %}
+                    <td>{{ r.client_type }}</td>
+                  {% endif %}
                   <td>{{ r.branch }}</td>
                   {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
                   {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
-                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.fees_received }}</td>{% endif %}
+                  {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses_received }}</td>{% endif %}
                   {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
                   {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_fees }}</td>{% endif %}
                   {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_deposit }}</td>{% endif %}
@@ -314,7 +353,8 @@
                 <td colspan="5" class="text-end">Total</td>
                 {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
                 {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees_received }}</td>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses_received }}</td>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_fees }}</td>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_deposit }}</td>{% endif %}
@@ -325,7 +365,11 @@
             <p class="text-secondary mb-0">No non-zero values for the selected filters.</p>
           {% endif %}
         {% else %}
-          <p class="small text-secondary mb-2">Only transactions and amount columns with non-zero values are shown.</p>
+          {% if mis_expenses_detail_mode %}
+            <p class="small text-secondary mb-2">Each row is one MIS expense entry for the selected period.</p>
+          {% else %}
+            <p class="small text-secondary mb-2">Only transactions and amount columns with non-zero values are shown.</p>
+          {% endif %}
           {% if rows %}
           <table class="table table-sm align-middle mb-0">
             <thead>
@@ -334,14 +378,23 @@
                 <th>Client ID</th>
                 <th>Client name</th>
                 <th>PAN</th>
+                {% if mis_expenses_detail_mode %}
+                  <th>Branch</th>
+                  <th>Expense category</th>
+                  <th>Payment mode</th>
+                  <th class="text-end">Amount</th>
+                  <th>Remarks</th>
+                {% else %}
                 <th>Type</th>
                 <th>Branch</th>
-                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees</th>{% endif %}
-                {% if "GST" in mis_metric_columns %}<th class="text-end">GST</th>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<th class="text-end">Receipts</th>{% endif %}
+                {% if "FEES" in mis_metric_columns %}<th class="text-end">Fees amount</th>{% endif %}
+                {% if "GST" in mis_metric_columns %}<th class="text-end">GST amount</th>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<th class="text-end">Fees received</th>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<th class="text-end">Expenses received</th>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<th class="text-end">Expenses</th>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<th class="text-end">Tender fees</th>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<th class="text-end">Tender deposit</th>{% endif %}
+                {% endif %}
               </tr>
             </thead>
             <tbody>
@@ -351,24 +404,40 @@
                   <td class="mono">{{ r.client_id }}</td>
                   <td>{{ r.client_name }}</td>
                   <td class="mono">{{ r.pan }}</td>
+                  {% if mis_expenses_detail_mode %}
+                    <td>{{ r.branch }}</td>
+                    <td>{{ r.expense_category }}</td>
+                    <td>{{ r.payment_mode }}</td>
+                    <td class="text-end mono fw-semibold">{{ r.expenses }}</td>
+                    <td class="text-secondary small">{{ r.remarks }}</td>
+                  {% else %}
                   <td>{{ r.client_type }}</td>
                   <td>{{ r.branch }}</td>
                   {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.fees }}</td>{% endif %}
                   {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ r.gst }}</td>{% endif %}
-                  {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ r.receipts }}</td>{% endif %}
+                  {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.fees_received }}</td>{% endif %}
+                  {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses_received }}</td>{% endif %}
                   {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ r.expenses }}</td>{% endif %}
                   {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_fees }}</td>{% endif %}
                   {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ r.tender_deposit }}</td>{% endif %}
+                  {% endif %}
                 </tr>
               {% endfor %}
               <tr class="table-light fw-semibold">
+                {% if mis_expenses_detail_mode %}
+                  <td colspan="7" class="text-end">Total</td>
+                  <td class="text-end mono">{{ totals.expenses }}</td>
+                  <td></td>
+                {% else %}
                 <td colspan="6" class="text-end">Total</td>
                 {% if "FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees }}</td>{% endif %}
                 {% if "GST" in mis_metric_columns %}<td class="text-end mono">{{ totals.gst }}</td>{% endif %}
-                {% if "RECEIPTS" in mis_metric_columns %}<td class="text-end mono">{{ totals.receipts }}</td>{% endif %}
+                {% if "FEES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.fees_received }}</td>{% endif %}
+                {% if "EXPENSES_RECEIVED" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses_received }}</td>{% endif %}
                 {% if "EXPENSES" in mis_metric_columns %}<td class="text-end mono">{{ totals.expenses }}</td>{% endif %}
                 {% if "TENDER_FEES" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_fees }}</td>{% endif %}
                 {% if "TENDER_DEPOSIT" in mis_metric_columns %}<td class="text-end mono">{{ totals.tender_deposit }}</td>{% endif %}
+                {% endif %}
               </tr>
             </tbody>
           </table>

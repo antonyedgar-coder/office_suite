@@ -11,7 +11,7 @@ from core.branch_access import approved_clients_for_user, filter_mis_qs
 from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
 from core.decorators import require_perm
 from masters.client_activity import log_client_activity
-from masters.models import Client, ClientActivityLog
+from masters.models import Client, ClientActivityLog, ExpenseCategory
 
 from .forms import ExpenseDetailForm, FeesDetailForm, ReceiptForm, TenderDetailForm
 from .models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
@@ -24,6 +24,13 @@ from .xlsx_import import (
     parse_receipts_csv,
     parse_receipts_xlsx,
 )
+
+
+def _default_expense_category() -> ExpenseCategory:
+    cat = ExpenseCategory.objects.filter(is_active=True).order_by("name").first()
+    if not cat:
+        cat, _ = ExpenseCategory.objects.get_or_create(name="General", defaults={"is_active": True})
+    return cat
 
 
 def _client_search_q(request):
@@ -313,7 +320,7 @@ def receipt_delete(request, pk: int):
 @require_perm("mis.view_expensedetail")
 def expense_list(request):
     q = _client_search_q(request)
-    qs = filter_mis_qs(ExpenseDetail.objects.select_related("client").all(), request.user)
+    qs = filter_mis_qs(ExpenseDetail.objects.select_related("client", "category").all(), request.user)
     if q:
         qs = qs.filter(
             Q(client__client_name__icontains=q)
@@ -432,7 +439,16 @@ def _session_get_file(request, key: str) -> bytes | None:
 
 @require_perm("mis.add_feesdetail")
 def fees_import_template(request):
-    header = ["DATE", "CLIENT_ID", "CLIENT_NAME", "FEES_AMOUNT", "GST_AMOUNT", "RECEIPTS_AMOUNT", "EXPENSES_AMOUNT"]
+    header = [
+        "DATE",
+        "CLIENT_ID",
+        "CLIENT_NAME",
+        "FEES_AMOUNT",
+        "GST_AMOUNT",
+        "FEES_RECEIVED_AMOUNT",
+        "EXPENSES_RECEIVED_AMOUNT",
+        "EXPENSES_AMOUNT",
+    ]
     sample = [["2026-05-10", "A00001", "ABC PRIVATE LIMITED", "10000", "1800", "", "500"]]
     return _xlsx_template_response("mis-fees-template.csv", header, sample)
 
@@ -455,7 +471,16 @@ def _client_by_id(client_id: str, user=None):
 
 @require_perm("mis.add_feesdetail")
 def mis_bulk_import_template(request):
-    header = ["DATE", "CLIENT_ID", "CLIENT_NAME", "FEES_AMOUNT", "GST_AMOUNT", "RECEIPTS_AMOUNT", "EXPENSES_AMOUNT"]
+    header = [
+        "DATE",
+        "CLIENT_ID",
+        "CLIENT_NAME",
+        "FEES_AMOUNT",
+        "GST_AMOUNT",
+        "FEES_RECEIVED_AMOUNT",
+        "EXPENSES_RECEIVED_AMOUNT",
+        "EXPENSES_AMOUNT",
+    ]
     sample = [
         ["2026-05-10", "A00001", "ABC PRIVATE LIMITED", "10000", "1800", "11800", "500"],
         ["2026-05-11", "B00002", "XYZ LLP", "5000", "900", "", ""],
@@ -495,7 +520,8 @@ def mis_bulk_import(request):
 
                 fees = r.data.get("fees_amount")
                 gst = r.data.get("gst_amount")
-                receipts = r.data.get("receipts_amount")
+                fees_received = r.data.get("fees_received_amount")
+                expenses_received = r.data.get("expenses_received_amount")
                 expenses = r.data.get("expenses_amount")
 
                 if request.user.is_superuser or request.user.has_perm("mis.add_feesdetail"):
@@ -508,12 +534,23 @@ def mis_bulk_import(request):
                         )
 
                 if request.user.is_superuser or request.user.has_perm("mis.add_receipt"):
-                    if receipts is not None:
-                        Receipt.objects.create(date=r.data["date"], client=c, amount_received=receipts)
+                    if fees_received is not None or expenses_received is not None:
+                        Receipt.objects.create(
+                            date=r.data["date"],
+                            client=c,
+                            fees_received=fees_received or Decimal("0.00"),
+                            expenses_received=expenses_received or Decimal("0.00"),
+                        )
 
                 if request.user.is_superuser or request.user.has_perm("mis.add_expensedetail"):
                     if expenses is not None:
-                        ExpenseDetail.objects.create(date=r.data["date"], client=c, expenses_paid=expenses, notes="")
+                        ExpenseDetail.objects.create(
+                            date=r.data["date"],
+                            client=c,
+                            category=_default_expense_category(),
+                            payment_mode=ExpenseDetail.PaymentMode.CASH,
+                            expenses_paid=expenses,
+                        )
 
         request.session.pop("mis_bulk_import_file", None)
         messages.success(request, f"Imported {len(rows)} row(s) into MIS.")
@@ -636,7 +673,12 @@ def receipts_import(request):
                     raise ValueError(f"Client not found for Client ID {r.data['client_id']}")
                 if (c.client_name or "").strip().upper() != (r.data.get("client_name") or "").strip().upper():
                     raise ValueError(f"Client name mismatch for {r.data['client_id']}")
-                Receipt.objects.create(date=r.data["date"], client=c, amount_received=r.data["amount_received"])
+                Receipt.objects.create(
+                    date=r.data["date"],
+                    client=c,
+                    fees_received=r.data["fees_received"],
+                    expenses_received=r.data["expenses_received"],
+                )
         request.session.pop("mis_receipts_import_xlsx", None)
         messages.success(request, f"Imported {len(rows)} receipt row(s).")
         return redirect("mis_receipt_list")
@@ -699,6 +741,8 @@ def expenses_import(request):
                 ExpenseDetail.objects.create(
                     date=r.data["date"],
                     client=c,
+                    category=_default_expense_category(),
+                    payment_mode=ExpenseDetail.PaymentMode.CASH,
                     expenses_paid=r.data["expenses_paid"],
                     notes=(
                         f"Fees Amount: {r.data.get('fees_amount')} | "

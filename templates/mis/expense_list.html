@@ -24,9 +24,11 @@
           <tr>
             <th>Date</th>
             <th>Client</th>
-            <th>PAN</th>
-            <th class="text-end">Expenses paid</th>
-            <th>Notes</th>
+            <th>Branch</th>
+            <th>Category</th>
+            <th>Payment mode</th>
+            <th class="text-end">Amount</th>
+            <th>Remarks</th>
             <th></th>
           </tr>
         </thead>
@@ -35,9 +37,11 @@
             <tr>
               <td>{{ r.date }}</td>
               <td>{{ r.client.client_name }}</td>
-              <td class="mono">{{ r.pan_no }}</td>
+              <td>{{ r.client.branch }}</td>
+              <td>{{ r.category.name }}</td>
+              <td>{{ r.get_payment_mode_display }}</td>
               <td class="text-end mono fw-semibold">{{ r.expenses_paid }}</td>
-              <td class="text-secondary small">{{ r.notes|default:"" }}</td>
+              <td class="text-secondary small">{{ r.remarks|default:"" }}</td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
                   {% if perms.mis.change_expensedetail %}
@@ -50,7 +54,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="text-secondary">No expenses.</td></tr>
+            <tr><td colspan="8" class="text-secondary">No expenses.</td></tr>
           {% endfor %}
         </tbody>
       </table>

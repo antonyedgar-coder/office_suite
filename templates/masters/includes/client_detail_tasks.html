@@ -1,0 +1,71 @@
+<div class="card p-3 mb-3 client-detail-task-filters">
+  <form method="get" class="row g-2 align-items-end">
+    <input type="hidden" name="tab" value="tasks" />
+    <div class="col-12 col-md-6 col-lg-3">
+      <label class="form-label small text-secondary mb-0">Task group</label>
+      <select name="group" class="form-select form-select-sm">
+        <option value="">All groups</option>
+        {% for g in task_groups %}
+          <option value="{{ g.pk }}" {% if task_filters.group_id == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-6 col-lg-3">
+      <label class="form-label small text-secondary mb-0">Task</label>
+      <select name="master" class="form-select form-select-sm">
+        <option value="">All tasks</option>
+        {% for m in task_masters %}
+          <option value="{{ m.pk }}" {% if task_filters.master_id == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.task_group.name }} — {{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-6 col-lg-3">
+      <label class="form-label small text-secondary mb-0">User</label>
+      <select name="assignee" class="form-select form-select-sm">
+        <option value="">All users</option>
+        {% for u in staff_users %}
+          <option value="{{ u.pk }}" {% if task_filters.assignee_id == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.employee_profile.full_name|default:u.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% include "tasks/includes/task_date_range_field.html" with prefix="due" label="Due date" preset=task_filters.due_preset from_name="due_from" to_name="due_to" from_value=task_filters.due_from to_value=task_filters.due_to display_id="clientTaskDueRangeDisplay" %}
+    <div class="col-12 col-md-auto d-flex flex-wrap gap-2 align-items-center">
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Apply filters</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'client_detail' client.client_id %}?tab=tasks">Clear</a>
+      {% if perms.tasks.add_task %}
+        <a class="btn btn-primary btn-sm" href="{% url 'task_create' %}">New task</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8125rem;">
+      <thead class="table-light">
+        <tr>
+          <th>Created</th>
+          <th>Task</th>
+          <th>Group</th>
+          <th>Status</th>
+          <th>Due</th>
+          <th>Users</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in task_rows %}
+          <tr>
+            <td class="text-nowrap">{{ row.created_date|default:"—" }}</td>
+            <td><a href="{% url 'task_detail' row.task.pk %}">{{ row.task.title }}</a></td>
+            <td class="text-nowrap">{{ row.task.task_master.task_group.name }}</td>
+            <td>{% include "includes/status_badge_task.html" with status=row.task.status label=row.task.get_status_display %}</td>
+            <td class="text-nowrap">{{ row.task.due_date|date:"d-m-Y" }}</td>
+            <td class="small">{{ row.assignee_names|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-secondary">No tasks match your filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

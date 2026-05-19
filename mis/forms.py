@@ -3,12 +3,9 @@ from decimal import Decimal
 
 
 from django import forms
-
-
-
 from core.branch_access import approved_clients_for_user, client_allowed_for_user
 
-from masters.models import Client
+from masters.models import Client, ExpenseCategory
 
 
 
@@ -184,25 +181,32 @@ class ReceiptForm(_ClientAutocompleteMixin, forms.ModelForm):
 
     client = _client_field()
 
-
-
     class Meta:
-
         model = Receipt
-
-        fields = ["date", "client", "amount_received", "remarks"]
-
+        fields = ["date", "client", "fees_received", "expenses_received", "remarks"]
         widgets = {
-
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-
-            "amount_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-
+            "fees_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "expenses_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "remarks": forms.Textarea(
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
             ),
-
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["fees_received"].label = "Fees received"
+        self.fields["expenses_received"].label = "Expenses received"
+
+    def clean(self):
+        data = super().clean()
+        fees = data.get("fees_received") or Decimal("0")
+        expenses = data.get("expenses_received") or Decimal("0")
+        if fees <= 0 and expenses <= 0:
+            raise forms.ValidationError(
+                "Enter Fees received and/or Expenses received (at least one must be greater than zero)."
+            )
+        return data
 
 
 
@@ -212,25 +216,33 @@ class ExpenseDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
     client = _client_field()
 
-
-
     class Meta:
-
         model = ExpenseDetail
-
-        fields = ["date", "client", "expenses_paid", "remarks"]
-
+        fields = ["date", "client", "category", "payment_mode", "expenses_paid", "remarks"]
         widgets = {
-
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-
+            "category": forms.Select(attrs={"class": "form-select"}),
+            "payment_mode": forms.Select(attrs={"class": "form-select"}),
             "expenses_paid": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-
             "remarks": forms.Textarea(
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
             ),
-
         }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
+        self.fields["category"].queryset = ExpenseCategory.objects.filter(is_active=True).order_by("name")
+        self.fields["category"].empty_label = "Select category…"
+        self.fields["category"].label = "Category"
+        self.fields["payment_mode"].label = "Payment mode"
+        self.fields["expenses_paid"].label = "Amount"
+
+    def clean(self):
+        data = super().clean()
+        amt = data.get("expenses_paid")
+        if amt is not None and amt <= Decimal("0"):
+            self.add_error("expenses_paid", "Amount must be greater than zero.")
+        return data
 
 
 class TenderDetailForm(_ClientAutocompleteMixin, forms.ModelForm):

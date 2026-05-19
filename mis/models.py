@@ -52,16 +52,23 @@ class FeesDetail(models.Model):
 
 class Receipt(models.Model):
     """
-    MIS capture of amount received from clients.
+    MIS capture of fees and expenses received from clients.
     """
 
     date = models.DateField()
     client = models.ForeignKey("masters.Client", on_delete=models.PROTECT, related_name="mis_receipts")
     pan_no = models.CharField(max_length=10, blank=True)
-    amount_received = models.DecimalField(
+    fees_received = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+    expenses_received = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
     )
     remarks = models.CharField(max_length=500, blank=True)
 
@@ -77,7 +84,7 @@ class Receipt(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"Receipt {self.client_id} {self.date} ({self.amount_received})"
+        return f"Receipt {self.client_id} {self.date} (fees {self.fees_received} / exp recv {self.expenses_received})"
 
 
 class ExpenseDetail(models.Model):
@@ -85,13 +92,32 @@ class ExpenseDetail(models.Model):
     MIS capture of expenses paid for/against a client.
     """
 
+    class PaymentMode(models.TextChoices):
+        CASH = "CASH", "Cash"
+        BANK_TRANSFER = "BANK_TRANSFER", "Bank Transfer"
+        UPI = "UPI", "UPI"
+        CHEQUE = "CHEQUE", "Cheque"
+        PAYMENT_GATEWAY = "PAYMENT_GATEWAY", "Payment Gateway"
+        OTHERS = "OTHERS", "Others"
+
     date = models.DateField()
     client = models.ForeignKey("masters.Client", on_delete=models.PROTECT, related_name="mis_expenses")
     pan_no = models.CharField(max_length=10, blank=True)
+    category = models.ForeignKey(
+        "masters.ExpenseCategory",
+        on_delete=models.PROTECT,
+        related_name="mis_expenses",
+    )
+    payment_mode = models.CharField(
+        max_length=20,
+        choices=PaymentMode.choices,
+        default=PaymentMode.CASH,
+    )
     expenses_paid = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
     )
     notes = models.CharField(max_length=300, blank=True)
     remarks = models.CharField(max_length=500, blank=True)
@@ -108,7 +134,7 @@ class ExpenseDetail(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"Expense {self.client_id} {self.date} ({self.expenses_paid})"
+        return f"Expense {self.client_id} {self.date} ({self.category_id} / {self.get_payment_mode_display()})"
 
 
 class TenderDetail(models.Model):

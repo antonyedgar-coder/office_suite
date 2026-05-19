@@ -40,7 +40,9 @@
           {% for c in clients %}
             <tr>
               <td class="mono">{{ c.client_id }}</td>
-              <td>{{ c.client_name }}</td>
+              <td>
+                <a href="{% url 'client_detail' c.client_id %}" class="fw-semibold text-decoration-none">{{ c.client_name }}</a>
+              </td>
               <td class="small">{% if c.client_group %}{{ c.client_group.name }}{% else %}—{% endif %}</td>
               <td class="small mono">{{ c.file_no|default:"—" }}</td>
               <td><span class="badge text-bg-light">{{ c.client_type }}</span></td>

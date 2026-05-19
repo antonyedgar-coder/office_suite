@@ -5,8 +5,9 @@
 {% block content %}
   <div class="card p-3 mb-3">
     <p class="text-secondary small mb-0">
-      Records created or edited by users other than the superuser stay here until someone with approval permission accepts them.
-      After approval, they can be used in MIS, director mapping, and DIR-3 KYC.
+      Records created or edited by users other than the superuser stay here until someone with approval permission accepts or rejects them.
+      Approve to use in MIS, director mapping, and DIR-3 KYC. Reject removes the record from this queue (new clients are deleted).
+      The user who created a pending client cannot approve or reject it; another approver (or a superuser) must act.
     </p>
   </div>
 
@@ -52,10 +53,23 @@
                   {% if perms.masters.change_client %}
                     <a class="btn btn-sm btn-outline-primary" href="{% url 'client_edit' c.client_id %}">Review / edit</a>
                   {% endif %}
-                  <form method="post" action="{% url 'client_approve' c.client_id %}" class="d-inline">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
-                  </form>
+                  {% if user.is_superuser or not c.created_by_id or c.created_by_id != user.id %}
+                    <form method="post" action="{% url 'client_approve' c.client_id %}" class="d-inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                    </form>
+                    <form
+                      method="post"
+                      action="{% url 'client_reject' c.client_id %}"
+                      class="d-inline"
+                      onsubmit="return confirm('Reject and remove {{ c.client_id }} from the approval queue? This cannot be undone.');"
+                    >
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                    </form>
+                  {% else %}
+                    <span class="text-secondary small">Awaiting another approver</span>
+                  {% endif %}
                 </div>
               </td>
             </tr>

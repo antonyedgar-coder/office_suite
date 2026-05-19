@@ -104,7 +104,7 @@
             <tr>
               <td class="text-nowrap small">{{ row.created_at|date:"d M Y, H:i" }}</td>
               <td class="small">
-                <a href="{% url 'client_edit' row.client_id %}">{{ row.client_name }}</a>
+                <a href="{% url 'client_detail' row.client_id %}">{{ row.client_name }}</a>
                 {% if row.client_pan %}
                   <span class="text-secondary mono d-block">{{ row.client_pan }}</span>
                 {% endif %}

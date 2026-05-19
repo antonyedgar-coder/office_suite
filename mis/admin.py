@@ -13,7 +13,7 @@ class FeesDetailAdmin(admin.ModelAdmin):
 
 @admin.register(Receipt)
 class ReceiptAdmin(admin.ModelAdmin):
-    list_display = ("date", "client", "pan_no", "amount_received")
+    list_display = ("date", "client", "pan_no", "fees_received", "expenses_received")
     list_select_related = ("client",)
     search_fields = ("client__client_name", "client__client_id", "pan_no")
     list_filter = ("date",)
@@ -21,7 +21,7 @@ class ReceiptAdmin(admin.ModelAdmin):
 
 @admin.register(ExpenseDetail)
 class ExpenseDetailAdmin(admin.ModelAdmin):
-    list_display = ("date", "client", "pan_no", "expenses_paid", "notes")
+    list_display = ("date", "client", "pan_no", "category", "payment_mode", "expenses_paid")
     list_select_related = ("client",)
     search_fields = ("client__client_name", "client__client_id", "pan_no", "notes")
     list_filter = ("date",)

@@ -4,7 +4,13 @@ from django.utils import timezone
 from .models import (
     Client,
     ClientActivityLog,
+    ClientDSC,
     ClientGroup,
+    ClientPortalCredential,
+    DSCInOut,
+    DSCNotification,
+    ExpenseCategory,
+    PortalName,
     ClientSequence,
     DirectorMapping,
     GroupSequence,
@@ -95,4 +101,66 @@ class ClientActivityLogAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+
+
+@admin.register(PortalName)
+class PortalNameAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+
+
+@admin.register(ClientDSC)
+class ClientDSCAdmin(admin.ModelAdmin):
+    list_display = (
+        "client",
+        "issue_date",
+        "expiry_date",
+        "expiry_notification",
+        "last_expiry_notification_sent_at",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("expiry_notification", "expiry_date", "issue_date")
+    search_fields = ("client__client_id", "client__client_name", "client__pan")
+    readonly_fields = ("created_by", "created_at", "updated_by", "updated_at")
+
+
+@admin.register(DSCNotification)
+class DSCNotificationAdmin(admin.ModelAdmin):
+    list_display = ("user", "dsc", "is_read", "created_at")
+    list_filter = ("is_read", "created_at")
+    search_fields = ("user__email", "message", "dsc__client__client_name")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(DSCInOut)
+class DSCInOutAdmin(admin.ModelAdmin):
+    list_display = ("dsc", "in_date", "out_date", "remarks")
+    list_filter = ("in_date", "out_date")
+    search_fields = ("dsc__client__client_name", "dsc__client__pan", "remarks")
+    raw_id_fields = ("dsc",)
+
+
+@admin.register(ClientPortalCredential)
+class ClientPortalCredentialAdmin(admin.ModelAdmin):
+    list_display = (
+        "client",
+        "portal",
+        "portal_username",
+        "created_by",
+        "created_at",
+        "updated_by",
+        "updated_at",
+    )
+    list_filter = ("portal", "created_at")
+    search_fields = ("client__client_id", "client__client_name", "portal__name", "portal_username")
+    readonly_fields = ("created_by", "created_at", "updated_by", "updated_at")
 
