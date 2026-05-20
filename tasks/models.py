@@ -83,6 +83,15 @@ class TaskMaster(models.Model):
     def is_archived(self) -> bool:
         return self.archived_at is not None
 
+    @classmethod
+    def selectable_for_new_tasks(cls):
+        """Active, non-archived masters only — used when creating new tasks."""
+        return (
+            cls.objects.filter(is_active=True, archived_at__isnull=True)
+            .select_related("task_group")
+            .order_by("task_group__sort_order", "task_group__name", "name")
+        )
+
     def __str__(self) -> str:
         return f"{self.task_group.name} — {self.name}"
 

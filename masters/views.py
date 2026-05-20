@@ -1111,7 +1111,7 @@ def director_mapping_bulk_import_template(request):
     header = DIRECTOR_MAPPING_CSV_HEADERS
     sample = [
         [
-            "AN0001",
+            "A00001",
             "01234567",
             "JOHN DIRECTOR",
             "BT0001",
@@ -1121,7 +1121,7 @@ def director_mapping_bulk_import_template(request):
             "",
         ],
         [
-            "AT0001",
+            "A00002",
             "07654321",
             "JANE SMITH",
             "BT0002",
@@ -1767,6 +1767,321 @@ def dsc_notification_mark_read(request, pk: int):
     if n.link:
         return redirect(n.link)
     return redirect("dsc_notification_list")
+
+
+def _masters_bulk_csv_preview_context(
+    *,
+    rows,
+    preview_columns,
+    upload_url_name: str,
+    preview_title: str,
+    preview_page_title: str,
+    success_hint: str,
+    cells_fn,
+):
+    error_rows = []
+    for r in rows:
+        if r.errors:
+            error_rows.append(
+                {
+                    "row_num": r.row_num,
+                    "errors": r.errors,
+                    "preview_cells": cells_fn(r),
+                }
+            )
+    can_import = bool(rows) and all(not r.errors for r in rows)
+    return {
+        "rows": rows,
+        "error_rows": error_rows,
+        "total_rows": len(rows),
+        "error_count": len(error_rows),
+        "can_import": can_import,
+        "preview_columns": preview_columns,
+        "upload_url_name": upload_url_name,
+        "preview_title": preview_title,
+        "preview_page_title": preview_page_title,
+        "success_hint": success_hint,
+    }
+
+
+EXPENSE_CATEGORY_IMPORT_SESSION_KEY = "expense_category_import_csv"
+
+
+@require_perm("masters.add_expensecategory")
+def expense_category_bulk_import(request):
+    from .expense_category_csv_import import EXPENSE_CATEGORY_CSV_COLUMNS, parse_expense_categories_csv
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(EXPENSE_CATEGORY_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Nothing to import. Please upload the CSV again.")
+            return redirect("expense_category_bulk_import")
+        rows, file_errors = parse_expense_categories_csv(raw.encode("utf-8"))
+        if file_errors or any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("expense_category_bulk_import")
+        with transaction.atomic():
+            for r in rows:
+                ExpenseCategory.objects.create(**r.data)
+        request.session.pop(EXPENSE_CATEGORY_IMPORT_SESSION_KEY, None)
+        messages.success(request, f"Imported {len(rows)} expense categor{'y' if len(rows) == 1 else 'ies'}.")
+        return redirect("expense_category_list")
+
+    if request.method == "POST":
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("expense_category_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_expense_categories_csv(raw_bytes)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("expense_category_bulk_import")
+        try:
+            request.session[EXPENSE_CATEGORY_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            request.session[EXPENSE_CATEGORY_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
+        ctx = _masters_bulk_csv_preview_context(
+            rows=rows,
+            preview_columns=["Name", "Active"],
+            upload_url_name="expense_category_bulk_import",
+            preview_title="Expense categories import",
+            preview_page_title="Expense categories — Import preview",
+            success_hint="Click Confirm import to create all categories.",
+            cells_fn=lambda r: [r.data.get("name", ""), "Yes" if r.data.get("is_active") else "No"],
+        )
+        if ctx["can_import"]:
+            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
+        else:
+            messages.error(request, f"{ctx['error_count']} row(s) have errors.")
+        return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+    return render(
+        request,
+        "includes/bulk_csv_import_page.html",
+        {
+            "import_title": "Expense categories import",
+            "import_page_title": "Expense categories — Bulk upload (CSV)",
+            "import_description": "NAME is required. IS_ACTIVE is YES/NO or blank (defaults to YES).",
+            "columns": EXPENSE_CATEGORY_CSV_COLUMNS,
+            "template_url_name": "expense_category_bulk_import_template",
+            "cancel_url_name": "expense_category_list",
+        },
+    )
+
+
+@require_perm("masters.add_expensecategory")
+def expense_category_bulk_import_template(request):
+    from .expense_category_csv_import import EXPENSE_CATEGORY_CSV_COLUMNS
+
+    def q(v: str) -> str:
+        s = (v or "").replace('"', '""')
+        return f'"{s}"'
+
+    lines = [",".join(q(c) for c in EXPENSE_CATEGORY_CSV_COLUMNS)]
+    for row in [["Office rent", "YES"], ["Travel", "YES"], ["Stationery", "NO"]]:
+        lines.append(",".join(q(c) for c in row))
+    content = "\r\n".join(lines) + "\r\n"
+    resp = HttpResponse(content, content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="expense-categories-template.csv"'
+    return resp
+
+
+PORTAL_PASSWORD_IMPORT_SESSION_KEY = "portal_password_import_csv"
+
+
+@require_perm("masters.add_clientportalcredential")
+def portal_password_bulk_import(request):
+    from .portal_password_csv_import import PORTAL_PASSWORD_CSV_COLUMNS, parse_portal_passwords_csv
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(PORTAL_PASSWORD_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Nothing to import. Please upload the CSV again.")
+            return redirect("portal_password_bulk_import")
+        rows, file_errors = parse_portal_passwords_csv(raw.encode("utf-8"), user=request.user)
+        if file_errors or any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("portal_password_bulk_import")
+        with transaction.atomic():
+            for r in rows:
+                d = dict(r.data)
+                obj = ClientPortalCredential.objects.create(
+                    client=d["client"],
+                    portal=d["portal"],
+                    portal_username=d["portal_username"],
+                    portal_password=d["portal_password"],
+                    created_by=request.user,
+                    updated_by=request.user,
+                )
+        request.session.pop(PORTAL_PASSWORD_IMPORT_SESSION_KEY, None)
+        messages.success(request, f"Imported {len(rows)} portal password(s).")
+        return redirect("portal_password_list")
+
+    if request.method == "POST":
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("portal_password_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_portal_passwords_csv(raw_bytes, user=request.user)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("portal_password_bulk_import")
+        try:
+            request.session[PORTAL_PASSWORD_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            request.session[PORTAL_PASSWORD_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
+        ctx = _masters_bulk_csv_preview_context(
+            rows=rows,
+            preview_columns=["Client", "Portal", "Username"],
+            upload_url_name="portal_password_bulk_import",
+            preview_title="Portal passwords import",
+            preview_page_title="Password management — Import preview",
+            success_hint="Portal names must exist in Portal names master (active). Click Confirm import to save.",
+            cells_fn=lambda r: [
+                r.data["client"].client_id if r.data.get("client") else "",
+                r.data["portal"].name if r.data.get("portal") else "",
+                r.data.get("portal_username", ""),
+            ],
+        )
+        if ctx["can_import"]:
+            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
+        else:
+            messages.error(request, f"{ctx['error_count']} row(s) have errors.")
+        return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+    return render(
+        request,
+        "includes/bulk_csv_import_page.html",
+        {
+            "import_title": "Portal passwords import",
+            "import_page_title": "Password management — Bulk upload (CSV)",
+            "import_description": (
+                "CLIENT_ID must be an approved client in your branch. "
+                "PORTAL_NAME must match an active portal in Portal names master."
+            ),
+            "columns": PORTAL_PASSWORD_CSV_COLUMNS,
+            "template_url_name": "portal_password_bulk_import_template",
+            "cancel_url_name": "portal_password_list",
+        },
+    )
+
+
+@require_perm("masters.add_clientportalcredential")
+def portal_password_bulk_import_template(request):
+    from .portal_password_csv_import import PORTAL_PASSWORD_CSV_COLUMNS
+
+    def q(v: str) -> str:
+        s = (v or "").replace('"', '""')
+        return f'"{s}"'
+
+    lines = [",".join(q(c) for c in PORTAL_PASSWORD_CSV_COLUMNS)]
+    lines.append(",".join(q(c) for c in ["A00001", "GST", "gst_user", "secret123"]))
+    content = "\r\n".join(lines) + "\r\n"
+    resp = HttpResponse(content, content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="portal-passwords-template.csv"'
+    return resp
+
+
+DSC_IMPORT_SESSION_KEY = "dsc_import_csv"
+
+
+@require_perm("masters.add_clientdsc")
+def dsc_bulk_import(request):
+    from .dsc_csv_import import DSC_CSV_COLUMNS, parse_dsc_csv
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(DSC_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Nothing to import. Please upload the CSV again.")
+            return redirect("dsc_bulk_import")
+        rows, file_errors = parse_dsc_csv(raw.encode("utf-8"), user=request.user)
+        if file_errors or any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("dsc_bulk_import")
+        with transaction.atomic():
+            for r in rows:
+                d = dict(r.data)
+                obj = ClientDSC.objects.create(
+                    client=d["client"],
+                    issue_date=d["issue_date"],
+                    expiry_date=d["expiry_date"],
+                    expiry_notification=d["expiry_notification"],
+                    dsc_password=d["dsc_password"],
+                    created_by=request.user,
+                    updated_by=request.user,
+                )
+                DSCInOut.objects.create(dsc=obj, in_date=timezone.localdate(obj.created_at))
+        request.session.pop(DSC_IMPORT_SESSION_KEY, None)
+        messages.success(request, f"Imported {len(rows)} DSC record(s). In-out entries created.")
+        return redirect("dsc_list")
+
+    if request.method == "POST":
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("dsc_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_dsc_csv(raw_bytes, user=request.user)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("dsc_bulk_import")
+        try:
+            request.session[DSC_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            request.session[DSC_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
+        ctx = _masters_bulk_csv_preview_context(
+            rows=rows,
+            preview_columns=["Client", "Issue", "Expiry", "Notify"],
+            upload_url_name="dsc_bulk_import",
+            preview_title="DSC import",
+            preview_page_title="DSC — Import preview",
+            success_hint="Individual clients only. In-out records are created on import. Click Confirm import to save.",
+            cells_fn=lambda r: [
+                r.data["client"].client_id if r.data.get("client") else "",
+                r.data.get("issue_date", ""),
+                r.data.get("expiry_date", ""),
+                "Yes" if r.data.get("expiry_notification") else "No",
+            ],
+        )
+        if ctx["can_import"]:
+            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
+        else:
+            messages.error(request, f"{ctx['error_count']} row(s) have errors.")
+        return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+    return render(
+        request,
+        "includes/bulk_csv_import_page.html",
+        {
+            "import_title": "DSC import",
+            "import_page_title": "DSC — Bulk upload (CSV)",
+            "import_description": (
+                "CLIENT_ID must be an approved Individual client in your branch. "
+                "Dates: YYYY-MM-DD or DD-MM-YYYY. EXPIRY_NOTIFICATION: YES or NO."
+            ),
+            "columns": DSC_CSV_COLUMNS,
+            "template_url_name": "dsc_bulk_import_template",
+            "cancel_url_name": "dsc_list",
+        },
+    )
+
+
+@require_perm("masters.add_clientdsc")
+def dsc_bulk_import_template(request):
+    from .dsc_csv_import import DSC_CSV_COLUMNS
+
+    def q(v: str) -> str:
+        s = (v or "").replace('"', '""')
+        return f'"{s}"'
+
+    lines = [",".join(q(c) for c in DSC_CSV_COLUMNS)]
+    lines.append(",".join(q(c) for c in ["A00001", "2024-01-01", "2027-01-01", "YES", "dsc-secret"]))
+    content = "\r\n".join(lines) + "\r\n"
+    resp = HttpResponse(content, content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="dsc-template.csv"'
+    return resp
 
 
 @require_perm("masters.view_expensecategory")

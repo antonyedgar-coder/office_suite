@@ -112,11 +112,10 @@ Individual, Partnership, LLP, Branch, Private Limited, Public Limited, Nidhi Co,
 
 ### 3.2 Client ID generation
 
-- Format: **`{L1}{L2}{NNNN}`** — 6 characters.  
+- Format: **`{L1}{NNNNN}`** — 6 characters.  
 - **L1:** First letter A–Z in **client name** (default X if none).  
-- **L2:** First letter A–Z in **branch** name.  
-- **NNNN:** 4-digit serial **per prefix** (e.g. all `AN` clients share one counter).  
-- **Example:** Name “Antony & Co”, branch Nagercoil → prefix **AN** → `AN0001`, `AN0002`, …  
+- **NNNNN:** 5-digit serial **per L1** (e.g. all `A` clients share one counter).  
+- **Example:** “Antony & Co” → prefix **A** → `A00001`, `A00002`, …  
 - ID is assigned on **first save**; cannot be edited.
 
 ### 3.3 Approval workflow

@@ -1,6 +1,13 @@
 {# Standalone links at bottom of sidebar (not inside Masters). #}
 {% with url_name=request.resolver_match.url_name|default:"" %}
   <div class="sidebar-footer-nav nav flex-column gap-1 pt-2 mt-2 border-top">
+    {% if show_settings_hub %}
+      <a
+        class="nav-link {% if url_name == 'settings_hub' %}active{% endif %}"
+        href="{% url 'settings_hub' %}"
+        ><i class="bi bi-gear nav-link-icon" aria-hidden="true"></i><span>Settings</span></a
+      >
+    {% endif %}
     {% if user.is_superuser or perms.masters.view_client %}
       <a
         class="nav-link {% if url_name == 'client_activity_log_list' %}active{% endif %}"

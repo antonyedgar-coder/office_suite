@@ -82,20 +82,14 @@ def _resolve_task_master(raw: str) -> TaskMaster | None:
     if "|" in s:
         group_name, master_name = [p.strip() for p in s.split("|", 1)]
         return (
-            TaskMaster.objects.filter(
-                is_active=True,
-                archived_at__isnull=True,
+            TaskMaster.selectable_for_new_tasks()
+            .filter(
                 task_group__name__iexact=group_name,
                 name__iexact=master_name,
             )
-            .select_related("task_group")
             .first()
         )
-    return (
-        TaskMaster.objects.filter(is_active=True, archived_at__isnull=True, name__iexact=s)
-        .select_related("task_group")
-        .first()
-    )
+    return TaskMaster.selectable_for_new_tasks().filter(name__iexact=s).first()
 
 
 @dataclass
@@ -159,7 +153,10 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         if not master_raw:
             errors.append("TASK_MASTER is required (use Group | Master or master name).")
         elif not master:
-            errors.append(f"TASK_MASTER not found: {master_raw}")
+            errors.append(
+                f"TASK_MASTER not found or inactive: {master_raw} "
+                "(only active task masters can be used)."
+            )
 
         assignee_emails = [e.strip().lower() for e in assignee_raw.replace(";", ",").split(",") if e.strip()]
         assignees = []

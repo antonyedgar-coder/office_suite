@@ -641,3 +641,118 @@ body {
 #app-toast-container .toast {
   min-width: 280px;
 }
+
+/* Settings hub */
+.settings-hub-intro {
+  font-size: 0.95rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.settings-hub-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 0 1rem;
+}
+
+.settings-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+  .settings-hub-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-hub-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  min-height: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-hub-card:hover {
+  border-color: #7dd3fc;
+  box-shadow: 0 4px 12px rgba(14, 116, 144, 0.12);
+  color: inherit;
+}
+
+.settings-hub-card-icon {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.15);
+}
+
+.settings-icon-blue {
+  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 55%, #1d4ed8 100%);
+}
+
+.settings-icon-purple {
+  background: linear-gradient(135deg, #c084fc 0%, #7c3aed 55%, #5b21b6 100%);
+}
+
+.settings-icon-teal {
+  background: linear-gradient(135deg, #2dd4bf 0%, #0d9488 55%, #0f766e 100%);
+}
+
+.settings-icon-orange {
+  background: linear-gradient(135deg, #fb923c 0%, #ea580c 55%, #c2410c 100%);
+}
+
+.settings-icon-green {
+  background: linear-gradient(135deg, #4ade80 0%, #16a34a 55%, #15803d 100%);
+}
+
+.settings-icon-pink {
+  background: linear-gradient(135deg, #f472b6 0%, #db2777 55%, #9d174d 100%);
+}
+
+.settings-icon-indigo {
+  background: linear-gradient(135deg, #818cf8 0%, #4f46e5 55%, #3730a3 100%);
+}
+
+.settings-icon-amber {
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 55%, #b45309 100%);
+}
+
+.settings-hub-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-hub-card-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #0f172a;
+  line-height: 1.25;
+  margin-bottom: 0.15rem;
+}
+
+.settings-hub-card-desc {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.35;
+}

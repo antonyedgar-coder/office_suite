@@ -824,6 +824,67 @@ class TaskMasterFormTests(TestCase):
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class InactiveTaskMasterTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="staff@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="verify@example.com", password="pass12345")
+        self.document_checker = User.objects.create_user(email="docs@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="INACTIVE TG")
+        self.client = Client.objects.create(
+            client_name="INACTIVE CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="ABCDE1234G",
+        )
+        tg = TaskGroup.objects.create(name="GST", sort_order=1)
+        self.active_master = TaskMaster.objects.create(task_group=tg, name="Active master", is_active=True)
+        self.inactive_master = TaskMaster.objects.create(
+            task_group=tg, name="Inactive master", is_active=False
+        )
+
+    def test_selectable_for_new_tasks_excludes_inactive(self):
+        ids = set(TaskMaster.selectable_for_new_tasks().values_list("pk", flat=True))
+        self.assertIn(self.active_master.pk, ids)
+        self.assertNotIn(self.inactive_master.pk, ids)
+
+    def test_create_task_from_master_rejects_inactive(self):
+        with self.assertRaises(ValidationError) as ctx:
+            create_task_from_master(
+                master=self.inactive_master,
+                client=self.client,
+                assignee_users=[self.user],
+                verifier=self.verifier,
+                document_checker=self.document_checker,
+                created_by=self.user,
+                period_key="2026-08",
+                due_date=date(2026, 8, 20),
+            )
+        self.assertIn("inactive", str(ctx.exception).lower())
+
+    def test_recurring_skips_inactive_master(self):
+        from tasks.models import TaskEnrollmentAssignee
+
+        self.inactive_master.is_recurring = True
+        self.inactive_master.frequency = TaskMaster.FREQ_MONTHLY
+        self.inactive_master.recurrence_config = {"day_of_month": 15}
+        self.inactive_master.save()
+        enrollment = TaskRecurrenceEnrollment.objects.create(
+            client=self.client,
+            task_master=self.inactive_master,
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            started_at=date(2026, 1, 1),
+            created_by=self.user,
+            is_active=True,
+        )
+        TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=self.user)
+        result = try_create_recurring_for_enrollment(enrollment, today=date(2026, 2, 15))
+        self.assertIsNone(result)
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class TaskCsvImportTests(TestCase):
     def setUp(self):
         self.creator = User.objects.create_user(email="creator@example.com", password="pass12345")

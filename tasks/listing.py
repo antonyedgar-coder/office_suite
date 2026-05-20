@@ -214,9 +214,7 @@ def filter_context(user, filters: TaskListFilters) -> dict:
         "status_choices": Task.STATUS_CHOICES,
         "date_preset_choices": DATE_PRESET_CHOICES,
         "clients": approved_clients_for_user(user).order_by("client_name"),
-        "masters": TaskMaster.objects.filter(is_active=True, archived_at__isnull=True)
-        .select_related("task_group")
-        .order_by("task_group__sort_order", "name"),
+        "masters": TaskMaster.selectable_for_new_tasks(),
         "staff_users": staff_users_queryset(),
     }
 

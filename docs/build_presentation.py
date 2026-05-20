@@ -67,7 +67,7 @@ SLIDES: list[tuple[str, list[str]]] = [
         [
             "Director + DIN: Individual / Foreign Citizen only",
             "PAN, name, and type must be consistent",
-            "Auto Client ID (e.g. AN0001)",
+            "Auto Client ID (e.g. A00001)",
             "Delete blocked if MIS, mapping, or DIR-3 linked",
             "Bulk import: preview; may be pending until approved",
         ],

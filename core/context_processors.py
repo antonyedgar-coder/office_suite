@@ -1,9 +1,16 @@
 from core.feature_flags import task_module_enabled
+from core.settings_hub import user_may_open_settings
 from core.user_display import user_display_name
 
 
 def enable_task_module(request):
     return {"enable_task_module": task_module_enabled()}
+
+
+def settings_hub_access(request):
+    if not getattr(request, "user", None) or not request.user.is_authenticated:
+        return {}
+    return {"show_settings_hub": user_may_open_settings(request.user)}
 
 
 def topbar_user(request):

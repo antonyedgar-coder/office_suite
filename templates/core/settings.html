@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Settings — CA Office Suite{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+  <p class="settings-hub-intro mb-4">Configure users, client setup, tasks, and billing. Each card opens the same screen as before — only the menu location changed.</p>
+
+  {% for section in sections %}
+    <h2 class="settings-hub-section-title">{{ section.title }}</h2>
+    <div class="settings-hub-grid mb-4">
+      {% for card in section.cards %}
+        <a class="settings-hub-card" href="{% url card.url_name %}">
+          <span class="settings-hub-card-icon {{ card.icon_bg }}" aria-hidden="true">
+            <i class="bi {{ card.icon }}"></i>
+          </span>
+          <span class="settings-hub-card-body">
+            <span class="settings-hub-card-title">{{ card.title }}</span>
+            <span class="settings-hub-card-desc">{{ card.description }}</span>
+          </span>
+        </a>
+      {% endfor %}
+    </div>
+  {% empty %}
+    <div class="empty-state">
+      <div class="empty-state-icon"><i class="bi bi-gear"></i></div>
+      <div class="empty-state-title">No settings available</div>
+      <p class="mb-0">Your account does not have permission to open any setup screens.</p>
+    </div>
+  {% endfor %}
+{% endblock %}

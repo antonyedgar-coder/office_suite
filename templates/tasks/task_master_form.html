@@ -43,7 +43,11 @@
           {{ form.default_priority }}
           {% if form.default_priority.errors %}<div class="text-danger small">{{ form.default_priority.errors }}</div>{% endif %}
         </div>
-        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_active }} <label class="form-check-label" for="id_is_active">Active</label></div>
+        <div class="col-md-4 mb-3 form-check pt-4">
+          {{ form.is_active }}
+          <label class="form-check-label" for="id_is_active">Active</label>
+          <p class="form-text mb-0">Inactive masters stay in the list but cannot be used when creating new tasks.</p>
+        </div>
         <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label" for="id_is_recurring">Recurring</label></div>
       </div>
       <div class="row mb-3">

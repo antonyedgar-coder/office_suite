@@ -79,7 +79,7 @@ These screens only allow **approved** clients:
 
 ### 3.3 Client ID and branches
 
-- **Client ID** is auto-generated (e.g. `AN0001`) from client name initial + branch + sequence.  
+- **Client ID** is auto-generated (e.g. `A00001`) from client name initial + global sequence.  
 - **Branches:** Trivandrum, Nagercoil.  
 - **Client types** include Individual, Partnership, LLP, Private/Public Limited, Branch, Foreign Citizen, Trust, etc.
 

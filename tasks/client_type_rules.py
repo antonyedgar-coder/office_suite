@@ -21,20 +21,10 @@ def may_submit_for_client_type(task: Task) -> bool:
     return not is_new_client_type(task.client)
 
 
-def verifier_may_approve_without_submit(task: Task) -> bool:
-    """Verifiers approve directly from assigned/rework (no submit step) for New Client."""
-    return is_new_client_type(task.client) and task.status in (
-        Task.STATUS_ASSIGNED,
-        Task.STATUS_REWORK,
-    )
-
-
 def validate_submit_for_client_type(task: Task) -> None:
     if may_submit_for_client_type(task):
         return
-    raise ValidationError(
-        f'Clients with type "{CLIENT_TYPE_NEW_CLIENT}" cannot submit tasks for verification.'
-    )
+    raise ValidationError(f'Clients with type "{CLIENT_TYPE_NEW_CLIENT}" cannot submit tasks for verification.')
 
 
 def none_client_submit_block_message() -> str:

@@ -161,9 +161,9 @@ def _first_letter_for_group_id(name: str) -> str:
 
 
 class ClientSequence(models.Model):
-    """Per name+branch prefix counter (client_id format: {L}{B}{NNNN}, e.g. AN0001)."""
+    """Per-letter counter (client_id format: {L}{NNNNN}, e.g. A00001)."""
 
-    prefix = models.CharField(max_length=2, primary_key=True)
+    prefix = models.CharField(max_length=1, primary_key=True)
     last_value = models.PositiveIntegerField(default=0)
 
 
@@ -258,7 +258,7 @@ class Client(models.Model):
         (PENDING, "Pending approval"),
     ]
 
-    # Client ID like AN0001 (name letter + branch letter + 4-digit serial)
+    # Client ID like A00001 (name letter + 5-digit serial; no branch)
     client_id = models.CharField(max_length=6, primary_key=True, editable=False)
 
     approval_status = models.CharField(
@@ -369,12 +369,12 @@ class Client(models.Model):
         #
         # IMPORTANT business override:
         # If PAN is blank and the name contains keywords like PRIVATE LIMITED/TRUST/FARMER/NIDHI/LLP/LIMITED,
-        # then Client Type must be New Client (do not force company types without PAN).
+        # then Client Type must be New Client or One Off Client (do not force company types without PAN).
         name_type_req = _client_types_required_by_name(self.client_name)
         if not self.pan and name_type_req is not None:
-            if self.client_type != CLIENT_TYPE_NEW_CLIENT:
+            if self.client_type not in {CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF}:
                 errors.setdefault("client_type", []).append(
-                    "Since PAN is blank, Client Type must be New Client (even if the name contains Private Limited / Trust / Farmer / Nidhi / LLP / Limited)."
+                    "Since PAN is blank, Client Type must be New Client or One Off Client (even if the name contains Private Limited / Trust / Farmer / Nidhi / LLP / Limited)."
                 )
         elif name_type_req is not None:
             if not name_type_req:
@@ -508,19 +508,19 @@ class Client(models.Model):
             raise ValidationError(errors)
 
     @staticmethod
-    def _client_id_prefix(name_upper: str, branch: str) -> str:
-        """First letter of client name + first letter of branch (e.g. AN, AT)."""
-        return _first_letter_a_to_z(name_upper) + _first_letter_a_to_z(branch)
+    def _client_id_prefix(name_upper: str) -> str:
+        """First letter of client name (e.g. A)."""
+        return _first_letter_a_to_z(name_upper)
 
     def save(self, *args, **kwargs):
         self.full_clean()
         if not self.client_id:
-            prefix = self._client_id_prefix(self.client_name, self.branch)
+            prefix = self._client_id_prefix(self.client_name)
             with transaction.atomic():
                 seq, _ = ClientSequence.objects.select_for_update().get_or_create(prefix=prefix)
                 seq.last_value += 1
                 seq.save(update_fields=["last_value"])
-                self.client_id = f"{prefix}{seq.last_value:04d}"
+                self.client_id = f"{prefix}{seq.last_value:05d}"
         return super().save(*args, **kwargs)
 
 

@@ -154,15 +154,7 @@ def _document_check_queue_qs(base, user):
 
 
 def _verify_queue_qs(base, user):
-    from masters.models import CLIENT_TYPE_NEW_CLIENT
-
-    return base.filter(verifier=user).filter(
-        Q(status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
-        | Q(
-            client__client_type=CLIENT_TYPE_NEW_CLIENT,
-            status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK],
-        )
-    )
+    return base.filter(verifier=user, status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
 
 
 def _task_detail_cards(

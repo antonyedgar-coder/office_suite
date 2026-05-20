@@ -18,6 +18,7 @@ from mis.models import ExpenseDetail, FeesDetail, Receipt
 
 from .activity_log import log_activity_from_request
 from .feature_flags import task_module_enabled
+from .settings_hub import build_settings_sections, user_may_open_settings
 
 
 def login_view(request):
@@ -255,6 +256,17 @@ def reset_test_data(request):
         return redirect("dashboard")
 
     return render(request, "admin_tools/reset_test_data.html", {"counts": counts})
+
+
+@login_required
+def settings_hub(request):
+    if not user_may_open_settings(request.user):
+        raise PermissionDenied
+    return render(
+        request,
+        "core/settings.html",
+        {"sections": build_settings_sections(request.user)},
+    )
 
 
 def permission_denied_view(request, exception):

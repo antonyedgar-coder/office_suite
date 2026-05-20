@@ -3,6 +3,7 @@ import json
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -36,12 +37,11 @@ from .listing import (
 )
 from .checklist import master_checklist_labels, toggle_task_checklist_item
 from .user_labels import user_person_name
-from masters.models import CLIENT_TYPE_NEW_CLIENT
+from masters.models import CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF
 
 from .client_type_rules import (
     may_submit_for_client_type,
     none_client_submit_block_message,
-    verifier_may_approve_without_submit,
 )
 from .services import (
     approve_task_assignment,
@@ -107,11 +107,16 @@ def task_group_edit(request, pk: int):
 def task_master_list(request):
     q = (request.GET.get("q") or "").strip()
     group_id = request.GET.get("group")
+    active_filter = (request.GET.get("active") or "").strip().lower()
     qs = TaskMaster.objects.select_related("task_group").order_by("task_group__sort_order", "name")
     if q:
         qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q))
     if group_id:
         qs = qs.filter(task_group_id=group_id)
+    if active_filter == "yes":
+        qs = qs.filter(is_active=True)
+    elif active_filter == "no":
+        qs = qs.filter(is_active=False)
     return render(
         request,
         "tasks/task_master_list.html",
@@ -120,6 +125,7 @@ def task_master_list(request):
             "q": q,
             "groups": TaskGroup.objects.filter(is_active=True),
             "group_id": group_id,
+            "active_filter": active_filter,
         },
     )
 
@@ -184,6 +190,220 @@ def task_master_edit(request, pk: int):
         "tasks/task_master_form.html",
         _task_master_form_context(form, mode="edit", master=master),
     )
+
+
+def _bulk_csv_preview_context(
+    request,
+    *,
+    rows,
+    columns,
+    upload_url_name: str,
+    preview_title: str,
+    preview_page_title: str,
+    success_hint: str,
+    cells_fn,
+):
+    error_rows = []
+    for r in rows:
+        if r.errors:
+            error_rows.append(
+                {
+                    "row_num": r.row_num,
+                    "errors": r.errors,
+                    "preview_cells": cells_fn(r),
+                }
+            )
+    can_import = bool(rows) and all(not r.errors for r in rows)
+    return {
+        "rows": rows,
+        "error_rows": error_rows,
+        "total_rows": len(rows),
+        "error_count": len(error_rows),
+        "can_import": can_import,
+        "columns": columns,
+        "preview_columns": columns,
+        "upload_url_name": upload_url_name,
+        "preview_title": preview_title,
+        "preview_page_title": preview_page_title,
+        "success_hint": success_hint,
+    }
+
+
+TASK_GROUP_IMPORT_SESSION_KEY = "task_group_import_csv"
+
+
+@require_perm("tasks.add_taskgroup")
+def task_group_bulk_import(request):
+    from .task_group_csv_import import TASK_GROUP_CSV_COLUMNS, parse_task_groups_csv
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(TASK_GROUP_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Nothing to import. Please upload the CSV again.")
+            return redirect("task_group_bulk_import")
+        rows, file_errors = parse_task_groups_csv(raw.encode("utf-8"))
+        if file_errors or any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("task_group_bulk_import")
+        with transaction.atomic():
+            for r in rows:
+                TaskGroup.objects.create(**r.data)
+        request.session.pop(TASK_GROUP_IMPORT_SESSION_KEY, None)
+        messages.success(request, f"Imported {len(rows)} task group(s).")
+        return redirect("task_group_list")
+
+    if request.method == "POST":
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("task_group_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_task_groups_csv(raw_bytes)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("task_group_bulk_import")
+        try:
+            request.session[TASK_GROUP_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            request.session[TASK_GROUP_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
+        ctx = _bulk_csv_preview_context(
+            request,
+            rows=rows,
+            columns=["Name", "Sort", "Active"],
+            upload_url_name="task_group_bulk_import",
+            preview_title="Task groups import",
+            preview_page_title="Task groups — Import preview",
+            success_hint="Click Confirm import to create all task groups.",
+            cells_fn=lambda r: [
+                r.data.get("name", ""),
+                r.data.get("sort_order", ""),
+                "Yes" if r.data.get("is_active") else "No",
+            ],
+        )
+        if ctx["can_import"]:
+            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
+        else:
+            messages.error(request, f"{ctx['error_count']} row(s) have errors.")
+        return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+    return render(
+        request,
+        "includes/bulk_csv_import_page.html",
+        {
+            "import_title": "Task groups import",
+            "import_page_title": "Task groups — Bulk upload (CSV)",
+            "import_description": "Each row creates one task group. NAME is required; SORT_ORDER defaults to 0; IS_ACTIVE is YES/NO or blank (YES).",
+            "columns": TASK_GROUP_CSV_COLUMNS,
+            "template_url_name": "task_group_bulk_import_template",
+            "cancel_url_name": "task_group_list",
+        },
+    )
+
+
+@require_perm("tasks.add_taskgroup")
+def task_group_bulk_import_template(request):
+    from .task_group_csv_import import TASK_GROUP_CSV_COLUMNS
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="task-groups-template.csv"'
+    writer = csv.writer(response)
+    writer.writerow(TASK_GROUP_CSV_COLUMNS)
+    writer.writerow(["GST", "0", "YES"])
+    writer.writerow(["ROC", "1", "YES"])
+    return response
+
+
+TASK_MASTER_IMPORT_SESSION_KEY = "task_master_import_csv"
+
+
+@require_perm("tasks.add_taskmaster")
+def task_master_bulk_import(request):
+    from .checklist import save_master_checklist
+    from .task_master_csv_import import TASK_MASTER_CSV_COLUMNS, parse_task_masters_csv
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(TASK_MASTER_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Nothing to import. Please upload the CSV again.")
+            return redirect("task_master_bulk_import")
+        rows, file_errors = parse_task_masters_csv(raw.encode("utf-8"))
+        if file_errors or any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("task_master_bulk_import")
+        with transaction.atomic():
+            for r in rows:
+                d = dict(r.data)
+                checklist = d.pop("checklist_items", [])
+                master = TaskMaster.objects.create(**d)
+                save_master_checklist(master, checklist)
+        request.session.pop(TASK_MASTER_IMPORT_SESSION_KEY, None)
+        messages.success(request, f"Imported {len(rows)} task master(s).")
+        return redirect("task_master_list")
+
+    if request.method == "POST":
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("task_master_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_task_masters_csv(raw_bytes)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("task_master_bulk_import")
+        try:
+            request.session[TASK_MASTER_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            request.session[TASK_MASTER_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
+        ctx = _bulk_csv_preview_context(
+            request,
+            rows=rows,
+            columns=["Group", "Name", "Priority", "Active", "Recurring"],
+            upload_url_name="task_master_bulk_import",
+            preview_title="Task masters import",
+            preview_page_title="Task masters — Import preview",
+            success_hint="Recurring masters need valid RECURRENCE_CONFIG_JSON. Click Confirm import to save.",
+            cells_fn=lambda r: [
+                r.data.get("task_group").name if r.data.get("task_group") else "",
+                r.data.get("name", ""),
+                r.data.get("default_priority", ""),
+                "Yes" if r.data.get("is_active") else "No",
+                "Yes" if r.data.get("is_recurring") else "No",
+            ],
+        )
+        if ctx["can_import"]:
+            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
+        else:
+            messages.error(request, f"{ctx['error_count']} row(s) have errors.")
+        return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+    return render(
+        request,
+        "includes/bulk_csv_import_page.html",
+        {
+            "import_title": "Task masters import",
+            "import_page_title": "Task masters — Bulk upload (CSV)",
+            "import_description": (
+                "TASK_GROUP must match an existing task group name. "
+                "For recurring masters (IS_RECURRING=YES), provide FREQUENCY and RECURRENCE_CONFIG_JSON "
+                "(same JSON as saved from the task master form). CHECKLIST_ITEMS: separate with | or ;."
+            ),
+            "columns": TASK_MASTER_CSV_COLUMNS,
+            "template_url_name": "task_master_bulk_import_template",
+            "cancel_url_name": "task_master_list",
+        },
+    )
+
+
+@require_perm("tasks.add_taskmaster")
+def task_master_bulk_import_template(request):
+    from .task_master_csv_import import TASK_MASTER_CSV_COLUMNS
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="task-masters-template.csv"'
+    writer = csv.writer(response)
+    writer.writerow(TASK_MASTER_CSV_COLUMNS)
+    writer.writerow(["GST", "GSTR-1", "", "normal", "YES", "NO", "", "", "", ""])
+    return response
 
 
 def _task_list_context(request, *, list_title, show_new_task, csv_url_name, base_qs=None):
@@ -560,9 +780,7 @@ def task_detail(request, pk: int):
         if task.status == Task.STATUS_DOCUMENT_REWORK
         else "Submit for verification"
     )
-    can_verify = is_verifier and (
-        task.status == Task.STATUS_SUBMITTED or verifier_may_approve_without_submit(task)
-    )
+    can_verify = is_verifier and task.status == Task.STATUS_SUBMITTED
     can_verify_rework = is_verifier and task.status == Task.STATUS_SUBMITTED
     can_complete_documents = (
         is_document_checker or request.user.is_superuser
@@ -750,11 +968,8 @@ def task_verify_queue(request):
         status=Task.STATUS_SUBMITTED,
         verifier=user,
     )
-    none_client_approve_base = tasks_for_user(user).filter(
-        verifier=user,
-        client__client_type=CLIENT_TYPE_NEW_CLIENT,
-        status__in=[Task.STATUS_ASSIGNED, Task.STATUS_REWORK],
-    )
+    # New Client tasks are not allowed to submit/verify/complete; do not show any special "verify without submit" section.
+    none_client_approve_base = tasks_for_user(user).none()
     filters = parse_task_list_filters(request)
     ctx = filter_context(user, filters)
     ctx.update(
@@ -798,7 +1013,7 @@ def task_verify_approve(request, pk: int):
         tasks_for_user(request.user).filter(verifier=request.user),
         pk=pk,
     )
-    if task.status != Task.STATUS_SUBMITTED and not verifier_may_approve_without_submit(task):
+    if task.status != Task.STATUS_SUBMITTED:
         raise Http404
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""

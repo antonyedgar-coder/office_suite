@@ -11,9 +11,19 @@
           {% for g in groups %}<option value="{{ g.pk }}" {% if group_id == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
         </select>
       </div>
+      <div class="col-md-2">
+        <select class="form-select" name="active">
+          <option value="">All statuses</option>
+          <option value="yes" {% if active_filter == "yes" %}selected{% endif %}>Active only</option>
+          <option value="no" {% if active_filter == "no" %}selected{% endif %}>Inactive only</option>
+        </select>
+      </div>
       <div class="col-md-auto d-flex gap-2">
         <button class="btn btn-outline-secondary" type="submit">Filter</button>
-        {% if perms.tasks.add_taskmaster %}<a class="btn btn-primary" href="{% url 'task_master_create' %}">New master</a>{% endif %}
+        {% if perms.tasks.add_taskmaster %}
+          <a class="btn btn-outline-primary" href="{% url 'task_master_bulk_import' %}">Bulk upload (CSV)</a>
+          <a class="btn btn-primary" href="{% url 'task_master_create' %}">New master</a>
+        {% endif %}
       </div>
     </form>
   </div>
@@ -26,7 +36,13 @@
             <td>{{ m.task_group.name }}</td>
             <td>{{ m.name }}</td>
             <td>{% if m.is_recurring %}{{ m.get_frequency_display }}{% else %}—{% endif %}</td>
-            <td>{% if m.is_active %}Yes{% else %}No{% endif %}</td>
+            <td>
+              {% if m.is_active %}
+                <span class="badge text-bg-success">Active</span>
+              {% else %}
+                <span class="badge text-bg-secondary">Inactive</span>
+              {% endif %}
+            </td>
             <td class="text-end">{% if perms.tasks.change_taskmaster %}<a href="{% url 'task_master_edit' m.pk %}" class="btn btn-sm btn-outline-primary">Edit</a>{% endif %}</td>
           </tr>
         {% empty %}<tr><td colspan="5" class="text-secondary">No task masters.</td></tr>{% endfor %}

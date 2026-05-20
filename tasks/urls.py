@@ -5,9 +5,21 @@ from . import views
 urlpatterns = [
     path("dashboard/", views.task_dashboard, name="task_dashboard"),
     path("groups/", views.task_group_list, name="task_group_list"),
+    path("groups/bulk-upload/", views.task_group_bulk_import, name="task_group_bulk_import"),
+    path(
+        "groups/bulk-upload/template/",
+        views.task_group_bulk_import_template,
+        name="task_group_bulk_import_template",
+    ),
     path("groups/new/", views.task_group_create, name="task_group_create"),
     path("groups/<int:pk>/", views.task_group_edit, name="task_group_edit"),
     path("masters/", views.task_master_list, name="task_master_list"),
+    path("masters/bulk-upload/", views.task_master_bulk_import, name="task_master_bulk_import"),
+    path(
+        "masters/bulk-upload/template/",
+        views.task_master_bulk_import_template,
+        name="task_master_bulk_import_template",
+    ),
     path("masters/new/", views.task_master_create, name="task_master_create"),
     path("masters/<int:pk>/", views.task_master_edit, name="task_master_edit"),
     path("export.csv", views.task_list_csv, name="task_list_csv"),

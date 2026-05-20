@@ -558,15 +558,8 @@ class TaskCreateForm(forms.Form):
 
             self.fields["client"].queryset = approved_clients_for_user(user)
 
-        self.fields["task_master"].queryset = (
-
-            TaskMaster.objects.filter(is_active=True)
-
-            .select_related("task_group")
-
-            .order_by("task_group__sort_order", "name")
-
-        )
+        self.fields["task_master"].queryset = TaskMaster.selectable_for_new_tasks()
+        self.fields["task_master"].help_text = "Only active task masters are listed."
 
         self.fields["verifier"].queryset = staff_qs
 
@@ -652,8 +645,6 @@ class TaskCreateForm(forms.Form):
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
         if verifier and document_checker:
-            if verifier.pk == document_checker.pk:
-                self.add_error("document_checker", "Document checker must be different from the verifier.")
             assignee_ids = {u.pk for u in assignees} if assignees else set()
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
@@ -661,6 +652,11 @@ class TaskCreateForm(forms.Form):
 
 
         master = cleaned.get("task_master")
+        if master and not TaskMaster.selectable_for_new_tasks().filter(pk=master.pk).exists():
+            self.add_error(
+                "task_master",
+                "This task master is inactive and cannot be used to create new tasks.",
+            )
         locked_period = period_type_for_task_master(master)
         if locked_period:
             if cleaned.get("period_type") and cleaned.get("period_type") != locked_period:
@@ -821,9 +817,6 @@ class TaskEditForm(forms.Form):
             assignee_ids = {u.pk for u in assignees}
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
-        if verifier and document_checker:
-            if verifier.pk == document_checker.pk:
-                self.add_error("document_checker", "Document checker must be different from the verifier.")
         return cleaned
 
 

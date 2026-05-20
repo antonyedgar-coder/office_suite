@@ -1,41 +1,32 @@
 {# Sidebar sections: Masters → Tasks → DSC Management → MIS → DIR-3 eKYC → Reports #}
 {% with url_name=request.resolver_match.url_name|default:"" nav_prefix=nav_id_prefix|default:"main" %}
-  {% if user.is_superuser or perms.masters.view_client or perms.masters.view_clientgroup or perms.masters.approve_client or perms.masters.view_clientportalcredential or perms.masters.view_directormapping or perms.core.view_employee %}
+  {% if user.is_superuser or perms.masters.view_client or perms.masters.approve_client or perms.masters.view_clientportalcredential or perms.masters.view_directormapping %}
     <div
-      class="nav-accordion-item{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete expense_category_list expense_category_create expense_category_edit expense_category_delete' %} is-open{% endif %}"
+      class="nav-accordion-item{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %} is-open{% endif %}"
       data-nav-section="masters"
     >
       <button
         type="button"
         class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete expense_category_list expense_category_create expense_category_edit expense_category_delete' %}true{% else %}false{% endif %}"
+        aria-expanded="{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %}true{% else %}false{% endif %}"
         aria-controls="nav-panel-{{ nav_prefix }}-masters"
       >
         <i class="bi bi-database nav-link-icon" aria-hidden="true"></i>
         <span>Masters</span>
         <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
       </button>
-      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_detail client_edit client_delete client_import client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete expense_category_list expense_category_create expense_category_edit expense_category_delete' %} hidden{% endif %}>
+      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %} hidden{% endif %}>
         {% if user.is_superuser or perms.masters.view_client %}
           <a class="nav-link {% if url_name in 'client_list client_create client_detail client_edit client_delete client_import' %}active{% endif %}" href="{% url 'client_list' %}"><i class="bi bi-people nav-link-icon" aria-hidden="true"></i><span>Client Master</span></a>
-        {% endif %}
-        {% if user.is_superuser or perms.masters.view_clientgroup %}
-          <a class="nav-link {% if url_name in 'client_group_list client_group_create client_group_edit client_group_delete client_group_bulk_import client_group_bulk_import_template' %}active{% endif %}" href="{% url 'client_group_list' %}"><i class="bi bi-collection nav-link-icon" aria-hidden="true"></i><span>Group Master</span></a>
         {% endif %}
         {% if user.is_superuser or perms.masters.approve_client %}
           <a class="nav-link {% if url_name in 'client_pending_list client_approve client_reject' %}active{% endif %}" href="{% url 'client_pending_list' %}"><i class="bi bi-patch-check nav-link-icon" aria-hidden="true"></i><span>Client approvals</span></a>
         {% endif %}
         {% if user.is_superuser or perms.masters.view_clientportalcredential %}
-          <a class="nav-link {% if url_name in 'portal_password_list portal_password_create portal_password_edit portal_password_delete' %}active{% endif %}" href="{% url 'portal_password_list' %}"><i class="bi bi-key nav-link-icon" aria-hidden="true"></i><span>Password management</span></a>
-        {% endif %}
-        {% if user.is_superuser or perms.masters.view_expensecategory %}
-          <a class="nav-link {% if url_name in 'expense_category_list expense_category_create expense_category_edit expense_category_delete' %}active{% endif %}" href="{% url 'expense_category_list' %}"><i class="bi bi-tags nav-link-icon" aria-hidden="true"></i><span>Expense categories</span></a>
+          <a class="nav-link {% if url_name in 'portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template' %}active{% endif %}" href="{% url 'portal_password_list' %}"><i class="bi bi-key nav-link-icon" aria-hidden="true"></i><span>Password management</span></a>
         {% endif %}
         {% if user.is_superuser or perms.masters.view_directormapping %}
           <a class="nav-link {% if url_name in 'director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %}active{% endif %}" href="{% url 'director_list' %}"><i class="bi bi-diagram-3 nav-link-icon" aria-hidden="true"></i><span>Director Mapping</span></a>
-        {% endif %}
-        {% if user.is_superuser or perms.core.view_employee %}
-          <a class="nav-link {% if url_name in 'user_list user_create user_edit user_delete user_toggle_active user_group_list user_group_create user_group_edit user_group_delete' %}active{% endif %}" href="{% url 'user_list' %}"><i class="bi bi-person-badge nav-link-icon" aria-hidden="true"></i><span>User Management</span></a>
         {% endif %}
       </div>
     </div>
@@ -45,22 +36,22 @@
 
   {% if user.is_superuser or perms.masters.view_clientdsc or perms.masters.view_dscinout %}
     <div
-      class="nav-accordion-item{% if url_name in 'dsc_list dsc_create dsc_edit dsc_delete dsc_inout_list dsc_inout_edit dsc_notification_list dsc_notification_mark_read' %} is-open{% endif %}"
+      class="nav-accordion-item{% if url_name in 'dsc_list dsc_create dsc_edit dsc_delete dsc_inout_list dsc_inout_edit dsc_notification_list dsc_notification_mark_read dsc_bulk_import dsc_bulk_import_template' %} is-open{% endif %}"
       data-nav-section="dsc"
     >
       <button
         type="button"
         class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'dsc_list dsc_create dsc_edit dsc_delete dsc_inout_list dsc_inout_edit dsc_notification_list dsc_notification_mark_read' %}true{% else %}false{% endif %}"
+        aria-expanded="{% if url_name in 'dsc_list dsc_create dsc_edit dsc_delete dsc_inout_list dsc_inout_edit dsc_notification_list dsc_notification_mark_read dsc_bulk_import dsc_bulk_import_template' %}true{% else %}false{% endif %}"
         aria-controls="nav-panel-{{ nav_prefix }}-dsc"
       >
         <i class="bi bi-file-earmark-lock nav-link-icon" aria-hidden="true"></i>
         <span>DSC Management</span>
         <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
       </button>
-      <div id="nav-panel-{{ nav_prefix }}-dsc" class="nav-accordion-panel"{% if url_name not in 'dsc_list dsc_create dsc_edit dsc_delete dsc_inout_list dsc_inout_edit dsc_notification_list dsc_notification_mark_read' %} hidden{% endif %}>
+      <div id="nav-panel-{{ nav_prefix }}-dsc" class="nav-accordion-panel"{% if url_name not in 'dsc_list dsc_create dsc_edit dsc_delete dsc_inout_list dsc_inout_edit dsc_notification_list dsc_notification_mark_read dsc_bulk_import dsc_bulk_import_template' %} hidden{% endif %}>
         {% if user.is_superuser or perms.masters.view_clientdsc %}
-          <a class="nav-link {% if url_name in 'dsc_list dsc_create dsc_edit dsc_delete' %}active{% endif %}" href="{% url 'dsc_list' %}"><i class="bi bi-plus-circle nav-link-icon" aria-hidden="true"></i><span>New DSC</span></a>
+          <a class="nav-link {% if url_name in 'dsc_list dsc_create dsc_edit dsc_delete dsc_bulk_import dsc_bulk_import_template' %}active{% endif %}" href="{% url 'dsc_list' %}"><i class="bi bi-plus-circle nav-link-icon" aria-hidden="true"></i><span>New DSC</span></a>
         {% endif %}
         {% if user.is_superuser or perms.masters.view_dscinout %}
           <a class="nav-link {% if url_name in 'dsc_inout_list dsc_inout_edit' %}active{% endif %}" href="{% url 'dsc_inout_list' %}"><i class="bi bi-arrow-left-right nav-link-icon" aria-hidden="true"></i><span>DSC In-Out</span></a>

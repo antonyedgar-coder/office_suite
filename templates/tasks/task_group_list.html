@@ -7,7 +7,10 @@
       <div class="col-12 col-md"><input class="form-control" name="q" value="{{ q }}" placeholder="Search by name" /></div>
       <div class="col-12 col-md-auto d-flex gap-2">
         <button class="btn btn-outline-secondary" type="submit">Search</button>
-        {% if perms.tasks.add_taskgroup %}<a class="btn btn-primary" href="{% url 'task_group_create' %}">New group</a>{% endif %}
+        {% if perms.tasks.add_taskgroup %}
+          <a class="btn btn-outline-primary" href="{% url 'task_group_bulk_import' %}">Bulk upload (CSV)</a>
+          <a class="btn btn-primary" href="{% url 'task_group_create' %}">New group</a>
+        {% endif %}
       </div>
     </form>
   </div>

@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .checklist import copy_checklist_to_task
-from .client_type_rules import validate_submit_for_client_type, verifier_may_approve_without_submit
+from .client_type_rules import validate_submit_for_client_type
 from .models import (
     Task,
     TaskActivity,
@@ -106,11 +106,7 @@ def resolve_task_billing(*, master: TaskMaster, is_billable=None, fees_amount=No
 
 @transaction.atomic
 def transition_task_status(task: Task, new_status: str, *, user, message: str = "") -> Task:
-    direct_none_verify = (
-        new_status == Task.STATUS_VERIFIED and verifier_may_approve_without_submit(task)
-    )
-    if not direct_none_verify:
-        validate_transition(task, new_status)
+    validate_transition(task, new_status)
     old = task.status
     if old == new_status:
         return task
@@ -168,6 +164,10 @@ def create_task_from_master(
     is_billable=None,
     fees_amount=None,
 ) -> Task:
+    if not master.is_active or master.archived_at is not None:
+        raise ValidationError(
+            "This task master is inactive and cannot be used to create new tasks."
+        )
     started = enrollment.started_at if enrollment else timezone.localdate()
     pk = period_key or first_period_key(master, started)
     if due_date is None:
@@ -375,6 +375,8 @@ def verify_task(task: Task, user, message: str = "") -> Task:
         raise ValidationError("Only the designated verifier can verify this task.")
     if not hasattr(task, "client") or not hasattr(task, "task_master"):
         task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
+    if (getattr(task.client, "client_type", None) or "").strip() == "New Client":
+        raise ValidationError('New Client tasks cannot be verified.')
     transition_task_status(task, Task.STATUS_VERIFIED, user=user, message=message or "Task verified.")
     notify_user(
         task.document_checker,
@@ -408,6 +410,10 @@ def complete_task(task: Task, user, message: str = "") -> Task:
         raise ValidationError("Only the designated document checker can mark this task complete.")
     if task.status != Task.STATUS_VERIFIED:
         raise ValidationError("Task must be verified before document checking can be completed.")
+    if not hasattr(task, "client") or not hasattr(task, "task_master"):
+        task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
+    if (getattr(task.client, "client_type", None) or "").strip() == "New Client":
+        raise ValidationError("New Client tasks cannot be marked complete.")
     transition_task_status(task, Task.STATUS_COMPLETE, user=user, message=message or "Document check complete.")
     for a in task.assignments.select_related("user"):
         notify_user(
@@ -633,6 +639,8 @@ def enrollment_is_paused(enrollment: TaskRecurrenceEnrollment, today=None) -> bo
 def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, today=None) -> Task | None:
     today = today or timezone.localdate()
     master = enrollment.task_master
+    if not master.is_active or master.archived_at is not None:
+        return None
     if not master.is_recurring or not enrollment.is_active:
         return None
     if enrollment_is_paused(enrollment, today):
