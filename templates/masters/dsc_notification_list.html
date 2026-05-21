@@ -11,7 +11,11 @@
         <div>
           <div class="small text-secondary">{{ n.created_at|date:"d-m-Y H:i" }}</div>
           <div>{{ n.message }}</div>
-          {% if n.dsc %}<div class="small text-secondary mt-1">Client: {{ n.dsc.client.client_name }}</div>{% endif %}
+          {% if n.dsc %}
+            <div class="small text-secondary mt-1">
+              Client: {{ n.dsc.client.client_name }}{% if n.dsc.client.pan %} — PAN {{ n.dsc.client.pan|upper }}{% endif %}
+            </div>
+          {% endif %}
         </div>
         <form method="post" action="{% url 'dsc_notification_mark_read' n.pk %}">
           {% csrf_token %}

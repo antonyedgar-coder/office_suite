@@ -401,7 +401,7 @@ class TaskActivity(models.Model):
     TYPE_CHECKLIST = "checklist"
     ACTIVITY_TYPES = [
         (TYPE_CREATED, "Created"),
-        (TYPE_ASSIGNED, "Users change"),
+        (TYPE_ASSIGNED, "Assignment"),
         (TYPE_STATUS, "Status change"),
         (TYPE_REMARK, "Remark"),
         (TYPE_ENROLLMENT, "Enrollment"),

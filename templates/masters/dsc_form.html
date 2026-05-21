@@ -22,9 +22,13 @@
           {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
           <div class="form-field-hint">Approved Individual clients only (search by name or PAN).</div>
         </div>
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-md-3">
           <label class="form-label" for="dscPanDisplay">PAN</label>
           <input class="form-control" id="dscPanDisplay" readonly disabled placeholder="Select a client" />
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="dscGroupDisplay">Group</label>
+          <input class="form-control" id="dscGroupDisplay" readonly disabled placeholder="Select a client" />
         </div>
 
         <div class="col-12 col-md-4">
@@ -70,6 +74,7 @@
       var search = document.getElementById("dscClientSearch");
       var hidden = document.querySelector("input[data-dsc-client-hidden='1']");
       var panEl = document.getElementById("dscPanDisplay");
+      var groupEl = document.getElementById("dscGroupDisplay");
       var list = document.getElementById("dscClientSuggestions");
       if (!search || !hidden || !list) return;
 
@@ -78,13 +83,19 @@
         clients.push({
           id: "{{ opt.pk|escapejs }}",
           label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}",
-          pan: "{{ opt.pan|upper|escapejs }}"
+          pan: "{{ opt.pan|upper|escapejs }}",
+          group: "{% if opt.client_group %}{{ opt.client_group.name|escapejs }}{% endif %}"
         });
       {% endfor %}
 
       function setPan(match) {
         if (!panEl) return;
         panEl.value = match && match.pan ? match.pan : "";
+      }
+
+      function setGroup(match) {
+        if (!groupEl) return;
+        groupEl.value = match && match.group ? match.group : "";
       }
 
       function renderSuggestions(q) {
@@ -115,6 +126,7 @@
         }
         hidden.value = match ? match.id : "";
         setPan(match);
+        setGroup(match);
       }
 
       if (hidden.value) {
@@ -122,6 +134,7 @@
           if (String(clients[j].id) === String(hidden.value)) {
             search.value = clients[j].label;
             setPan(clients[j]);
+            setGroup(clients[j]);
             break;
           }
         }
@@ -131,6 +144,7 @@
       search.addEventListener("input", function () {
         hidden.value = "";
         setPan(null);
+        setGroup(null);
         renderSuggestions(search.value);
       });
       search.addEventListener("change", syncHiddenFromLabel);

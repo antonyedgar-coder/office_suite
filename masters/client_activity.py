@@ -286,10 +286,13 @@ def build_task_client_activity_text(
         return f"Task {title} created."
 
     if activity_type == TaskActivity.TYPE_ASSIGNED:
-        prefix = "Users updated to "
-        if msg.startswith(prefix):
-            names = msg[len(prefix) :].rstrip(".")
-            return f"Task {title} reassigned to {names}."
+        for prefix, verb in (
+            ("Task assigned to ", "assigned to"),
+            ("Users updated to ", "reassigned to"),
+        ):
+            if msg.startswith(prefix):
+                names = msg[len(prefix) :].rstrip(".")
+                return f"Task {title} {verb} {names}."
         if msg:
             return f"Task {title}: {msg}"
         return f"Task {title} assignees updated."

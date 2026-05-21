@@ -431,7 +431,12 @@ class ClientPortalCredentialForm(forms.ModelForm):
 def individual_clients_for_user(user):
     from core.branch_access import approved_clients_for_user
 
-    return approved_clients_for_user(user).filter(client_type="Individual").order_by("client_name")
+    return (
+        approved_clients_for_user(user)
+        .filter(client_type="Individual")
+        .select_related("client_group")
+        .order_by("client_name")
+    )
 
 
 class ClientDSCForm(forms.ModelForm):

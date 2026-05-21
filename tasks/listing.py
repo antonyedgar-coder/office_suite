@@ -27,6 +27,7 @@ class TaskListFilters:
     master_id: str = ""
     assignee_id: str = ""
     verifier_id: str = ""
+    document_checker_id: str = ""
     created_preset: str = "all_time"
     created_from: str = ""
     created_to: str = ""
@@ -110,6 +111,8 @@ def apply_task_list_filters(qs, filters: TaskListFilters):
         qs = qs.filter(assignments__user_id=filters.assignee_id)
     if filters.verifier_id:
         qs = qs.filter(verifier_id=filters.verifier_id)
+    if filters.document_checker_id:
+        qs = qs.filter(document_checker_id=filters.document_checker_id)
 
     c_from = parse_date(filters.created_from)
     c_to = parse_date(filters.created_to)
@@ -269,6 +272,8 @@ def filters_query_string(filters: TaskListFilters) -> str:
         params["assignee"] = filters.assignee_id
     if filters.verifier_id:
         params["verifier"] = filters.verifier_id
+    if filters.document_checker_id:
+        params["document_checker"] = filters.document_checker_id
     for prefix in ("created", "due", "approved"):
         preset = getattr(filters, f"{prefix}_preset")
         if preset:

@@ -4,6 +4,7 @@ import json
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -103,6 +104,24 @@ def task_group_edit(request, pk: int):
     return render(request, "tasks/task_group_form.html", {"form": form, "mode": "edit", "group": group})
 
 
+@require_perm("tasks.delete_taskgroup")
+def task_group_delete(request, pk: int):
+    group = get_object_or_404(TaskGroup, pk=pk)
+    if request.method == "POST":
+        try:
+            group.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "This task group cannot be deleted while task masters are linked to it. "
+                "Remove or reassign those task masters first.",
+            )
+            return redirect("task_group_edit", pk=pk)
+        messages.success(request, "Task group deleted.")
+        return redirect("task_group_list")
+    return render(request, "tasks/task_group_delete_confirm.html", {"group": group})
+
+
 @require_perm("tasks.view_taskmaster")
 def task_master_list(request):
     q = (request.GET.get("q") or "").strip()
@@ -190,6 +209,24 @@ def task_master_edit(request, pk: int):
         "tasks/task_master_form.html",
         _task_master_form_context(form, mode="edit", master=master),
     )
+
+
+@require_perm("tasks.delete_taskmaster")
+def task_master_delete(request, pk: int):
+    master = get_object_or_404(TaskMaster, pk=pk)
+    if request.method == "POST":
+        try:
+            master.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "This task master cannot be deleted while tasks or enrollments use it. "
+                "Cancel or remove those tasks first, or archive the master instead.",
+            )
+            return redirect("task_master_edit", pk=pk)
+        messages.success(request, "Task master deleted.")
+        return redirect("task_master_list")
+    return render(request, "tasks/task_master_delete_confirm.html", {"master": master})
 
 
 def _bulk_csv_preview_context(

@@ -16,6 +16,7 @@ from .models import (
     TaskNotification,
     TaskRecurrenceEnrollment,
 )
+from .client_labels import format_client_name_pan, format_task_client_suffix
 from .notifications import notify_admin_group, notify_user
 from .recurrence import compute_create_due_dates, first_period_key, should_create_today
 from .transitions import validate_transition
@@ -85,11 +86,16 @@ def _set_assignees(task: Task, assignee_ids: list[int], *, actor=None):
         )
 
     if actor:
+        names = _assignee_names(assignee_ids)
+        if not old_ids:
+            assign_msg = f"Task assigned to {names}."
+        else:
+            assign_msg = f"Users updated to {names}."
         _log_activity(
             task,
             actor,
             TaskActivity.TYPE_ASSIGNED,
-            message=f"Users updated to {_assignee_names(assignee_ids)}.",
+            message=assign_msg,
             metadata={"old_assignee_ids": sorted(old_ids), "new_assignee_ids": sorted(assignee_ids)},
         )
 
@@ -226,7 +232,7 @@ def create_task_from_master(
     if needs_assignment_approval:
         notify_user(
             verifier,
-            f"Approve task assignment: {task.display_title} — {client.client_id}",
+            f"Approve task assignment: {task.display_title} — {format_client_name_pan(client)}",
             kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -235,7 +241,7 @@ def create_task_from_master(
         for u in assignee_users:
             notify_user(
                 u,
-                f"You were assigned: {task.display_title} — {client.client_id}",
+                f"You were assigned: {task.display_title} — {format_client_name_pan(client)}",
                 kind=TaskNotification.KIND_ASSIGNED,
                 link=f"/tasks/{task.pk}/",
                 task=task,
@@ -251,11 +257,11 @@ def approve_task_assignment(task: Task, user, message: str = "") -> Task:
         raise ValidationError("This task is not awaiting assignment approval.")
 
     transition_task_status(task, Task.STATUS_ASSIGNED, user=user, message=message or "Assignment approved.")
-    client_id = task.client_id
+    client_label = format_task_client_suffix(task)
     for assignment in task.assignments.select_related("user"):
         notify_user(
             assignment.user,
-            f"You were assigned: {task.display_title} — {client_id}",
+            f"You were assigned: {task.display_title} — {client_label}",
             kind=TaskNotification.KIND_ASSIGNED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -314,7 +320,7 @@ def submit_task(task: Task, user) -> Task:
     transition_task_status(task, Task.STATUS_SUBMITTED, user=user)
     notify_user(
         task.verifier,
-        f"Task submitted for verification: {task.display_title} — {task.client_id}",
+        f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
         kind=TaskNotification.KIND_VERIFY,
         link=f"/tasks/{task.pk}/",
         task=task,
@@ -338,7 +344,7 @@ def resubmit_for_document_check(task: Task, user, message: str = "") -> Task:
     task.save(update_fields=["submitted_at", "submitted_by", "updated_at"])
     notify_user(
         task.document_checker,
-        f"Document check (resubmitted): {task.display_title} — {task.client_id}",
+        f"Document check (resubmitted): {task.display_title} — {format_task_client_suffix(task)}",
         kind=TaskNotification.KIND_DOCUMENT_CHECK,
         link=f"/tasks/{task.pk}/",
         task=task,
@@ -361,7 +367,7 @@ def send_back_for_document_correction(task: Task, user, message: str = "") -> Ta
     for a in task.assignments.select_related("user"):
         notify_user(
             a.user,
-            f"Documents need correction: {task.display_title} — {task.client_id}",
+            f"Documents need correction: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_REWORK,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -380,7 +386,7 @@ def verify_task(task: Task, user, message: str = "") -> Task:
     transition_task_status(task, Task.STATUS_VERIFIED, user=user, message=message or "Task verified.")
     notify_user(
         task.document_checker,
-        f"Document check required: {task.display_title} — {task.client_id}",
+        f"Document check required: {task.display_title} — {format_task_client_suffix(task)}",
         kind=TaskNotification.KIND_DOCUMENT_CHECK,
         link=f"/tasks/{task.pk}/",
         task=task,
@@ -388,7 +394,7 @@ def verify_task(task: Task, user, message: str = "") -> Task:
     for a in task.assignments.select_related("user"):
         notify_user(
             a.user,
-            f"Task verified: {task.display_title} — {task.client_id}",
+            f"Task verified: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -396,7 +402,7 @@ def verify_task(task: Task, user, message: str = "") -> Task:
     if task.created_by_id:
         notify_user(
             task.created_by,
-            f"Task verified: {task.display_title} — {task.client_id}",
+            f"Task verified: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -418,7 +424,7 @@ def complete_task(task: Task, user, message: str = "") -> Task:
     for a in task.assignments.select_related("user"):
         notify_user(
             a.user,
-            f"Task complete: {task.display_title} — {task.client_id}",
+            f"Task complete: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -426,7 +432,7 @@ def complete_task(task: Task, user, message: str = "") -> Task:
     if task.created_by_id:
         notify_user(
             task.created_by,
-            f"Task complete: {task.display_title} — {task.client_id}",
+            f"Task complete: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -434,7 +440,7 @@ def complete_task(task: Task, user, message: str = "") -> Task:
     if task.verifier_id and task.verifier_id != user.pk:
         notify_user(
             task.verifier,
-            f"Task complete: {task.display_title} — {task.client_id}",
+            f"Task complete: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_APPROVED,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -489,7 +495,7 @@ def rework_task(task: Task, user, message: str = "") -> Task:
     for a in task.assignments.select_related("user"):
         notify_user(
             a.user,
-            f"Task sent for rework: {task.display_title} — {task.client_id}",
+            f"Task sent for rework: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_REWORK,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -574,7 +580,7 @@ def update_task_team(
             u = User.objects.get(pk=uid)
             notify_user(
                 u,
-                f"You were assigned: {task.display_title} — {task.client_id}",
+                f"You were assigned: {task.display_title} — {format_task_client_suffix(task)}",
                 kind=TaskNotification.KIND_ASSIGNED,
                 link=f"/tasks/{task.pk}/",
                 task=task,
@@ -584,7 +590,7 @@ def update_task_team(
         if task.status == Task.STATUS_PENDING_ASSIGNMENT:
             notify_user(
                 verifier,
-                f"Approve task assignment: {task.display_title} — {task.client_id}",
+                f"Approve task assignment: {task.display_title} — {format_task_client_suffix(task)}",
                 kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
                 link=f"/tasks/{task.pk}/",
                 task=task,
@@ -592,7 +598,7 @@ def update_task_team(
         elif task.status == Task.STATUS_SUBMITTED:
             notify_user(
                 verifier,
-                f"Task submitted for verification: {task.display_title} — {task.client_id}",
+                f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
                 kind=TaskNotification.KIND_VERIFY,
                 link=f"/tasks/{task.pk}/",
                 task=task,
@@ -601,7 +607,7 @@ def update_task_team(
     if old_doc_id != document_checker.pk and task.status == Task.STATUS_VERIFIED:
         notify_user(
             document_checker,
-            f"Document check required: {task.display_title} — {task.client_id}",
+            f"Document check required: {task.display_title} — {format_task_client_suffix(task)}",
             kind=TaskNotification.KIND_DOCUMENT_CHECK,
             link=f"/tasks/{task.pk}/",
             task=task,
@@ -650,7 +656,7 @@ def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, to
     if not assignees or not assignees_active(assignees):
         msg = (
             f"Recurring task skipped (inactive assignee): {master.name} — "
-            f"{enrollment.client_id}"
+            f"{format_client_name_pan(enrollment.client)}"
         )
         notify_admins(msg, link="/tasks/")
         return None

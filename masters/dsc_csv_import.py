@@ -17,6 +17,7 @@ from .models import Client, ClientDSC
 
 DSC_CSV_COLUMNS = [
     "CLIENT_ID",
+    "CLIENT_NAME",
     "ISSUE_DATE",
     "EXPIRY_DATE",
     "EXPIRY_NOTIFICATION",
@@ -88,6 +89,7 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
 
         errors: list[str] = []
         client_id = _upper(gv("CLIENT_ID"))
+        client_name = (gv("CLIENT_NAME") or "").strip()
         client = clients_by_id.get(client_id)
 
         try:
@@ -108,12 +110,21 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
 
         if not client_id:
             errors.append("CLIENT_ID is required.")
+        if not client_name:
+            errors.append("CLIENT_NAME is required.")
         elif not client:
             errors.append(
                 f"CLIENT_ID not found, not Individual, or not in your branch: {client_id}"
             )
         elif client and not client_allowed_for_user(user, client):
             errors.append(f"CLIENT_ID not allowed for your branch: {client_id}")
+        elif client and client_name:
+            expected = (client.client_name or "").strip()
+            if expected.casefold() != client_name.casefold():
+                errors.append(
+                    f"CLIENT_NAME does not match client master for {client_id} "
+                    f"(expected {expected!r}, got {client_name!r})."
+                )
 
         if not issue_date:
             errors.append("ISSUE_DATE is required.")

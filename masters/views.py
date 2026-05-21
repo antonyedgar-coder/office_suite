@@ -603,13 +603,34 @@ def client_reject(request, client_id: str):
         return redirect("client_pending_list")
     cid = client.client_id
     cname = client.client_name
+    creator = client.created_by
+    reject_remarks = (request.POST.get("reject_remarks") or "").strip()
     log_client_activity(
         client=client,
         user=request.user,
         category=ClientActivityLog.CATEGORY_CLIENT,
         activity="Client master rejected and removed from approval queue.",
-        remarks=(request.POST.get("reject_remarks") or "").strip() or client.remarks,
+        remarks=reject_remarks or client.remarks,
     )
+    if creator_id := getattr(creator, "pk", None):
+        if creator_id != request.user.pk and getattr(creator, "is_active", True):
+            from django.urls import reverse
+
+            from tasks.client_labels import format_client_name_pan
+            from tasks.models import TaskNotification
+            from tasks.notifications import notify_user
+
+            label = format_client_name_pan(client)
+            msg = f"Client rejected: {label}."
+            if reject_remarks:
+                msg = f"{msg} Remarks: {reject_remarks}"
+            notify_user(
+                creator,
+                msg,
+                kind=TaskNotification.KIND_GENERAL,
+                link=reverse("client_list"),
+                client=None,
+            )
     try:
         client.delete()
     except ProtectedError:
@@ -2039,7 +2060,12 @@ def dsc_bulk_import(request):
             preview_page_title="DSC — Import preview",
             success_hint="Individual clients only. In-out records are created on import. Click Confirm import to save.",
             cells_fn=lambda r: [
-                r.data["client"].client_id if r.data.get("client") else "",
+                (
+                    f"{r.data['client'].client_name}"
+                    + (f" — {r.data['client'].pan.upper()}" if r.data.get("client") and r.data["client"].pan else "")
+                )
+                if r.data.get("client")
+                else "",
                 r.data.get("issue_date", ""),
                 r.data.get("expiry_date", ""),
                 "Yes" if r.data.get("expiry_notification") else "No",
@@ -2058,7 +2084,7 @@ def dsc_bulk_import(request):
             "import_title": "DSC import",
             "import_page_title": "DSC — Bulk upload (CSV)",
             "import_description": (
-                "CLIENT_ID must be an approved Individual client in your branch. "
+                "CLIENT_ID and CLIENT_NAME must match an approved Individual client in your branch. "
                 "Dates: YYYY-MM-DD or DD-MM-YYYY. EXPIRY_NOTIFICATION: YES or NO."
             ),
             "columns": DSC_CSV_COLUMNS,
@@ -2077,7 +2103,9 @@ def dsc_bulk_import_template(request):
         return f'"{s}"'
 
     lines = [",".join(q(c) for c in DSC_CSV_COLUMNS)]
-    lines.append(",".join(q(c) for c in ["A00001", "2024-01-01", "2027-01-01", "YES", "dsc-secret"]))
+    lines.append(
+        ",".join(q(c) for c in ["A00001", "Sample Client Name", "2024-01-01", "2027-01-01", "YES", "dsc-secret"])
+    )
     content = "\r\n".join(lines) + "\r\n"
     resp = HttpResponse(content, content_type="text/csv; charset=utf-8")
     resp["Content-Disposition"] = 'attachment; filename="dsc-template.csv"'

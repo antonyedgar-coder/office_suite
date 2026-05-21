@@ -92,7 +92,7 @@
         <div class="list-group list-group-flush">
           {% for r in client_type_counts %}
             <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
-              <div>{{ r.type }}</div>
+              <div>{{ r.client_type|default:"—" }}</div>
               <div class="mono fw-semibold">{{ r.count }}</div>
             </div>
           {% empty %}
@@ -194,7 +194,7 @@
       var el = document.getElementById("dashboard-client-types");
       var clientCounts = el ? safeParse(el.textContent || "[]", []) : [];
       var typeLabels = clientCounts.map(function (r) {
-        return r.type;
+        return r.client_type || "—";
       });
       var typeValues = clientCounts.map(function (r) {
         return r.count;

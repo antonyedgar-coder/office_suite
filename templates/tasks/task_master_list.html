@@ -43,7 +43,10 @@
                 <span class="badge text-bg-secondary">Inactive</span>
               {% endif %}
             </td>
-            <td class="text-end">{% if perms.tasks.change_taskmaster %}<a href="{% url 'task_master_edit' m.pk %}" class="btn btn-sm btn-outline-primary">Edit</a>{% endif %}</td>
+            <td class="text-end">
+              {% if perms.tasks.change_taskmaster %}<a href="{% url 'task_master_edit' m.pk %}" class="btn btn-sm btn-outline-primary">Edit</a>{% endif %}
+              {% if perms.tasks.delete_taskmaster %}<a href="{% url 'task_master_delete' m.pk %}" class="btn btn-sm btn-outline-danger">Delete</a>{% endif %}
+            </td>
           </tr>
         {% empty %}<tr><td colspan="5" class="text-secondary">No task masters.</td></tr>{% endfor %}
       </tbody>

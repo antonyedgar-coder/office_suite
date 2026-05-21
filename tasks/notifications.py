@@ -25,8 +25,10 @@ def notify_user(
     kind: str = TaskNotification.KIND_GENERAL,
     link: str = "",
     task: Task | None = None,
+    client=None,
 ) -> TaskNotification:
-    client = task.client if task else None
+    if client is None and task is not None:
+        client = task.client
     return TaskNotification.objects.create(
         user=user,
         kind=kind,
