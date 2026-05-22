@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from core.feature_flags import task_module_enabled
+from core.feature_flags import documents_module_enabled, task_module_enabled
 
 User = get_user_model()
 
@@ -20,6 +20,7 @@ class WipeOptions:
     clients: bool = False
     client_groups: bool = False
     tasks: bool = False
+    documents: bool = False
     activity_log: bool = False
     delete_users: bool = False
     users_keep_ids: set[int] = field(default_factory=set)
@@ -83,6 +84,35 @@ def count_local_data() -> dict[str, int]:
                 "task_enrollments": 0,
             }
         )
+
+    if documents_module_enabled():
+        from documents.models import (
+            ClientDocument,
+            ClientDocumentFolder,
+            DocumentFolderTemplate,
+            DocumentTypeTemplate,
+            TaskMasterDocumentMapping,
+        )
+
+        counts.update(
+            {
+                "client_documents": ClientDocument.objects.count(),
+                "client_document_folders": ClientDocumentFolder.objects.count(),
+                "document_folder_templates": DocumentFolderTemplate.objects.count(),
+                "document_type_templates": DocumentTypeTemplate.objects.count(),
+                "task_document_mappings": TaskMasterDocumentMapping.objects.count(),
+            }
+        )
+    else:
+        counts.update(
+            {
+                "client_documents": 0,
+                "client_document_folders": 0,
+                "document_folder_templates": 0,
+                "document_type_templates": 0,
+                "task_document_mappings": 0,
+            }
+        )
     return counts
 
 
@@ -116,6 +146,44 @@ def _delete_tasks() -> dict[str, int]:
     return out
 
 
+def _delete_documents_module() -> dict[str, int]:
+    """Uploaded files, client folders, settings templates, and task→file links."""
+    if not documents_module_enabled():
+        return {}
+    import shutil
+    from pathlib import Path
+
+    from django.conf import settings
+
+    from documents.models import (
+        ClientDocument,
+        ClientDocumentFolder,
+        DocumentFolderTemplate,
+        DocumentTypeTemplate,
+        TaskMasterDocumentMapping,
+    )
+
+    out: dict[str, int] = {}
+    for doc in ClientDocument.objects.all().only("id", "file").iterator(chunk_size=200):
+        if doc.file:
+            doc.file.delete(save=False)
+    out["client_documents"] = ClientDocument.objects.all().delete()[0]
+    out["client_document_folders"] = ClientDocumentFolder.objects.all().delete()[0]
+    out["task_document_mappings"] = TaskMasterDocumentMapping.objects.all().delete()[0]
+    out["document_type_templates"] = DocumentTypeTemplate.objects.all().delete()[0]
+    for folder in DocumentFolderTemplate.objects.all().only("pk"):
+        folder.client_types.clear()
+    out["document_folder_templates"] = DocumentFolderTemplate.objects.all().delete()[0]
+
+    media_root = getattr(settings, "MEDIA_ROOT", None)
+    if media_root:
+        clients_dir = Path(media_root) / "clients"
+        if clients_dir.is_dir():
+            shutil.rmtree(clients_dir, ignore_errors=True)
+            out["document_media_dirs"] = 1
+    return out
+
+
 @transaction.atomic
 def wipe_local_data(options: WipeOptions) -> dict[str, int]:
     """
@@ -127,8 +195,12 @@ def wipe_local_data(options: WipeOptions) -> dict[str, int]:
         options.director_mapping = True
         options.dir3kyc = True
         options.tasks = True
+        options.documents = True
 
     deleted: dict[str, int] = {}
+
+    if options.documents:
+        deleted.update(_delete_documents_module())
 
     if options.tasks:
         deleted.update(_delete_tasks())
@@ -203,6 +275,7 @@ def wipe_all_local_data(*, keep_user_ids: set[int]) -> dict[str, int]:
             clients=True,
             client_groups=True,
             tasks=True,
+            documents=True,
             activity_log=True,
             delete_users=True,
             users_keep_ids=keep_user_ids,

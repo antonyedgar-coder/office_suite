@@ -1,0 +1,65 @@
+<script>
+  (function () {
+    var search = document.getElementById("docClientSearch");
+    var hidden = document.querySelector("input[data-doc-client-hidden='1']");
+    var list = document.getElementById("docClientSuggestions");
+    if (!search || !hidden || !list) return;
+
+    var clients = [];
+    {% for opt in form.fields.client.queryset %}
+      clients.push({
+        id: "{{ opt.pk|escapejs }}",
+        label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}",
+        pan: "{{ opt.pan|upper|escapejs }}",
+        branch: "{{ opt.branch|escapejs }}",
+        client_type: "{{ opt.client_type|escapejs }}"
+      });
+    {% endfor %}
+
+    function renderSuggestions(q) {
+      list.innerHTML = "";
+      var qq = (q || "").toLowerCase().trim();
+      var shown = 0;
+      for (var i = 0; i < clients.length; i++) {
+        var t = (clients[i].label || "").toLowerCase();
+        if (!qq || t.indexOf(qq) !== -1) {
+          var o = document.createElement("option");
+          o.value = clients[i].label;
+          list.appendChild(o);
+          shown++;
+          if (shown >= 50) break;
+        }
+      }
+    }
+
+    function syncHidden() {
+      var v = (search.value || "").trim();
+      var match = null;
+      for (var i = 0; i < clients.length; i++) {
+        if (clients[i].label === v) {
+          match = clients[i];
+          break;
+        }
+      }
+      hidden.value = match ? match.id : "";
+      if (window.docOnClientSelected) window.docOnClientSelected(match);
+    }
+
+    if (hidden.value) {
+      for (var j = 0; j < clients.length; j++) {
+        if (String(clients[j].id) === String(hidden.value)) {
+          search.value = clients[j].label;
+          break;
+        }
+      }
+    }
+
+    renderSuggestions("");
+    search.addEventListener("input", function () {
+      hidden.value = "";
+      renderSuggestions(search.value);
+    });
+    search.addEventListener("change", syncHidden);
+    search.addEventListener("blur", syncHidden);
+  })();
+</script>

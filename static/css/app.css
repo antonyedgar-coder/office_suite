@@ -815,3 +815,24 @@ body {
 .master-request-panel-table .table-active {
   --bs-table-bg-state: rgba(3, 105, 161, 0.12);
 }
+
+.doc-actions-menu {
+  min-width: 9.5rem;
+}
+
+.doc-actions-menu .dropdown-item {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.doc-actions-toggle {
+  line-height: 1;
+}
+
+.doc-replace-details dt {
+  font-weight: 600;
+}
+
+.doc-replace-details dd {
+  color: var(--bs-body-color);
+}

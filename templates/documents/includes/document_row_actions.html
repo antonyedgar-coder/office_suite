@@ -1,0 +1,53 @@
+{% load document_extras %}
+<div class="dropdown d-inline-block">
+  <button
+    type="button"
+    class="btn btn-sm btn-link text-secondary px-1 py-0 doc-actions-toggle"
+    data-bs-toggle="dropdown"
+    aria-expanded="false"
+    aria-label="File actions"
+    title="Actions"
+  >
+    <i class="bi bi-three-dots-vertical fs-5"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end shadow-sm doc-actions-menu">
+    <li>
+      <a
+        class="dropdown-item"
+        href="{% url 'client_document_view' doc.pk %}"
+        target="_blank"
+        rel="noopener noreferrer"
+      >View</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="{% url 'client_document_download' doc.pk %}">Download</a>
+    </li>
+    {% if perms.documents.add_clientdocument and doc|document_can_edit:request.user %}
+      <li>
+        <button
+          type="button"
+          class="dropdown-item js-doc-replace-open"
+          data-replace-url="{% url 'client_document_replace' doc.pk %}"
+          data-client="{{ doc.client.client_name }}"
+          data-folder="{{ doc.folder.template.name }}"
+          data-file-type="{{ doc.document_type.name }}"
+          data-fy="{{ doc|document_fy }}"
+          data-period="{{ doc|document_period }}"
+          data-filename="{{ doc.generated_filename }}"
+          data-version="{{ doc.version }}"
+          data-extensions="{{ doc.document_type.allowed_extensions }}"
+        >Edit</button>
+      </li>
+    {% endif %}
+    {% if perms.documents.delete_clientdocument and doc|document_can_edit:request.user %}
+      <li><hr class="dropdown-divider my-1"></li>
+      <li>
+        <a class="dropdown-item text-danger" href="{% url 'client_document_delete' doc.pk %}">Delete</a>
+      </li>
+    {% endif %}
+    {% if doc.task_id and not doc|document_can_edit:request.user %}
+      <li><hr class="dropdown-divider my-1"></li>
+      <li><span class="dropdown-item-text small text-secondary">Locked (task complete)</span></li>
+    {% endif %}
+  </ul>
+</div>

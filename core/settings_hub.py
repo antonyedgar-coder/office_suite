@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .feature_flags import task_module_enabled
+from .feature_flags import documents_module_enabled, task_module_enabled
 
 
 @dataclass(frozen=True)
@@ -113,6 +113,44 @@ def _tasks_setup_cards(user) -> tuple[SettingsCard, ...]:
     return tuple(cards)
 
 
+def _documents_setup_cards(user) -> tuple[SettingsCard, ...]:
+    if not documents_module_enabled():
+        return ()
+    if not (
+        user.is_superuser
+        or user.has_perm("documents.manage_document_templates")
+    ):
+        return ()
+    cards: tuple[SettingsCard, ...] = (
+        SettingsCard(
+            title="Folder creation",
+            description="Standard document folders (e.g. Financials, KYC). New folders can only be added here.",
+            url_name="document_folder_template_list",
+            icon="bi-folder-plus",
+            icon_bg="settings-icon-indigo",
+        ),
+        SettingsCard(
+            title="File creation",
+            description="Allowed file types per folder, extensions, FY rules, and auto-naming templates.",
+            url_name="document_type_template_list",
+            icon="bi-file-earmark-plus",
+            icon_bg="settings-icon-teal",
+        ),
+    )
+    if task_module_enabled():
+        cards = (
+            *cards,
+            SettingsCard(
+                title="Task → document links",
+                description="Map task types to document file types for upload from tasks and period alignment.",
+                url_name="task_document_mapping_list",
+                icon="bi-link-45deg",
+                icon_bg="settings-icon-violet",
+            ),
+        )
+    return cards
+
+
 def _billing_setup_cards(user) -> tuple[SettingsCard, ...]:
     cards: list[SettingsCard] = []
     if user.is_superuser or user.has_perm("masters.view_expensecategory"):
@@ -139,6 +177,9 @@ def build_settings_sections(user) -> list[SettingsSection]:
     task_cards = _tasks_setup_cards(user)
     if task_cards:
         sections.append(SettingsSection(title="Tasks", cards=task_cards))
+    doc_cards = _documents_setup_cards(user)
+    if doc_cards:
+        sections.append(SettingsSection(title="Documents", cards=doc_cards))
     billing_cards = _billing_setup_cards(user)
     if billing_cards:
         sections.append(SettingsSection(title="Billing", cards=billing_cards))

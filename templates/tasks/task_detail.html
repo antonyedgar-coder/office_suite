@@ -6,6 +6,7 @@
   <div class="row g-3">
     <div class="col-lg-5">
       <div class="card p-3">
+        <h6 class="mb-3">Task details</h6>
         <p class="mb-1"><strong>Client:</strong> {{ task.client.client_name }} ({{ task.client_id }})</p>
         <p class="mb-1"><strong>Type of client:</strong> {{ task.client.client_type|default:"—" }}</p>
         <p class="mb-1"><strong>Status:</strong> {{ task.get_status_display }}</p>
@@ -43,6 +44,9 @@
           {% endif %}
         </div>
       </div>
+      {% if show_task_documents %}
+        {% include "tasks/includes/task_documents_panel.html" %}
+      {% endif %}
       {% if checklist_items %}
         <div class="card p-3 mt-3">
           <h6 class="mb-3">Checklist</h6>

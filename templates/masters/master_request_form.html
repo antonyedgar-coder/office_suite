@@ -14,10 +14,13 @@
     </div>
 
     <div class="mb-3" id="masterRequestClientWrap" style="display:none">
-      <label class="form-label required-field" for="id_client">Client</label>
+      <label class="form-label required-field" for="masterRequestClientSearch">Client</label>
+      {{ form.client_search }}
+      <datalist id="masterRequestClientSuggestions"></datalist>
       {{ form.client }}
       {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
-      <div class="form-field-hint">Required only when requesting a new task.</div>
+      {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
+      <div class="form-field-hint">Required only when requesting a new task. Type name or PAN and pick from the list.</div>
     </div>
 
     <div class="mb-3">
@@ -50,10 +53,19 @@
     (function () {
       var typeEl = document.getElementById("id_request_type");
       var clientWrap = document.getElementById("masterRequestClientWrap");
-      var clientEl = document.getElementById("id_client");
+      var clientEl = document.querySelector("input[data-master-request-client-hidden='1']");
+      var clientSearch = document.getElementById("masterRequestClientSearch");
+      var clientList = document.getElementById("masterRequestClientSuggestions");
       var assigneeEl = document.getElementById("id_assigned_to");
       var assignees = JSON.parse(document.getElementById("master-request-assignees").textContent || "{}");
       var NEW_TASK = "new_task";
+      var clients = [];
+      {% for opt in form.fields.client.queryset %}
+        clients.push({
+          id: "{{ opt.pk|escapejs }}",
+          label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}"
+        });
+      {% endfor %}
 
       function syncAssignees() {
         if (!typeEl || !assigneeEl) return;
@@ -74,12 +86,64 @@
         });
       }
 
+      function renderClientSuggestions(q) {
+        if (!clientList) return;
+        clientList.innerHTML = "";
+        var qq = (q || "").toLowerCase().trim();
+        var shown = 0;
+        for (var i = 0; i < clients.length; i++) {
+          var c = clients[i];
+          var t = (c.label || "").toLowerCase();
+          if (!qq || t.indexOf(qq) !== -1) {
+            var o = document.createElement("option");
+            o.value = c.label;
+            clientList.appendChild(o);
+            shown++;
+            if (shown >= 50) break;
+          }
+        }
+      }
+
+      function syncClientHiddenFromLabel() {
+        if (!clientSearch || !clientEl) return;
+        var v = (clientSearch.value || "").trim();
+        var match = null;
+        for (var i = 0; i < clients.length; i++) {
+          if (clients[i].label === v) {
+            match = clients[i];
+            break;
+          }
+        }
+        clientEl.value = match ? match.id : "";
+      }
+
       function syncClient() {
         if (!typeEl || !clientWrap) return;
         var show = typeEl.value === NEW_TASK;
         clientWrap.style.display = show ? "" : "none";
-        if (clientEl) clientEl.required = show;
-        if (!show && clientEl) clientEl.value = "";
+        if (clientSearch) clientSearch.required = show;
+        if (!show) {
+          if (clientEl) clientEl.value = "";
+          if (clientSearch) clientSearch.value = "";
+        }
+      }
+
+      if (clientSearch && clientEl && clientList) {
+        if (clientEl.value) {
+          for (var j = 0; j < clients.length; j++) {
+            if (String(clients[j].id) === String(clientEl.value)) {
+              clientSearch.value = clients[j].label;
+              break;
+            }
+          }
+        }
+        renderClientSuggestions("");
+        clientSearch.addEventListener("input", function () {
+          clientEl.value = "";
+          renderClientSuggestions(clientSearch.value);
+        });
+        clientSearch.addEventListener("change", syncClientHiddenFromLabel);
+        clientSearch.addEventListener("blur", syncClientHiddenFromLabel);
       }
 
       if (typeEl) {

@@ -1,0 +1,41 @@
+{% if enable_documents_module and user.is_authenticated %}
+  {% if user.is_superuser or perms.documents.view_clientdocument %}
+    <div
+      class="nav-accordion-item{% if url_name in 'client_folder_create client_document_upload_pick client_document_upload document_file_list client_document_download' %} is-open{% endif %}"
+      data-nav-section="documents"
+    >
+      <button
+        type="button"
+        class="nav-accordion-toggle"
+        aria-expanded="{% if url_name in 'client_folder_create client_document_upload_pick client_document_upload document_file_list client_document_download' %}true{% else %}false{% endif %}"
+        aria-controls="nav-panel-{{ nav_prefix }}-documents"
+      >
+        <i class="bi bi-folder2-open nav-link-icon" aria-hidden="true"></i>
+        <span>Documents</span>
+        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
+      </button>
+      <div
+        id="nav-panel-{{ nav_prefix }}-documents"
+        class="nav-accordion-panel"
+        {% if url_name not in 'client_folder_create client_document_upload_pick client_document_upload document_file_list client_document_download' %}
+          hidden
+        {% endif %}
+      >
+        {% if user.is_superuser or perms.documents.add_clientdocument %}
+          <a
+            class="nav-link {% if url_name == 'client_folder_create' %}active{% endif %}"
+            href="{% url 'client_folder_create' %}"
+          ><i class="bi bi-folder-plus nav-link-icon" aria-hidden="true"></i><span>Create folder</span></a>
+          <a
+            class="nav-link {% if url_name in 'client_document_upload_pick client_document_upload' %}active{% endif %}"
+            href="{% url 'client_document_upload_pick' %}"
+          ><i class="bi bi-cloud-upload nav-link-icon" aria-hidden="true"></i><span>Upload file</span></a>
+        {% endif %}
+        <a
+          class="nav-link {% if url_name == 'document_file_list' %}active{% endif %}"
+          href="{% url 'document_file_list' %}"
+        ><i class="bi bi-files nav-link-icon" aria-hidden="true"></i><span>View / download files</span></a>
+      </div>
+    </div>
+  {% endif %}
+{% endif %}

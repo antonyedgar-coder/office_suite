@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.branch_access import approved_clients_for_user
+from core.feature_flags import documents_module_enabled, task_module_enabled
 from core.decorators import require_perm
 from core.embed_popup import allow_embed_popup_frame
 
@@ -1043,6 +1044,25 @@ def task_detail(request, pk: int):
         period_type=task.period_type or "",
         master=task.task_master,
     )
+
+    task_doc_ctx: dict = {"show_task_documents": False}
+    if documents_module_enabled() and task_module_enabled():
+        from documents.periods import extract_fy_from_period_key
+        from documents.task_bridge import document_period_from_task, task_allows_document_changes
+        from documents.task_services import build_task_document_slots
+
+        try:
+            period_key, period_label = document_period_from_task(task)
+        except ValidationError:
+            period_key, period_label = "once", (task.period_key or "—")
+        task_doc_ctx = {
+            "show_task_documents": True,
+            "task_doc_slots": build_task_document_slots(task),
+            "task_doc_period_label": period_label,
+            "task_doc_period_fy": extract_fy_from_period_key(period_key),
+            "task_doc_locked": not task_allows_document_changes(task),
+        }
+
     return render(
         request,
         "tasks/task_detail.html",
@@ -1070,6 +1090,7 @@ def task_detail(request, pk: int):
             "can_delete": can_delete,
             "can_edit": can_edit,
             "assignment_pending": task.status == Task.STATUS_PENDING_ASSIGNMENT,
+            **task_doc_ctx,
         },
     )
 

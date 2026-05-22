@@ -36,7 +36,7 @@
             <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_receipt_list' %}">MIS • Receipts</a>
           {% endif %}
           {% if perms.mis.view_expensedetail %}
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_expense_list' %}">MIS • Expenses</a>
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_expense_list' %}">MIS • Client Expenses</a>
           {% endif %}
           {% if perms.dirkyc.view_dir3kyc %}
             <a class="btn btn-outline-primary btn-sm" href="{% url 'dirkyc_list' %}">DIR-3 KYC</a>

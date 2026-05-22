@@ -14,3 +14,7 @@ def env_flag(name: str, *, default: bool = False) -> bool:
 
 def task_module_enabled() -> bool:
     return env_flag("ENABLE_TASK_MODULE", default=False)
+
+
+def documents_module_enabled() -> bool:
+    return env_flag("ENABLE_DOCUMENTS_MODULE", default=False)

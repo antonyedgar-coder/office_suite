@@ -29,6 +29,13 @@
         <div class="col-6 col-md-4"><span class="text-secondary">Task masters</span><div class="mono fw-semibold">{{ counts.task_masters }}</div></div>
         <div class="col-6 col-md-4"><span class="text-secondary">Task groups</span><div class="mono fw-semibold">{{ counts.task_groups }}</div></div>
       {% endif %}
+      {% if enable_documents_module %}
+        <div class="col-6 col-md-4"><span class="text-secondary">Uploaded files</span><div class="mono fw-semibold">{{ counts.client_documents }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Client doc folders</span><div class="mono fw-semibold">{{ counts.client_document_folders }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Folder templates</span><div class="mono fw-semibold">{{ counts.document_folder_templates }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">File type templates</span><div class="mono fw-semibold">{{ counts.document_type_templates }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Task→file links</span><div class="mono fw-semibold">{{ counts.task_document_mappings }}</div></div>
+      {% endif %}
     </div>
 
     <form method="post" class="row g-3" id="resetForm">
@@ -42,7 +49,7 @@
             Delete everything (keep my login only)
           </label>
           <div class="form-text">
-            Clients, client groups, MIS, director mapping, DIR-3 KYC, tasks (if enabled), activity log, and all other users.
+            Clients, client groups, MIS, director mapping, DIR-3 KYC, tasks (if enabled), documents (if enabled), activity log, and all other users.
           </div>
         </div>
       </div>
@@ -67,6 +74,14 @@
             <label class="form-check-label" for="delTasks">Task module (tasks, masters, groups, enrollments)</label>
           </div>
         {% endif %}
+        {% if enable_documents_module %}
+          <div class="form-check">
+            <input class="form-check-input reset-opt" type="checkbox" id="delDocuments" name="delete_documents" value="1" />
+            <label class="form-check-label" for="delDocuments">
+              Documents module (uploads, client folders, folder/file templates, task→file links)
+            </label>
+          </div>
+        {% endif %}
         <div class="form-check">
           <input class="form-check-input reset-opt" type="checkbox" id="delGroups" name="delete_client_groups" value="1" />
           <label class="form-check-label" for="delGroups">Client groups</label>
@@ -86,7 +101,7 @@
             <strong>Client Master (ALL clients)</strong>
           </label>
           <div class="form-text text-danger">
-            Also wipes MIS, director mapping, DIR-3 KYC, and tasks automatically to avoid dependency errors.
+            Also wipes MIS, director mapping, DIR-3 KYC, tasks, and documents (uploads + templates) automatically to avoid dependency errors.
           </div>
         </div>
       </div>

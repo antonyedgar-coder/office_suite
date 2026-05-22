@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% load record_labels document_extras %}
+
+{% block title %}View files — CA Office Suite{% endblock %}
+
+{% block page_title %}View / download files{% endblock %}
+
+
+
+{% block content %}
+
+  {% include "includes/page_header.html" with title="Client documents" subtitle="Active files stored with standard names." %}
+
+
+
+  <p class="mb-3 d-flex flex-wrap gap-2">
+
+    {% if perms.documents.add_clientdocument %}
+
+      <a class="btn btn-sm btn-primary" href="{% url 'client_document_upload_pick' %}">Upload file</a>
+
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'client_folder_create' %}">Create folder</a>
+
+    {% endif %}
+
+  </p>
+
+
+
+  <div class="card p-3 mb-3">
+
+    <form method="get" class="row g-2 align-items-end">
+
+      <div class="col-12 col-md-6 col-lg-3">
+
+        <label class="form-label" for="filterClient">Client</label>
+
+        <select class="form-select" id="filterClient" name="client">
+
+          <option value="">All clients</option>
+
+          {% for c in client_choices %}
+
+            <option value="{{ c.client_id }}"{% if filter_client_id == c.client_id %} selected{% endif %}>{{ c.client_name }}</option>
+
+          {% endfor %}
+
+        </select>
+
+      </div>
+
+      <div class="col-12 col-md-6 col-lg-2">
+
+        <label class="form-label" for="filterFy">FY</label>
+
+        <select class="form-select" id="filterFy" name="fy">
+
+          <option value="">All FY</option>
+
+          {% for val, label in fy_choices %}
+
+            <option value="{{ val }}"{% if filter_fy == val %} selected{% endif %}>{{ label }}</option>
+
+          {% endfor %}
+
+        </select>
+
+      </div>
+
+      <div class="col-12 col-md-6 col-lg-2">
+
+        <label class="form-label" for="filterFolder">Folder</label>
+
+        <select class="form-select" id="filterFolder" name="folder_template">
+
+          <option value="">All folders</option>
+
+          {% for f in folder_choices %}
+
+            <option value="{{ f.pk }}"{% if filter_folder_template_id == f.pk|stringformat:"s" %} selected{% endif %}>{{ f.name }}</option>
+
+          {% endfor %}
+
+        </select>
+
+      </div>
+
+      <div class="col-12 col-md-6 col-lg-3">
+
+        <label class="form-label" for="filterDocType">File type</label>
+
+        <select class="form-select" id="filterDocType" name="doc_type">
+
+          <option value="">All file types</option>
+
+          {% for dt in doc_type_choices %}
+
+            <option value="{{ dt.pk }}"{% if filter_doc_type_id == dt.pk|stringformat:"s" %} selected{% endif %}>{{ dt.folder.name }} — {{ dt.name }}</option>
+
+          {% endfor %}
+
+        </select>
+
+      </div>
+
+      <div class="col-12 col-md-6 col-lg-2">
+
+        <label class="form-label" for="filterQ">Search</label>
+
+        <input class="form-control" id="filterQ" name="q" value="{{ filter_q }}" placeholder="Name, filename…" />
+
+      </div>
+
+      <div class="col-12 d-flex flex-wrap gap-2">
+
+        <button type="submit" class="btn btn-primary">Apply filters</button>
+
+        <a class="btn btn-outline-secondary" href="{% url 'document_file_list' %}">Clear</a>
+
+      </div>
+
+    </form>
+
+  </div>
+
+
+
+  <div class="card data-table-card">
+
+    <div class="data-table-wrap">
+
+      <table class="table table-sm table-striped data-table mb-0">
+
+        <thead>
+
+          <tr>
+
+            <th>Client</th>
+
+            <th>Branch</th>
+
+            <th>Folder</th>
+
+            <th>File type</th>
+
+            <th>FY</th>
+
+            <th>Period</th>
+
+            <th>Filename</th>
+
+            <th>Uploaded</th>
+
+            <th class="text-end" style="width:3rem"></th>
+
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for doc in rows %}
+
+            <tr>
+
+              <td><a href="{% url 'client_detail' doc.client_id %}?tab=documents">{{ doc.client.client_name }}</a></td>
+
+              <td class="small">{{ doc.client.branch }}</td>
+
+              <td>{{ doc.folder.template.name }}</td>
+
+              <td>{{ doc.document_type.name }}</td>
+
+              <td class="mono small">{{ doc|document_fy }}</td>
+
+              <td class="mono small">{{ doc|document_period }}</td>
+
+              <td class="small">{{ doc.generated_filename }}</td>
+
+              <td class="small text-secondary">
+
+                {{ doc.uploaded_at|date:"d-m-Y H:i" }}
+
+                {% if doc|document_uploader %}<br><span class="text-body">{{ doc|document_uploader }}</span>{% endif %}
+
+              </td>
+
+              <td class="text-end">
+
+                {% include "documents/includes/document_row_actions.html" with doc=doc %}
+
+              </td>
+
+            </tr>
+
+          {% empty %}
+
+            <tr><td colspan="9" class="text-secondary">No files match your filters.</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+  {% if perms.documents.add_clientdocument %}
+    {% include "documents/includes/document_replace_modal.html" %}
+  {% endif %}
+
+{% endblock %}
+

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}File creation — CA Office Suite{% endblock %}
+{% block page_title %}File creation{% endblock %}
+
+{% block content %}
+  {% include "includes/page_header.html" with title="Document file types" subtitle="Define which files can be uploaded in each folder and how they are named automatically." %}
+
+  <p class="mb-3 d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}"><i class="bi bi-arrow-left"></i> Settings</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_folder_template_list' %}">Folder creation</a>
+    <a class="btn btn-sm btn-primary" href="{% url 'document_type_template_create' %}">New file type</a>
+  </p>
+
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-8">
+        <label class="form-label" for="fileTypeQ">Search</label>
+        <input class="form-control" id="fileTypeQ" name="q" value="{{ q }}" placeholder="File or folder name" />
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Search</button>
+        <a class="btn btn-outline-secondary" href="{% url 'document_type_template_list' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card data-table-card">
+    <div class="data-table-wrap">
+      <table class="table table-sm table-striped data-table mb-0">
+        <thead>
+          <tr>
+            <th>Folder</th>
+            <th>File name (type)</th>
+            <th>Allowed</th>
+            <th>Period</th>
+            <th>Auto filename template</th>
+            <th>Active</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.folder.name }}</td>
+              <td class="fw-medium">{{ row.name }}</td>
+              <td class="mono small">{{ row.allowed_extensions }}</td>
+              <td class="small">{{ row.get_period_kind_display }}</td>
+              <td class="small text-secondary mono">{{ row.name_template }}</td>
+              <td>{% if row.is_active %}Yes{% else %}No{% endif %}</td>
+              <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'document_type_template_edit' row.pk %}">Edit</a></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="text-secondary">No file types yet. Create a folder first, then add file types here.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

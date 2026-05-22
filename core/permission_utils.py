@@ -2,7 +2,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
-from core.feature_flags import task_module_enabled
+from core.feature_flags import documents_module_enabled, task_module_enabled
 
 
 def _managed_models() -> tuple[tuple[str, str], ...]:
@@ -29,6 +29,13 @@ def _managed_models() -> tuple[tuple[str, str], ...]:
                 ("tasks", "taskgroup"),
                 ("tasks", "taskmaster"),
                 ("tasks", "task"),
+            ]
+        )
+    if documents_module_enabled():
+        models.extend(
+            [
+                ("documents", "clientdocument"),
+                ("documents", "documentfoldertemplate"),
             ]
         )
     return tuple(models)

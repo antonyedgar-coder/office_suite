@@ -4,3 +4,5 @@ python-dotenv==1.0.1
 whitenoise==6.8.2
 openpyxl==3.1.5
 gunicorn==23.0.0
+django-storages[s3]==1.14.4
+boto3==1.35.99

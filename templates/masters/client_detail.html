@@ -43,6 +43,15 @@
         role="tab"
       >Details</a>
     </li>
+    {% if show_documents_tab %}
+      <li class="nav-item" role="presentation">
+        <a
+          class="nav-link{% if active_tab == 'documents' %} active{% endif %}"
+          href="{% url 'client_detail' client.client_id %}?tab=documents"
+          role="tab"
+        >Documents</a>
+      </li>
+    {% endif %}
     {% if show_tasks_tab %}
       <li class="nav-item" role="presentation">
         <a
@@ -92,6 +101,8 @@
 
   {% if active_tab == "details" %}
     {% include "masters/includes/client_detail_details.html" %}
+  {% elif active_tab == "documents" %}
+    {% include "masters/includes/client_detail_documents.html" %}
   {% elif active_tab == "tasks" %}
     {% include "masters/includes/client_detail_tasks.html" %}
   {% elif active_tab == "passwords" %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Folder creation — CA Office Suite{% endblock %}
+{% block page_title %}Folder creation{% endblock %}
+
+{% block content %}
+  {% include "includes/page_header.html" with title="Document folders" subtitle="Standard folders for every approved client. Add or edit folders only here (Settings → Documents)." %}
+
+  <p class="mb-3 d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}"><i class="bi bi-arrow-left"></i> Settings</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_type_template_list' %}">File creation</a>
+    <a class="btn btn-sm btn-primary" href="{% url 'document_folder_template_create' %}">New folder</a>
+  </p>
+
+  <div class="card data-table-card">
+    <div class="data-table-wrap">
+      <table class="table table-sm table-striped data-table mb-0">
+        <thead>
+          <tr>
+            <th>Folder name</th>
+            <th>File types</th>
+            <th>Sort</th>
+            <th>Active</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for folder in rows %}
+            <tr>
+              <td class="fw-medium">{{ folder.name }}</td>
+              <td>{{ folder.type_count }}</td>
+              <td>{{ folder.sort_order }}</td>
+              <td>{% if folder.is_active %}Yes{% else %}No{% endif %}</td>
+              <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'document_folder_template_edit' folder.pk %}">Edit</a></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="text-secondary">
+                No folders yet. Create folders here, then add file types under <strong>Settings → Documents → File creation</strong>.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

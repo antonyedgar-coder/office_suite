@@ -1,5 +1,7 @@
 from django.urls import path
 
+from core.feature_flags import documents_module_enabled
+
 from . import views
 
 urlpatterns = [
@@ -60,5 +62,17 @@ urlpatterns = [
     path("notifications/", views.notification_list, name="notification_list"),
     path("notifications/<int:pk>/read/", views.notification_mark_read, name="notification_mark_read"),
     path("<int:pk>/edit/", views.task_edit, name="task_edit"),
-    path("<int:pk>/", views.task_detail, name="task_detail"),
 ]
+
+if documents_module_enabled():
+    from documents.views import task_document_upload
+
+    urlpatterns.append(
+        path(
+            "<int:pk>/documents/upload/",
+            task_document_upload,
+            name="task_document_upload",
+        )
+    )
+
+urlpatterns.append(path("<int:pk>/", views.task_detail, name="task_detail"))

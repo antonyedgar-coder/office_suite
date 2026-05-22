@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Create folder — CA Office Suite{% endblock %}
+{% block page_title %}Create folder{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_file_list' %}"><i class="bi bi-arrow-left"></i> Documents</a>
+  </p>
+
+  <div class="card p-3 mb-3 col-lg-8">
+    <h2 class="h6 fw-semibold mb-3">1. Select client</h2>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="select_client" />
+      <div class="mb-3">
+        <label class="form-label required-field" for="docClientSearch">Client name</label>
+        {{ client_form.client_search }}
+        <datalist id="docClientSuggestions"></datalist>
+        {{ client_form.client }}
+        {% if client_form.client_search.errors %}<div class="text-danger small">{{ client_form.client_search.errors }}</div>{% endif %}
+      </div>
+      {% if not client %}
+        <button type="submit" class="btn btn-primary">Continue</button>
+      {% endif %}
+    </form>
+    {% include "documents/includes/client_search_script.html" with form=client_form %}
+  </div>
+
+  {% if client %}
+    <div class="card p-3 col-lg-8">
+      <h2 class="h6 fw-semibold mb-3">2. Folders for this client</h2>
+      <dl class="row small mb-3">
+        <dt class="col-sm-3">Client type</dt>
+        <dd class="col-sm-9">{{ client.client_type }}</dd>
+        <dt class="col-sm-3">PAN</dt>
+        <dd class="col-sm-9 mono">{{ client.pan|upper|default:"—" }}</dd>
+        <dt class="col-sm-3">Branch</dt>
+        <dd class="col-sm-9">{{ client.branch }}</dd>
+      </dl>
+      <p class="text-secondary small">Folders come from <strong>Settings → Documents → Folder creation</strong> (filtered by client type). Tick those required for this client.</p>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_folders" />
+        <input type="hidden" name="client_id" value="{{ client.client_id }}" />
+        {% if folder_rows %}
+          <div class="mb-3">
+            {% for row in folder_rows %}
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="folder_ids"
+                  value="{{ row.template.pk }}"
+                  id="folder_{{ row.template.pk }}"
+                  {% if row.already_created %}checked disabled{% endif %}
+                />
+                <label class="form-check-label" for="folder_{{ row.template.pk }}">
+                  {{ row.template.name }}
+                  {% if row.already_created %}<span class="text-secondary">(already created)</span>{% endif %}
+                </label>
+              </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary">Create folders</button>
+        {% else %}
+          <p class="text-warning">No folder templates apply to client type <strong>{{ client.client_type }}</strong>. Add folders in Settings and assign client types.</p>
+        {% endif %}
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
-from core.feature_flags import task_module_enabled
+from core.feature_flags import documents_module_enabled, task_module_enabled
 
 load_dotenv()
 
@@ -40,6 +40,9 @@ INSTALLED_APPS = [
 if task_module_enabled():
     INSTALLED_APPS.append("tasks.apps.TasksConfig")
 
+if documents_module_enabled():
+    INSTALLED_APPS.append("documents.apps.DocumentsConfig")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -67,6 +70,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.enable_task_module",
+                "core.context_processors.enable_documents_module",
                 "core.context_processors.topbar_user",
                 "core.context_processors.task_nav_counts",
                 "core.context_processors.dsc_nav_counts",
@@ -188,6 +192,41 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Client documents (ENABLE_DOCUMENTS_MODULE=1). Local dev: DOCUMENT_STORAGE=local.
+DOCUMENT_STORAGE = os.getenv("DOCUMENT_STORAGE", "local").strip().lower()
+DOCUMENT_MAX_UPLOAD_BYTES = int(os.getenv("DOCUMENT_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+
+if documents_module_enabled():
+    _staticfiles_backend = {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+    if DOCUMENT_STORAGE == "spaces":
+        STORAGES = {
+            "default": {
+                "BACKEND": "storages.backends.s3.S3Storage",
+                "OPTIONS": {
+                    "access_key": os.environ["DO_SPACES_KEY"],
+                    "secret_key": os.environ["DO_SPACES_SECRET"],
+                    "bucket_name": os.environ["DO_SPACES_BUCKET"],
+                    "endpoint_url": os.environ["DO_SPACES_ENDPOINT"],
+                    "region_name": os.getenv("DO_SPACES_REGION", ""),
+                    "default_acl": "private",
+                    "file_overwrite": False,
+                    "object_parameters": {"CacheControl": "private, max-age=3600"},
+                },
+            },
+            "staticfiles": _staticfiles_backend,
+        }
+    else:
+        MEDIA_ROOT = BASE_DIR / "media"
+        STORAGES = {
+            "default": {
+                "BACKEND": "django.core.files.storage.FileSystemStorage",
+                "OPTIONS": {"location": MEDIA_ROOT},
+            },
+            "staticfiles": _staticfiles_backend,
+        }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

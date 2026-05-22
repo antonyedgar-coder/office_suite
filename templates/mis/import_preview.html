@@ -5,7 +5,7 @@
 {% block content %}
   <div class="card p-3 mb-3">
     <div class="fw-semibold mb-1">
-      {% if mode == "fees" %}Fees Details{% elif mode == "receipts" %}Receipts{% else %}Expenses Details{% endif %}
+      {% if mode == "fees" %}Fees Details{% elif mode == "receipts" %}Receipts{% else %}Client Expenses{% endif %}
       — Preview
     </div>
     {% if file_errors %}

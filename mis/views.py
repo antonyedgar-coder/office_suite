@@ -355,7 +355,7 @@ def expense_create(request):
             "form": form,
             "mode": "create",
             "cancel_url": reverse("mis_expense_list"),
-            "breadcrumbs": ui_breadcrumbs(("Expenses Details", "mis_expense_list"), ("New expense",)),
+            "breadcrumbs": ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("New expense",)),
         },
     )
 
@@ -386,7 +386,7 @@ def expense_edit(request, pk: int):
             "mode": "edit",
             "obj": obj,
             "cancel_url": reverse("mis_expense_list"),
-            "breadcrumbs": ui_breadcrumbs(("Expenses Details", "mis_expense_list"), ("Edit expense",)),
+            "breadcrumbs": ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("Edit expense",)),
         },
     )
 

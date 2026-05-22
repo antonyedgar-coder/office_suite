@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Upload document — {{ client.client_name }}{% endblock %}
+{% block page_title %}Upload document{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_file_list' %}">Back to files</a>
+  </p>
+
+  <div class="card p-3 col-lg-8">
+    <p class="text-secondary small mb-3">
+      Client: <strong>{{ client.client_name }}</strong>
+      {% if client.pan %} · PAN {{ client.pan|upper }}{% endif %}
+    </p>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+      <div class="mb-3">
+        <label class="form-label required-field" for="id_doc_folder">Folder</label>
+        {{ form.folder }}
+        {% if form.folder.errors %}<div class="text-danger small">{{ form.folder.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label required-field" for="id_doc_type">File</label>
+        {{ form.document_type }}
+        {% if form.document_type.errors %}<div class="text-danger small">{{ form.document_type.errors }}</div>{% endif %}
+        <div class="form-field-hint" id="docTypeHint">Choose the standardized file type (from Settings → File creation).</div>
+      </div>
+
+      <div class="mb-3" id="docPeriodFyWrap" style="display:none">
+        <label class="form-label required-field" for="id_doc_period_fy">Financial year (FY)</label>
+        {{ form.period_fy }}
+        {% if form.period_fy.errors %}<div class="text-danger small">{{ form.period_fy.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3" id="docPeriodMonthWrap" style="display:none">
+        <label class="form-label required-field" for="id_doc_period_month">Month</label>
+        {{ form.period_month }}
+        {% if form.period_month.errors %}<div class="text-danger small">{{ form.period_month.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3" id="docPeriodQuarterWrap" style="display:none">
+        <label class="form-label required-field" for="id_doc_period_quarter">Quarter</label>
+        {{ form.period_quarter }}
+        {% if form.period_quarter.errors %}<div class="text-danger small">{{ form.period_quarter.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3" id="docPeriodHalfWrap" style="display:none">
+        <label class="form-label required-field" for="id_doc_period_half">Half-year</label>
+        {{ form.period_half }}
+        {% if form.period_half.errors %}<div class="text-danger small">{{ form.period_half.errors }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label required-field" for="id_doc_file">File</label>
+        {{ form.file }}
+        {% if form.file.errors %}<div class="text-danger small">{{ form.file.errors }}</div>{% endif %}
+        <div class="form-field-hint">The stored filename is generated automatically from the document type and client.</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+  </div>
+
+  {{ types_json|json_script:"doc-types-by-folder" }}
+  <script>
+    (function () {
+      var PERIOD_NONE = "none";
+      var PERIOD_MONTH = "month";
+      var PERIOD_QUARTER = "quarter";
+      var PERIOD_HALF = "half_year";
+      var PERIOD_FY = "indian_fy";
+      var NEEDS_FY = [PERIOD_MONTH, PERIOD_QUARTER, PERIOD_HALF, PERIOD_FY];
+
+      var folderEl = document.getElementById("id_doc_folder");
+      var typeEl = document.getElementById("id_doc_type");
+      var monthWrap = document.getElementById("docPeriodMonthWrap");
+      var fyWrap = document.getElementById("docPeriodFyWrap");
+      var quarterWrap = document.getElementById("docPeriodQuarterWrap");
+      var halfWrap = document.getElementById("docPeriodHalfWrap");
+      var monthEl = document.getElementById("id_doc_period_month");
+      var fyEl = document.getElementById("id_doc_period_fy");
+      var quarterEl = document.getElementById("id_doc_period_quarter");
+      var halfEl = document.getElementById("id_doc_period_half");
+      var hint = document.getElementById("docTypeHint");
+      var fileEl = document.getElementById("id_doc_file");
+      var byFolder = JSON.parse(document.getElementById("doc-types-by-folder").textContent || "{}");
+      var folderTemplateIds = {};
+      {% for f in form.fields.folder.queryset %}
+        folderTemplateIds["{{ f.pk }}"] = "{{ f.template_id }}";
+      {% endfor %}
+
+      function setRequired(el, on) {
+        if (el) el.required = !!on;
+      }
+
+      function hidePeriodFields() {
+        [monthWrap, fyWrap, quarterWrap, halfWrap].forEach(function (w) {
+          if (w) w.style.display = "none";
+        });
+        setRequired(monthEl, false);
+        setRequired(fyEl, false);
+        setRequired(quarterEl, false);
+        setRequired(halfEl, false);
+      }
+
+      function selectedPeriodKind() {
+        var opt = typeEl && typeEl.options[typeEl.selectedIndex];
+        return opt && opt.dataset.periodKind ? opt.dataset.periodKind : PERIOD_NONE;
+      }
+
+      function needsFy(kind) {
+        return NEEDS_FY.indexOf(kind) >= 0;
+      }
+
+      function syncPeriodUi() {
+        hidePeriodFields();
+        var kind = selectedPeriodKind();
+        if (needsFy(kind) && fyWrap) {
+          fyWrap.style.display = "";
+          setRequired(fyEl, true);
+        }
+        if (kind === PERIOD_MONTH && monthWrap) {
+          monthWrap.style.display = "";
+          setRequired(monthEl, true);
+        } else if (kind === PERIOD_QUARTER && quarterWrap) {
+          quarterWrap.style.display = "";
+          setRequired(quarterEl, true);
+        } else if (kind === PERIOD_HALF && halfWrap) {
+          halfWrap.style.display = "";
+          setRequired(halfEl, true);
+        }
+      }
+
+      function syncTypes() {
+        if (!folderEl || !typeEl) return;
+        var folderPk = folderEl.value;
+        var tmplId = folderTemplateIds[folderPk] || "";
+        var list = byFolder[tmplId] || [];
+        var prev = typeEl.value;
+        typeEl.innerHTML = "";
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "— Select file —";
+        typeEl.appendChild(empty);
+        list.forEach(function (t) {
+          var opt = document.createElement("option");
+          opt.value = String(t.id);
+          opt.textContent = t.label;
+          opt.dataset.periodKind = t.period_kind || PERIOD_NONE;
+          opt.dataset.extensions = (t.extensions || []).join(",");
+          if (String(t.id) === String(prev)) opt.selected = true;
+          typeEl.appendChild(opt);
+        });
+        syncPeriodUi();
+        syncTypeHint();
+      }
+
+      function syncTypeHint() {
+        var opt = typeEl.options[typeEl.selectedIndex];
+        var exts = opt && opt.dataset.extensions ? opt.dataset.extensions.split(",").filter(Boolean) : [];
+        if (hint) {
+          hint.textContent = exts.length
+            ? "Allowed: " + exts.join(", ").toUpperCase()
+            : "Choose the standardized file type (from Settings → File creation).";
+        }
+        if (fileEl && exts.length) {
+          fileEl.accept = exts.map(function (e) { return "." + e; }).join(",");
+        }
+      }
+
+      if (folderEl) folderEl.addEventListener("change", syncTypes);
+      if (typeEl) {
+        typeEl.addEventListener("change", function () {
+          syncPeriodUi();
+          syncTypeHint();
+        });
+      }
+      syncTypes();
+    })();
+  </script>
+{% endblock %}

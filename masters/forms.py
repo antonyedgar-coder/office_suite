@@ -605,6 +605,20 @@ class DSCInOutForm(forms.ModelForm):
 
 
 class MasterRequestForm(forms.ModelForm):
+    client_search = forms.CharField(
+        required=False,
+        label="Client",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "masterRequestClientSearch",
+                "list": "masterRequestClientSuggestions",
+                "placeholder": "Type client name or PAN…",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
     class Meta:
         model = MasterRequest
         fields = ["request_type", "client", "assigned_to", "subject", "message"]
@@ -613,7 +627,6 @@ class MasterRequestForm(forms.ModelForm):
         }
         widgets = {
             "request_type": forms.Select(attrs={"class": "form-select", "id": "id_request_type"}),
-            "client": forms.Select(attrs={"class": "form-select", "id": "id_client"}),
             "assigned_to": forms.Select(attrs={"class": "form-select", "id": "id_assigned_to"}),
             "subject": forms.TextInput(
                 attrs={"class": "form-control", "placeholder": "Short summary of the request"}
@@ -629,14 +642,27 @@ class MasterRequestForm(forms.ModelForm):
         from core.branch_access import approved_clients_for_user
 
         if user is not None:
-            self.fields["client"].queryset = approved_clients_for_user(user).order_by("client_name")
+            qs = approved_clients_for_user(user).order_by("client_name")
         else:
-            self.fields["client"].queryset = Client.approved_objects().order_by("client_name")
+            qs = Client.approved_objects().order_by("client_name")
+        self.fields["client"] = ClientNamePanChoiceField(
+            queryset=qs,
+            label="Client",
+            widget=forms.HiddenInput(
+                attrs={"data-master-request-client-hidden": "1", "id": "id_client"}
+            ),
+        )
         self.fields["client"].required = False
-        self.fields["client"].empty_label = "— Select client —"
         self.fields["assigned_to"].queryset = User.objects.none()
         self.fields["assigned_to"].empty_label = "— Select assignee —"
         self.fields["subject"].required = True
+        client_id = self.initial.get("client")
+        if client_id:
+            c = qs.filter(pk=client_id).first()
+            if c:
+                name = (c.client_name or "").strip()
+                pan = (c.pan or "").strip().upper()
+                self.fields["client_search"].initial = f"{name} — {pan}" if pan else name
         if self.is_bound:
             rt = self.data.get("request_type") or ""
             if rt:
@@ -647,8 +673,16 @@ class MasterRequestForm(forms.ModelForm):
         rt = data.get("request_type")
         client = data.get("client")
         assignee = data.get("assigned_to")
-        if rt == MasterRequest.TYPE_NEW_TASK and not client:
-            self.add_error("client", "Client is required for a new task request.")
+        search = (data.get("client_search") or "").strip()
+        if rt == MasterRequest.TYPE_NEW_TASK:
+            if not client:
+                if search:
+                    self.add_error(
+                        "client_search",
+                        "Select a client from the suggestions (name and PAN).",
+                    )
+                else:
+                    self.add_error("client", "Client is required for a new task request.")
         if rt and rt != MasterRequest.TYPE_NEW_TASK:
             data["client"] = None
         if rt and assignee:

@@ -744,7 +744,7 @@ class ClientActivityLog(models.Model):
 
 
 class ExpenseCategory(models.Model):
-    """Master list of expense categories for MIS Expenses Details."""
+    """Master list of expense categories for MIS Client Expenses."""
 
     name = models.CharField(max_length=120, unique=True)
     is_active = models.BooleanField(default=True)

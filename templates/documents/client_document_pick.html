@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — CA Office Suite{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_file_list' %}"><i class="bi bi-arrow-left"></i> Documents</a>
+  </p>
+
+  <form method="post" class="card p-3 col-lg-6">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label required-field" for="docClientSearch">Client</label>
+      {{ form.client_search }}
+      <datalist id="docClientSuggestions"></datalist>
+      {{ form.client }}
+      {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
+      {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary">Continue</button>
+  </form>
+
+  {% include "documents/includes/client_search_script.html" with form=form %}
+{% endblock %}

@@ -1,0 +1,270 @@
+{% load document_extras %}
+
+
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+
+  <div class="fw-semibold">Documents</div>
+
+  <div class="d-flex flex-wrap gap-2">
+
+    {% if can_upload_document %}
+
+      <a class="btn btn-sm btn-primary" href="{% url 'client_document_upload' client.client_id %}">Upload file</a>
+
+    {% endif %}
+
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_file_list' %}?client={{ client.client_id }}">All files</a>
+
+  </div>
+
+</div>
+
+
+
+{% if not client_has_document_folders %}
+
+  <div class="alert alert-warning small mb-3">
+
+    No document folders for this client yet.
+
+    <a href="{% url 'client_folder_create' %}?client_id={{ client.client_id }}">Create folder</a>
+
+    under <strong>Documents</strong> in the sidebar.
+
+  </div>
+
+{% endif %}
+
+
+
+<div class="card p-3 mb-3">
+
+  <form method="get" action="{% url 'client_detail' client.client_id %}" class="row g-2 align-items-end">
+
+    <input type="hidden" name="tab" value="documents" />
+
+    <div class="col-12 col-md-4 col-lg-2">
+
+      <label class="form-label" for="clientDocFilterFy">FY</label>
+
+      <select class="form-select" id="clientDocFilterFy" name="fy">
+
+        <option value="">All FY</option>
+
+        {% for val, label in document_fy_choices %}
+
+          <option value="{{ val }}"{% if document_filter_fy == val %} selected{% endif %}>{{ label }}</option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+    <div class="col-12 col-md-4 col-lg-3">
+
+      <label class="form-label" for="clientDocFilterFolder">Folder</label>
+
+      <select class="form-select" id="clientDocFilterFolder" name="folder_template">
+
+        <option value="">All folders</option>
+
+        {% for f in document_folder_choices %}
+
+          <option value="{{ f.pk }}"{% if document_filter_folder_template == f.pk|stringformat:"s" %} selected{% endif %}>{{ f.name }}</option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+    <div class="col-12 col-md-4 col-lg-3">
+
+      <label class="form-label" for="clientDocFilterType">File type</label>
+
+      <select class="form-select" id="clientDocFilterType" name="doc_type">
+
+        <option value="">All file types</option>
+
+        {% for dt in document_doc_type_choices %}
+
+          <option value="{{ dt.pk }}"{% if document_filter_doc_type == dt.pk|stringformat:"s" %} selected{% endif %}>{{ dt.folder.name }} — {{ dt.name }}</option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-2">
+
+      <label class="form-label" for="clientDocFilterQ">Search</label>
+
+      <input class="form-control" id="clientDocFilterQ" name="q" value="{{ document_filter_q }}" placeholder="Filename…" />
+
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-2 d-flex flex-wrap gap-2">
+
+      <button type="submit" class="btn btn-primary">Apply</button>
+
+      <a class="btn btn-outline-secondary" href="{% url 'client_detail' client.client_id %}?tab=documents">Clear</a>
+
+    </div>
+
+  </form>
+
+</div>
+
+
+
+<div class="card data-table-card">
+
+  <div class="data-table-wrap">
+
+    <table class="table table-sm table-striped data-table mb-0">
+
+      <thead>
+
+        <tr>
+
+          <th>Folder</th>
+
+          <th>File</th>
+
+          <th>FY</th>
+
+          <th>Period</th>
+
+          <th>Stored filename</th>
+
+          <th>Ver.</th>
+
+          <th>Uploaded</th>
+
+          <th class="text-end" style="width:3rem"></th>
+
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for doc in document_rows %}
+
+          <tr>
+
+            <td>{{ doc.folder.template.name }}</td>
+
+            <td>{{ doc.document_type.name }}</td>
+
+            <td class="mono small">{{ doc|document_fy }}</td>
+
+            <td class="mono small">{{ doc|document_period }}</td>
+
+            <td class="small">{{ doc.generated_filename }}</td>
+
+            <td>{{ doc.version }}</td>
+
+            <td class="small text-secondary">
+
+              {{ doc.uploaded_at|date:"d-m-Y H:i" }}
+
+              {% if doc|document_uploader %}<br><span class="text-body">{{ doc|document_uploader }}</span>{% endif %}
+
+            </td>
+
+            <td class="text-end">
+
+              {% include "documents/includes/document_row_actions.html" with doc=doc %}
+
+            </td>
+
+          </tr>
+
+        {% empty %}
+
+          <tr>
+
+            <td colspan="8" class="text-secondary">
+
+              No files match your filters.
+
+              {% if can_upload_document %} Use <strong>Upload file</strong> to add one.{% endif %}
+
+            </td>
+
+          </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+
+
+{% if document_history_rows %}
+
+  <details class="mt-3">
+
+    <summary class="fw-semibold small text-secondary">Older versions (superseded)</summary>
+
+    <div class="card data-table-card mt-2">
+
+      <div class="data-table-wrap">
+
+        <table class="table table-sm mb-0">
+
+          <thead>
+
+            <tr>
+
+              <th>Filename</th>
+
+              <th>Ver.</th>
+
+              <th>Uploaded</th>
+
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            {% for doc in document_history_rows %}
+
+              <tr class="text-secondary">
+
+                <td class="small">{{ doc.generated_filename }}</td>
+
+                <td>{{ doc.version }}</td>
+
+                <td class="small">{{ doc.uploaded_at|date:"d-m-Y H:i" }}</td>
+
+              </tr>
+
+            {% endfor %}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </details>
+
+{% endif %}
+
+{% if can_upload_document %}
+  {% include "documents/includes/document_replace_modal.html" %}
+{% endif %}
+

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — CA Office Suite{% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+
+
+{% block content %}
+
+  <p class="mb-3">
+
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_type_template_list' %}"><i class="bi bi-arrow-left"></i> File creation</a>
+
+  </p>
+
+
+
+  <form method="post" class="card p-3 col-lg-8">
+
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+
+
+    <div class="mb-3">
+
+      <label class="form-label required-field" for="{{ form.folder.id_for_label }}">Folder</label>
+
+      {{ form.folder }}
+
+      {% if form.folder.errors %}<div class="text-danger small">{{ form.folder.errors }}</div>{% endif %}
+
+    </div>
+
+
+
+    <div class="mb-3">
+
+      <label class="form-label required-field" for="{{ form.name.id_for_label }}">File name (type)</label>
+
+      {{ form.name }}
+
+      {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+
+    </div>
+
+
+
+    <div class="mb-3">
+
+      <label class="form-label required-field" for="{{ form.allowed_extensions.id_for_label }}">Allowed file types</label>
+
+      {{ form.allowed_extensions }}
+
+      {% if form.allowed_extensions.errors %}<div class="text-danger small">{{ form.allowed_extensions.errors }}</div>{% endif %}
+
+      <div class="form-field-hint">Comma-separated, without dots (e.g. pdf or pdf,xlsx).</div>
+
+    </div>
+
+
+
+    <div class="mb-3">
+
+      <label class="form-label required-field" for="{{ form.period_kind.id_for_label }}">Period on upload</label>
+
+      {{ form.period_kind }}
+
+      {% if form.period_kind.errors %}<div class="text-danger small">{{ form.period_kind.errors }}</div>{% endif %}
+
+      <div class="form-field-hint">
+
+        One-time: no period field. Monthly / quarterly / half-yearly / FY control which selector staff see when uploading.
+
+      </div>
+
+    </div>
+
+
+
+    <div class="mb-3">
+
+      <label class="form-label required-field" for="{{ form.name_template.id_for_label }}">Auto filename template</label>
+
+      {{ form.name_template }}
+
+      {% if form.name_template.errors %}<div class="text-danger small">{{ form.name_template.errors }}</div>{% endif %}
+
+      <div class="form-field-hint">
+
+        Filenames are generated automatically on upload (e.g. Type_Client_2024-25_Apr, Type_Client_2024-25_Apr-Jun, Type_Client_2024-25). This field is kept for reference only.
+
+      </div>
+
+    </div>
+
+
+
+    <div class="mb-3">
+
+      <label class="form-label" for="{{ form.sort_order.id_for_label }}">Sort order</label>
+
+      {{ form.sort_order }}
+
+    </div>
+
+
+
+    <div class="mb-3 form-check">
+
+      {{ form.is_active }}
+
+      <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+
+    </div>
+
+
+
+    <button type="submit" class="btn btn-primary">Save</button>
+
+  </form>
+
+{% endblock %}
+

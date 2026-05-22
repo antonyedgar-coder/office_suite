@@ -1,10 +1,14 @@
-from core.feature_flags import task_module_enabled
+from core.feature_flags import documents_module_enabled, task_module_enabled
 from core.settings_hub import user_may_open_settings
 from core.user_display import user_display_name
 
 
 def enable_task_module(request):
     return {"enable_task_module": task_module_enabled()}
+
+
+def enable_documents_module(request):
+    return {"enable_documents_module": documents_module_enabled()}
 
 
 def master_request_nav_counts(request):

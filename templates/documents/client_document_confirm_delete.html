@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Delete file — CA Office Suite{% endblock %}
+{% block page_title %}Delete file{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_file_list' %}">Back to files</a>
+  </p>
+
+  <div class="card p-3 col-lg-8">
+    <p class="mb-2">
+      Delete <strong>{{ doc.generated_filename }}</strong> for
+      <strong>{{ doc.client.client_name }}</strong>?
+    </p>
+    <ul class="small text-secondary mb-3">
+      <li>Folder: {{ doc.folder.template.name }}</li>
+      <li>File type: {{ doc.document_type.name }}</li>
+      {% if doc.period_label %}
+        <li>Period: {{ doc.period_label }}</li>
+      {% endif %}
+      <li>Version: {{ doc.version }}</li>
+    </ul>
+    <p class="text-secondary small mb-3">The stored file will be removed. This cannot be undone.</p>
+    <form method="post" class="d-inline-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Delete</button>
+      <a class="btn btn-outline-secondary" href="{% url 'document_file_list' %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

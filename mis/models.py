@@ -127,6 +127,8 @@ class ExpenseDetail(models.Model):
 
     class Meta:
         ordering = ["-date", "-id"]
+        verbose_name = "client expense"
+        verbose_name_plural = "client expenses"
 
     def save(self, *args, **kwargs):
         if self.client_id:

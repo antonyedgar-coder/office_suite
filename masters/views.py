@@ -226,6 +226,13 @@ def client_detail(request, client_id: str):
         pk=client_id,
     )
     tab = (request.GET.get("tab") or "details").strip().lower()
+    from core.feature_flags import documents_module_enabled
+
+    show_documents = (
+        documents_module_enabled()
+        and request.user.has_perm("documents.view_clientdocument")
+        and client.approval_status == Client.APPROVED
+    )
     show_tasks = task_module_enabled() and request.user.has_perm("tasks.view_task")
     show_passwords = request.user.has_perm("masters.view_clientportalcredential")
     show_dsc = _client_detail_show_dsc_tab(client, request.user)
@@ -233,7 +240,9 @@ def client_detail(request, client_id: str):
     show_directors = _client_detail_show_directors_tab(client) and request.user.has_perm(
         "masters.view_directormapping"
     )
-    allowed_tabs = {"details", "tasks", "passwords", "dsc", "mis", "directors"}
+    allowed_tabs = {"details", "documents", "tasks", "passwords", "dsc", "mis", "directors"}
+    if tab == "documents" and not show_documents:
+        tab = "details"
     if tab == "tasks" and not show_tasks:
         tab = "details"
     if tab == "passwords" and not show_passwords:
@@ -250,7 +259,10 @@ def client_detail(request, client_id: str):
     ctx = {
         "client": client,
         "active_tab": tab,
+        "show_documents_tab": show_documents,
         "show_tasks_tab": show_tasks,
+        "can_upload_document": show_documents
+        and request.user.has_perm("documents.add_clientdocument"),
         "show_passwords_tab": show_passwords,
         "show_dsc_tab": show_dsc,
         "show_mis_tab": show_mis,
@@ -260,6 +272,78 @@ def client_detail(request, client_id: str):
         "can_add_dsc": request.user.has_perm("masters.add_clientdsc"),
         "can_add_director_mapping": request.user.has_perm("masters.add_directormapping"),
     }
+
+    if tab == "documents" and show_documents:
+        from django.db.models import Q
+
+        from documents.models import ClientDocument, DocumentFolderTemplate, DocumentTypeTemplate
+        from documents.periods import fy_choices
+
+        doc_fy = (request.GET.get("fy") or "").strip()
+        doc_folder_template = (request.GET.get("folder_template") or "").strip()
+        doc_type = (request.GET.get("doc_type") or "").strip()
+        doc_q = (request.GET.get("q") or "").strip()
+
+        active_docs = (
+            ClientDocument.objects.filter(
+                client_id=client_id,
+                status=ClientDocument.STATUS_ACTIVE,
+            )
+            .select_related(
+                "folder__template",
+                "document_type",
+                "uploaded_by",
+            )
+        )
+        if doc_fy:
+            active_docs = active_docs.filter(
+                Q(period_key__startswith=f"FY{doc_fy}") | Q(financial_year=doc_fy)
+            )
+        if doc_folder_template.isdigit():
+            active_docs = active_docs.filter(folder__template_id=int(doc_folder_template))
+        if doc_type.isdigit():
+            active_docs = active_docs.filter(document_type_id=int(doc_type))
+        if doc_q:
+            active_docs = active_docs.filter(
+                Q(generated_filename__icontains=doc_q)
+                | Q(document_type__name__icontains=doc_q)
+                | Q(folder__template__name__icontains=doc_q)
+            )
+        active_docs = active_docs.order_by(
+            "folder__template__sort_order",
+            "document_type__sort_order",
+            "-version",
+        )
+        ctx["document_rows"] = list(active_docs)
+        ctx["document_filter_fy"] = doc_fy
+        ctx["document_filter_folder_template"] = doc_folder_template
+        ctx["document_filter_doc_type"] = doc_type
+        ctx["document_filter_q"] = doc_q
+        ctx["document_fy_choices"] = fy_choices()
+        ctx["document_folder_choices"] = (
+            DocumentFolderTemplate.objects.filter(client_folders__client_id=client_id)
+            .distinct()
+            .order_by("sort_order", "name")
+        )
+        ctx["document_doc_type_choices"] = (
+            DocumentTypeTemplate.objects.filter(
+                is_active=True,
+                folder__client_folders__client_id=client_id,
+            )
+            .select_related("folder")
+            .distinct()
+            .order_by("folder__sort_order", "sort_order", "name")
+        )
+        ctx["client_has_document_folders"] = ctx["document_folder_choices"].exists()
+        history = (
+            ClientDocument.objects.filter(
+                client_id=client_id,
+                status=ClientDocument.STATUS_SUPERSEDED,
+            )
+            .select_related("document_type")
+            .order_by("-uploaded_at")[:50]
+        )
+        ctx["document_history_rows"] = list(history)
 
     if tab == "tasks" and show_tasks:
         from tasks.listing import prepare_task_list_rows

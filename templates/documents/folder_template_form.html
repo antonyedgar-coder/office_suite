@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — CA Office Suite{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_folder_template_list' %}"><i class="bi bi-arrow-left"></i> Folder creation</a>
+  </p>
+
+  <form method="post" class="card p-3 col-lg-6">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="mb-3">
+      <label class="form-label required-field" for="{{ form.name.id_for_label }}">Folder name</label>
+      {{ form.name }}
+      {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+      <div class="form-field-hint">Shown to staff when uploading (e.g. Financials, KYC).</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.sort_order.id_for_label }}">Sort order</label>
+      {{ form.sort_order }}
+      {% if form.sort_order.errors %}<div class="text-danger small">{{ form.sort_order.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3 form-check">
+      {{ form.is_active }}
+      <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+    </div>
+
+    <div class="mb-3">
+      <div class="form-label">Client types</div>
+      <div class="form-field-hint mb-2">{{ form.client_types.help_text }}</div>
+      {% for checkbox in form.client_types %}
+        <div class="form-check">{{ checkbox.tag }} <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label></div>
+      {% empty %}
+        <p class="text-secondary small mb-0">No client types in master — add under Settings → Client types.</p>
+      {% endfor %}
+      {% if form.client_types.errors %}<div class="text-danger small">{{ form.client_types.errors }}</div>{% endif %}
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+{% endblock %}
