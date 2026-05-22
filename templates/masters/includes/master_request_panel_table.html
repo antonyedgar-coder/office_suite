@@ -1,0 +1,52 @@
+<div class="table-responsive">
+  <table class="table table-sm mb-0 align-middle master-request-panel-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Subject</th>
+        <th>Type</th>
+        <th>Client</th>
+        <th>Status</th>
+        <th>Requested by</th>
+        <th>Assigned to</th>
+        <th>Date</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in panel_requests %}
+        <tr
+          class="master-request-panel-row{% if selected_request_id == r.pk %} table-active{% endif %}"
+          data-request-id="{{ r.pk }}"
+          id="mr-panel-row-{{ r.pk }}"
+        >
+          <td>{{ r.pk }}</td>
+          <td class="fw-medium">{{ r.subject|default:"—" }}</td>
+          <td>{{ r.get_request_type_display }}</td>
+          <td>{% if r.client %}{{ r.client.client_name }}{% else %}—{% endif %}</td>
+          <td>
+            <span class="badge text-bg-{% if r.status == 'submitted' %}warning{% elif r.status == 'completed' %}success{% else %}secondary{% endif %}">
+              {{ r.get_status_display }}
+            </span>
+          </td>
+          <td>{{ r.requested_by }}</td>
+          <td>{{ r.assigned_to }}</td>
+          <td class="text-nowrap">{{ r.created_at|date:"d-m-Y H:i" }}</td>
+          <td>
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'master_request_detail' r.pk %}">Open</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="9" class="text-secondary p-3">
+            {% if notifications %}
+              No linked requests to show for the current filter.
+            {% else %}
+              No notifications match this filter.
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

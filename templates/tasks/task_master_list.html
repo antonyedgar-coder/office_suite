@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load record_labels %}
 {% block title %}Task masters — CA Office Suite{% endblock %}
 {% block page_title %}Task masters{% endblock %}
 {% block content %}
@@ -29,7 +30,7 @@
   </div>
   <div class="card p-3">
     <table class="table table-sm">
-      <thead><tr><th>Group</th><th>Name</th><th>Recurring</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>Group</th><th>Name</th><th>Recurring</th><th>Active</th><th>Created by</th><th></th></tr></thead>
       <tbody>
         {% for m in masters %}
           <tr>
@@ -43,12 +44,13 @@
                 <span class="badge text-bg-secondary">Inactive</span>
               {% endif %}
             </td>
+            <td class="small text-secondary">{{ m.created_by|creator_name }}</td>
             <td class="text-end">
               {% if perms.tasks.change_taskmaster %}<a href="{% url 'task_master_edit' m.pk %}" class="btn btn-sm btn-outline-primary">Edit</a>{% endif %}
               {% if perms.tasks.delete_taskmaster %}<a href="{% url 'task_master_delete' m.pk %}" class="btn btn-sm btn-outline-danger">Delete</a>{% endif %}
             </td>
           </tr>
-        {% empty %}<tr><td colspan="5" class="text-secondary">No task masters.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="6" class="text-secondary">No task masters.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

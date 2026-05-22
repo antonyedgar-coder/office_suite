@@ -1,0 +1,5 @@
+{% extends "embed/popup_base.html" %}
+{% block title %}{% if mode == "create" %}New portal name{% else %}Edit portal name{% endif %}{% endblock %}
+{% block content %}
+  {% include "masters/includes/portal_name_form_inner.html" %}
+{% endblock %}

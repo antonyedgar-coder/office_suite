@@ -49,11 +49,26 @@
   </div>
   <div class="card p-3 col-lg-9">
     <form method="post" id="taskCreateForm">{% csrf_token %}
+      {% include "includes/master_request_link_field.html" %}
       {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
 
       <div class="mb-3">
         <label class="form-label" for="id_task_master">Task master</label>
-        {{ form.task_master }}
+        <div class="input-group">
+          {{ form.task_master }}
+          {% if can_add_task_master %}
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-master-picker-url="{% url 'task_master_create' %}"
+              data-master-picker-title="New task master"
+              title="Add task master"
+              aria-label="Add task master"
+            >
+              <i class="bi bi-plus-lg"></i>
+            </button>
+          {% endif %}
+        </div>
         {% if form.task_master.errors %}<div class="text-danger small">{{ form.task_master.errors }}</div>{% endif %}
       </div>
 
@@ -74,21 +89,21 @@
         <div id="assigneeChips" class="mt-2"></div>
         {{ form.assignee_ids }}
         {% if form.assignee_picker.errors %}<div class="text-danger small">{{ form.assignee_picker.errors }}</div>{% endif %}
-        <div class="form-text">Type to filter staff; click a name to add. Multiple users allowed.</div>
+        <div class="form-text">Type to filter staff; click a name to add. Multiple users allowed. The task creator cannot be listed here — assigned users approve the task before work begins.</div>
       </div>
 
       <div class="mb-3">
         <label class="form-label" for="id_verifier">Verifier</label>
         {{ form.verifier }}
         {% if form.verifier.errors %}<div class="text-danger small">{{ form.verifier.errors }}</div>{% endif %}
-        <div class="form-text">Approves assignment and verifies submitted work.</div>
+        <div class="form-text">Verifies submitted work. May be the same person as the document checker or task creator.</div>
       </div>
 
       <div class="mb-3">
         <label class="form-label" for="id_document_checker">Document checker</label>
         {{ form.document_checker }}
         {% if form.document_checker.errors %}<div class="text-danger small">{{ form.document_checker.errors }}</div>{% endif %}
-        <div class="form-text">Checks documents after verification; only they can mark the task complete.</div>
+        <div class="form-text">Checks documents after verification; only they can mark the task complete. May be the same person as the verifier or task creator.</div>
       </div>
 
       <div class="mb-3 border rounded p-3 bg-light">
@@ -159,8 +174,17 @@
   {{ staff_users_json|json_script:"task-staff-users" }}
   {{ clients_json|json_script:"task-clients" }}
   {{ masters_meta_json|json_script:"task-masters-meta" }}
+  {{ task_groups_json|json_script:"task-groups-json" }}
+
+  {% if can_add_task_master %}
+    {% include "includes/master_picker_modal.html" %}
+  {% endif %}
 {% endblock %}
 {% block extra_js %}
+{% load static %}
+{% if can_add_task_master %}
+  <script src="{% static 'js/master_picker_popup.js' %}"></script>
+{% endif %}
 <script>
 (function () {
   var MIN_CHARS = 2;
@@ -372,6 +396,43 @@
     renderAssigneeChips();
     if (periodType && periodType.disabled) periodType.disabled = false;
   });
+
+  {% if can_add_task_master %}
+  if (window.CaMasterPicker) {
+    CaMasterPicker.wireButtons();
+    CaMasterPicker.init({
+      taskMaster: function (msg) {
+        var masterSelect = document.getElementById("id_task_master");
+        if (!masterSelect) return;
+        var id = String(msg.id);
+        var exists = false;
+        for (var i = 0; i < masterSelect.options.length; i++) {
+          if (masterSelect.options[i].value === id) {
+            masterSelect.options[i].textContent = msg.label;
+            masterSelect.options[i].selected = true;
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) {
+          var opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = msg.label;
+          opt.selected = true;
+          masterSelect.appendChild(opt);
+        }
+        masterSelect.value = id;
+        if (mastersMeta && msg.extra) {
+          mastersMeta[id] = {
+            period_type: msg.extra.period_type || "",
+            default_fees_amount: msg.extra.default_fees_amount || "",
+          };
+        }
+        applyMasterDefaults();
+      },
+    });
+  }
+  {% endif %}
 })();
 </script>
 {% endblock %}

@@ -628,20 +628,18 @@ class TaskCreateForm(forms.Form):
         verifier = cleaned.get("verifier")
         document_checker = cleaned.get("document_checker")
         user = self._task_user
-        if user and user.is_authenticated and assignees and verifier:
+        if user and user.is_authenticated and assignees:
             assignee_ids = {u.pk for u in assignees}
-            if user.pk == verifier.pk:
-                self.add_error("verifier", "Creator cannot be the verifier.")
             if user.pk in assignee_ids:
                 self.add_error("assignee_picker", "Creator cannot be assigned to the task.")
-            if verifier.pk in assignee_ids:
-                self.add_error("verifier", "Verifier cannot be one of the assigned users.")
             if len(assignee_ids) < len(assignees):
                 self.add_error("assignee_picker", "Each assigned user must be a different person.")
+        if user and user.is_authenticated and assignees and verifier:
+            assignee_ids = {u.pk for u in assignees}
+            if verifier.pk in assignee_ids:
+                self.add_error("verifier", "Verifier cannot be one of the assigned users.")
         if user and user.is_authenticated and assignees and document_checker:
             assignee_ids = {u.pk for u in assignees}
-            if user.pk == document_checker.pk:
-                self.add_error("document_checker", "Creator cannot be the document checker.")
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
         if verifier and document_checker:

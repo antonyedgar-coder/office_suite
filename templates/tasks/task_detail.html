@@ -7,10 +7,11 @@
     <div class="col-lg-5">
       <div class="card p-3">
         <p class="mb-1"><strong>Client:</strong> {{ task.client.client_name }} ({{ task.client_id }})</p>
+        <p class="mb-1"><strong>Type of client:</strong> {{ task.client.client_type|default:"—" }}</p>
         <p class="mb-1"><strong>Status:</strong> {{ task.get_status_display }}</p>
         {% if assignment_pending %}
           <p class="small text-warning-emphasis mb-2">
-            Awaiting verifier approval of the assignment. Assigned users are not notified yet.
+            Awaiting approval from an assigned user before work can begin.
           </p>
         {% endif %}
         <p class="mb-1"><strong>Priority:</strong> {{ task.get_priority_display }}</p>
@@ -67,11 +68,11 @@
       {% endif %}
       {% if can_approve_assignment %}
         <div class="card p-3 mt-3">
-          <h6>Assignment approval</h6>
-          <p class="small text-secondary mb-2">Confirm users before they can see and work on this task.</p>
+          <h6>Task approval</h6>
+          <p class="small text-secondary mb-2">Accept this assignment to start working on the task. Other assigned users will be notified.</p>
           <form method="post">{% csrf_token %}
             <input type="hidden" name="action" value="approve_assignment" />
-            <button class="btn btn-success btn-sm">Approve assignment</button>
+            <button class="btn btn-success btn-sm">Approve task</button>
           </form>
         </div>
       {% endif %}

@@ -9,7 +9,10 @@ from .models import (
     ClientPortalCredential,
     DSCInOut,
     DSCNotification,
+    ClientType,
     ExpenseCategory,
+    MasterRequest,
+    MasterRequestNotification,
     PortalName,
     ClientSequence,
     DirectorMapping,
@@ -103,6 +106,20 @@ class ClientActivityLogAdmin(admin.ModelAdmin):
         return False
 
 
+@admin.register(ClientType)
+class ClientTypeAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "pan_mandatory",
+        "allow_task_submit_without_pan",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = ("is_active", "pan_mandatory", "allow_task_submit_without_pan")
+    search_fields = ("name",)
+    ordering = ("sort_order", "name")
+
+
 @admin.register(ExpenseCategory)
 class ExpenseCategoryAdmin(admin.ModelAdmin):
     list_display = ("name", "is_active", "created_at")
@@ -163,4 +180,33 @@ class ClientPortalCredentialAdmin(admin.ModelAdmin):
     list_filter = ("portal", "created_at")
     search_fields = ("client__client_id", "client__client_name", "portal__name", "portal_username")
     readonly_fields = ("created_by", "created_at", "updated_by", "updated_at")
+
+
+@admin.register(MasterRequest)
+class MasterRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "pk",
+        "subject",
+        "request_type",
+        "status",
+        "requested_by",
+        "assigned_to",
+        "client",
+        "created_at",
+    )
+    list_filter = ("request_type", "status", "created_at")
+    search_fields = (
+        "subject",
+        "message",
+        "requested_by__username",
+        "assigned_to__username",
+        "client__client_name",
+    )
+    readonly_fields = ("created_at", "updated_at", "completed_at")
+
+
+@admin.register(MasterRequestNotification)
+class MasterRequestNotificationAdmin(admin.ModelAdmin):
+    list_display = ("user", "kind", "master_request", "is_read", "created_at")
+    list_filter = ("kind", "is_read")
 

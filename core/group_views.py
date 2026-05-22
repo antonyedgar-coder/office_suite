@@ -4,6 +4,7 @@ from django.contrib.auth.models import Group
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .group_forms import GroupAccessForm
+from .models import AccessGroupMeta
 
 
 def _superuser(u):
@@ -12,7 +13,11 @@ def _superuser(u):
 
 @user_passes_test(_superuser)
 def group_list(request):
-    groups = Group.objects.prefetch_related("permissions").order_by("name")
+    groups = (
+        Group.objects.prefetch_related("permissions")
+        .select_related("access_meta__created_by__employee_profile")
+        .order_by("name")
+    )
     return render(
         request,
         "access/group_list.html",
@@ -25,7 +30,8 @@ def group_create(request):
     if request.method == "POST":
         form = GroupAccessForm(request.POST)
         if form.is_valid():
-            form.save()
+            group = form.save()
+            AccessGroupMeta.objects.create(group=group, created_by=request.user)
             messages.success(request, "Access group created.")
             return redirect("user_group_list")
     else:

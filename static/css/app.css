@@ -447,6 +447,26 @@ body {
   }
 }
 
+.master-picker-modal-body {
+  min-height: 75vh;
+}
+
+.master-picker-frame {
+  display: block;
+  width: 100%;
+  height: 75vh;
+  min-height: 480px;
+  border: 0;
+  background: var(--bs-body-bg);
+}
+
+.master-picker-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--bs-body-bg);
+}
+
 /* Field labels & form section headings — darker than input text */
 .content .form-label,
 .filter-panel-form .form-label {
@@ -755,4 +775,43 @@ body {
   font-size: 0.78rem;
   color: #64748b;
   line-height: 1.35;
+}
+
+/* Master request notifications inbox (split view) */
+.master-request-inbox-panel {
+  max-height: min(72vh, 680px);
+}
+
+.master-request-inbox-list {
+  max-height: min(64vh, 600px);
+  overflow-y: auto;
+}
+
+.master-request-inbox-item {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.master-request-inbox-item:hover {
+  background: rgba(3, 105, 161, 0.06);
+}
+
+.master-request-inbox-item.is-selected {
+  background: rgba(3, 105, 161, 0.1);
+  border-left-color: var(--app-primary);
+}
+
+.master-request-panel-row {
+  cursor: pointer;
+}
+
+.master-request-panel-table .table-active {
+  --bs-table-bg-state: rgba(3, 105, 161, 0.12);
 }

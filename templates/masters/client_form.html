@@ -23,6 +23,7 @@
   <form method="post" id="clientMasterForm" class="app-form-with-sticky-bar">
     {% csrf_token %}
     <div class="card p-3 mb-3">
+      {% if mode == "create" %}{% include "includes/master_request_link_field.html" %}{% endif %}
       <div class="accordion form-section-accordion" id="clientFormSections">
         <div class="accordion-item">
           <h2 class="accordion-header">
@@ -33,7 +34,29 @@
           <div id="clientSectionCore" class="accordion-collapse collapse show" data-bs-parent="#clientFormSections">
             <div class="accordion-body row g-3">
               <div class="col-12 col-md-6">
-                <label class="form-label required-field" for="{{ form.client_type.id_for_label }}">Client type</label>
+                <label class="form-label required-field" for="clientTypeSearch">Client type</label>
+                <div class="input-group">
+                  <input
+                    class="form-control"
+                    id="clientTypeSearch"
+                    list="clientTypeSuggestions"
+                    placeholder="Type to search client type…"
+                    autocomplete="off"
+                  />
+                  {% if can_add_client_type %}
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      data-master-picker-url="{% url 'client_type_create' %}"
+                      data-master-picker-title="New client type"
+                      title="Add client type"
+                      aria-label="Add client type"
+                    >
+                      <i class="bi bi-plus-lg"></i>
+                    </button>
+                  {% endif %}
+                </div>
+                <datalist id="clientTypeSuggestions"></datalist>
                 {{ form.client_type }}
                 {% if form.client_type.errors %}<div class="text-danger small">{{ form.client_type.errors }}</div>{% endif %}
               </div>
@@ -49,11 +72,31 @@
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="clientGroupSearch">{{ form.client_group.label }}</label>
-                <input class="form-control" id="clientGroupSearch" list="clientGroupSuggestions" placeholder="Type to search Group Master…" autocomplete="off" />
+                <div class="input-group">
+                  <input
+                    class="form-control"
+                    id="clientGroupSearch"
+                    list="clientGroupSuggestions"
+                    placeholder="Type to search group…"
+                    autocomplete="off"
+                  />
+                  {% if can_add_client_group %}
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      data-master-picker-url="{% url 'client_group_create' %}"
+                      data-master-picker-title="New client group"
+                      title="Add client group"
+                      aria-label="Add client group"
+                    >
+                      <i class="bi bi-plus-lg"></i>
+                    </button>
+                  {% endif %}
+                </div>
                 <datalist id="clientGroupSuggestions"></datalist>
                 {{ form.client_group }}
                 {% if form.client_group.errors %}<div class="text-danger small">{{ form.client_group.errors }}</div>{% endif %}
-                <div class="form-field-hint">Optional. Must match Group Master.</div>
+                <div class="form-field-hint">Optional. Pick from Group Master or add new.</div>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="{{ form.file_no.id_for_label }}">{{ form.file_no.label }}</label>
@@ -173,15 +216,23 @@
     {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
   </form>
 
+  {% if can_add_client_type or can_add_client_group %}
+    {% include "includes/master_picker_modal.html" %}
+  {% endif %}
+
   {% if mode == "edit" %}
     {% include "masters/includes/client_activity_log.html" %}
   {% endif %}
 
   {{ groups_opts|json_script:"group-master-opts" }}
+  {{ client_types_opts|json_script:"client-type-opts" }}
 {% endblock %}
 
 {% block extra_js %}
   <script src="{% static 'js/client_form_validate.js' %}"></script>
+  {% if can_add_client_type or can_add_client_group %}
+    <script src="{% static 'js/master_picker_popup.js' %}"></script>
+  {% endif %}
   <script>
     (function () {
       function wireGroupAutocomplete(searchId, listId, hiddenSelector, querysetVar) {
@@ -217,6 +268,9 @@
             }
           }
           hidden.value = match ? match.id : "";
+          try {
+            hidden.dispatchEvent(new Event("change", { bubbles: true }));
+          } catch (e) {}
         }
 
         if (hidden.value) {
@@ -240,6 +294,54 @@
       var el = document.getElementById("group-master-opts");
       var groups = el ? JSON.parse(el.textContent) : [];
       wireGroupAutocomplete("clientGroupSearch", "clientGroupSuggestions", "input[data-client-group-hidden='1']", groups);
+
+      var typeEl = document.getElementById("client-type-opts");
+      var types = typeEl ? JSON.parse(typeEl.textContent) : [];
+      wireGroupAutocomplete("clientTypeSearch", "clientTypeSuggestions", "input[data-client-type-hidden='1']", types);
+
+      function appendPickerOption(opts, item) {
+        var found = false;
+        for (var i = 0; i < opts.length; i++) {
+          if (String(opts[i].id) === String(item.id)) {
+            opts[i].label = item.label;
+            found = true;
+            break;
+          }
+        }
+        if (!found) opts.push(item);
+      }
+
+      {% if can_add_client_type or can_add_client_group %}
+      if (window.CaMasterPicker) {
+        CaMasterPicker.wireButtons();
+        var typeSearch = document.getElementById("clientTypeSearch");
+        var typeHidden = document.querySelector("input[data-client-type-hidden='1']");
+        var groupSearch = document.getElementById("clientGroupSearch");
+        var groupHidden = document.querySelector("input[data-client-group-hidden='1']");
+        var pickerHandlers = {};
+        {% if can_add_client_type %}
+        pickerHandlers.clientType = function (msg) {
+          appendPickerOption(types, { id: msg.id, label: msg.label });
+          if (typeHidden) typeHidden.value = msg.id;
+          if (typeSearch) {
+            typeSearch.value = msg.label;
+            typeSearch.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        };
+        {% endif %}
+        {% if can_add_client_group %}
+        pickerHandlers.clientGroup = function (msg) {
+          appendPickerOption(groups, { id: msg.id, label: msg.label });
+          if (groupHidden) groupHidden.value = msg.id;
+          if (groupSearch) {
+            groupSearch.value = msg.label;
+            groupSearch.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        };
+        {% endif %}
+        CaMasterPicker.init(pickerHandlers);
+      }
+      {% endif %}
 
       var ids = ["id_client_name", "id_pan", "id_gstin", "id_llpin", "id_cin", "id_passport_no"];
       ids.forEach(function (id) {

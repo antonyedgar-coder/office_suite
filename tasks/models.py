@@ -6,6 +6,8 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from core.created_by import created_by_field
+
 from .recurrence_config import validate_recurrence_config
 
 
@@ -13,6 +15,7 @@ class TaskGroup(models.Model):
     name = models.CharField(max_length=120, unique=True)
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    created_by = created_by_field()
 
     class Meta:
         ordering = ["sort_order", "name"]
@@ -69,6 +72,7 @@ class TaskMaster(models.Model):
     )
     default_currency = models.CharField(max_length=8, default=CURRENCY_INR)
     archived_at = models.DateTimeField(null=True, blank=True)
+    created_by = created_by_field()
 
     class Meta:
         ordering = ["task_group__sort_order", "task_group__name", "name"]
@@ -198,7 +202,7 @@ class Task(models.Model):
     # Legacy DB/activity value (migrated to verified).
     STATUS_APPROVED = STATUS_VERIFIED
     STATUS_CHOICES = [
-        (STATUS_PENDING_ASSIGNMENT, "Awaiting assignment approval"),
+        (STATUS_PENDING_ASSIGNMENT, "Awaiting user approval"),
         (STATUS_ASSIGNED, "Pending"),
         (STATUS_SUBMITTED, "Submitted"),
         (STATUS_VERIFIED, "Verified"),
@@ -331,7 +335,7 @@ class Task(models.Model):
     @classmethod
     def status_label(cls, code: str) -> str:
         if code == cls.STATUS_PENDING_ASSIGNMENT:
-            return "Awaiting assignment approval"
+            return "Awaiting user approval"
         if code in (cls.STATUS_ASSIGNED, cls.STATUS_IN_PROGRESS, cls.STATUS_DRAFT):
             return "Pending"
         if code == "approved":

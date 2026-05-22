@@ -49,6 +49,16 @@ def _user_cards(user) -> tuple[SettingsCard, ...]:
 
 def _client_setup_cards(user) -> tuple[SettingsCard, ...]:
     cards: list[SettingsCard] = []
+    if user.is_superuser or user.has_perm("masters.view_clienttype"):
+        cards.append(
+            SettingsCard(
+                title="Client types",
+                description="Define client types, PAN mandatory, and task submit rules when PAN is not applicable.",
+                url_name="client_type_list",
+                icon="bi-diagram-3-fill",
+                icon_bg="settings-icon-green",
+            )
+        )
     if user.is_superuser or user.has_perm("masters.view_clientgroup"):
         cards.append(
             SettingsCard(
@@ -59,12 +69,16 @@ def _client_setup_cards(user) -> tuple[SettingsCard, ...]:
                 icon_bg="settings-icon-teal",
             )
         )
-    if user.is_superuser or user.has_perm("masters.view_clientportalcredential"):
+    if (
+        user.is_superuser
+        or user.has_perm("masters.view_portalname")
+        or user.has_perm("masters.add_portalname")
+    ):
         cards.append(
             SettingsCard(
                 title="Portals list",
-                description="Portal names (GST, MCA, etc.) are managed when adding passwords; open password management to add portals.",
-                url_name="portal_password_list",
+                description="Portal names (GST, MCA, etc.) used in password management.",
+                url_name="portal_name_list",
                 icon="bi-globe2",
                 icon_bg="settings-icon-orange",
             )

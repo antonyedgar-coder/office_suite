@@ -1,0 +1,89 @@
+  <div class="card p-3 {% if not embed_popup %}col-lg-8{% endif %}">
+    <form method="post" id="taskMasterForm">{% csrf_token %}
+      {% include "includes/master_request_link_field.html" %}
+      {% if form.errors %}
+        <div class="alert alert-danger" role="alert">
+          <div class="fw-semibold mb-1">Please correct the following:</div>
+          <ul class="mb-0 ps-3">
+            {% for field in form %}
+              {% for error in field.errors %}
+                <li>{{ field.label }}: {{ error }}</li>
+              {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="id_task_group">Task group</label>
+        {{ form.task_group }}
+        {% if form.task_group.errors %}<div class="text-danger small">{{ form.task_group.errors }}</div>{% endif %}
+        {% if not form.task_group.field.queryset %}
+          <p class="form-text text-warning mb-0">Create an active task group first (Tasks → Task group).</p>
+        {% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_name">Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_description">Description</label>
+        {{ form.description }}
+        {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors }}</div>{% endif %}
+      </div>
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label class="form-label" for="id_default_priority">Default priority</label>
+          {{ form.default_priority }}
+          {% if form.default_priority.errors %}<div class="text-danger small">{{ form.default_priority.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4 mb-3 form-check pt-4">
+          {{ form.is_active }}
+          <label class="form-check-label" for="id_is_active">Active</label>
+          <p class="form-text mb-0">Inactive masters stay in the list but cannot be used when creating new tasks.</p>
+        </div>
+        <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label" for="id_is_recurring">Recurring</label></div>
+      </div>
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <label class="form-label" for="id_default_fees_amount">Suggested fees (optional)</label>
+          {{ form.default_fees_amount }}
+          {% if form.default_fees_amount.errors %}<div class="text-danger small">{{ form.default_fees_amount.errors }}</div>{% endif %}
+          <p class="form-text mb-0">Pre-fills fees when you create a billable task. Billable and verifier are chosen on each new task only.</p>
+        </div>
+      </div>
+      <div class="border rounded p-3 mb-3">
+        <h6 class="mb-2">Checklist template</h6>
+        <p class="form-text small">Items are copied to each new task from this master. Users tick them off on the task page.</p>
+        <div id="checklistRows"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="checklistAddBtn">Add item</button>
+        {{ form.checklist_json }}
+        {% if form.checklist_json.errors %}<div class="text-danger small mt-1">{{ form.checklist_json.errors }}</div>{% endif %}
+      </div>
+      <div id="recurrencePanel" class="border rounded p-3 mb-3" style="display:none">
+        <div class="mb-3">
+          <label class="form-label" for="id_frequency">Frequency</label>
+          {{ form.frequency }}
+          {% if form.frequency.errors %}<div class="text-danger small">{{ form.frequency.errors }}</div>{% endif %}
+        </div>
+        <div id="recurrenceFields"></div>
+        {% if form.recurrence_config_json.errors %}
+          <div class="text-danger small">{{ form.recurrence_config_json.errors }}</div>
+        {% endif %}
+      </div>
+      {{ form.recurrence_config_json }}
+      <div class="{% if not embed_popup %}d-flex gap-2{% endif %}">
+        {% if embed_popup %}
+          {% include "includes/embed_form_actions.html" with cancel_url=cancel_url|default:"" %}
+        {% else %}
+          <button type="submit" class="btn btn-primary">Save</button>
+          <a class="btn btn-outline-secondary" href="{% url 'task_master_list' %}">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {{ recurrence_config|default:"{}"|json_script:"recurrence-config-data" }}
+  {{ checklist_labels|json_script:"checklist-labels-data" }}

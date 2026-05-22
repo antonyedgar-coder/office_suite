@@ -7,6 +7,30 @@ def enable_task_module(request):
     return {"enable_task_module": task_module_enabled()}
 
 
+def master_request_nav_counts(request):
+    if not getattr(request, "user", None) or not request.user.is_authenticated:
+        return {}
+    from masters.master_request_service import (
+        user_can_view_master_requests,
+        user_sees_assigned_queue,
+    )
+    from masters.models import MasterRequest, MasterRequestNotification
+
+    out = {"show_master_requests_nav": user_can_view_master_requests(request.user)}
+    badge = MasterRequestNotification.objects.filter(
+        user=request.user,
+        is_read=False,
+    ).count()
+    if user_sees_assigned_queue(request.user):
+        badge += MasterRequest.objects.filter(
+            assigned_to=request.user,
+            status=MasterRequest.STATUS_SUBMITTED,
+        ).count()
+    if badge:
+        out["master_request_nav_pending_count"] = badge
+    return out
+
+
 def settings_hub_access(request):
     if not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}

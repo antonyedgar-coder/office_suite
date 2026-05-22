@@ -1,9 +1,27 @@
 from django.urls import path
 
-from . import views
+from . import master_request_views, views
 
 
 urlpatterns = [
+    path("master-requests/", master_request_views.master_request_list, name="master_request_list"),
+    path("master-requests/new/", master_request_views.master_request_create, name="master_request_create"),
+    path(
+        "master-requests/notifications/",
+        master_request_views.master_request_notification_list,
+        name="master_request_notification_list",
+    ),
+    path(
+        "master-requests/notifications/mark-all-read/",
+        master_request_views.master_request_notification_mark_all_read,
+        name="master_request_notification_mark_all_read",
+    ),
+    path(
+        "master-requests/notifications/<int:pk>/read/",
+        master_request_views.master_request_notification_mark_read,
+        name="master_request_notification_mark_read",
+    ),
+    path("master-requests/<int:pk>/", master_request_views.master_request_detail, name="master_request_detail"),
     path("clients/", views.client_list, name="client_list"),
     path("clients/activity-log/", views.client_activity_log_list, name="client_activity_log_list"),
     path("clients/pending/", views.client_pending_list, name="client_pending_list"),
@@ -21,9 +39,17 @@ urlpatterns = [
     path("groups/bulk-delete/", views.client_group_bulk_delete, name="client_group_bulk_delete"),
     path("groups/<int:pk>/delete/", views.client_group_delete, name="client_group_delete"),
     path("groups/<int:pk>/", views.client_group_edit, name="client_group_edit"),
+    path("client-types/", views.client_type_list, name="client_type_list"),
+    path("client-types/new/", views.client_type_create, name="client_type_create"),
+    path("client-types/<int:pk>/delete/", views.client_type_delete, name="client_type_delete"),
+    path("client-types/<int:pk>/", views.client_type_edit, name="client_type_edit"),
     path("clients/<str:client_id>/approve/", views.client_approve, name="client_approve"),
     path("clients/<str:client_id>/reject/", views.client_reject, name="client_reject"),
+    path("portal-names/", views.portal_name_list, name="portal_name_list"),
+    path("portal-names/new/", views.portal_name_create, name="portal_name_create"),
     path("portal-names/create/", views.portal_name_create_api, name="portal_name_create_api"),
+    path("client-types/quick-create/", views.client_type_create_api, name="client_type_create_api"),
+    path("client-groups/quick-create/", views.client_group_create_api, name="client_group_create_api"),
     path("expense-categories/", views.expense_category_list, name="expense_category_list"),
     path("expense-categories/bulk-upload/", views.expense_category_bulk_import, name="expense_category_bulk_import"),
     path(

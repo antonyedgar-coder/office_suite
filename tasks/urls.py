@@ -22,6 +22,7 @@ urlpatterns = [
         name="task_master_bulk_import_template",
     ),
     path("masters/new/", views.task_master_create, name="task_master_create"),
+    path("masters/quick-create/", views.task_master_quick_create_api, name="task_master_quick_create_api"),
     path("masters/<int:pk>/delete/", views.task_master_delete, name="task_master_delete"),
     path("masters/<int:pk>/", views.task_master_edit, name="task_master_edit"),
     path("export.csv", views.task_list_csv, name="task_list_csv"),

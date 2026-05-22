@@ -1,0 +1,18 @@
+{% if pending_master_requests %}
+  <div class="mb-3 border rounded p-3 bg-light">
+    <label class="form-label" for="id_master_request_id">Complete a master request (optional)</label>
+    <select name="master_request_id" id="id_master_request_id" class="form-select">
+      <option value="">— Not linked to a request —</option>
+      {% for mr in pending_master_requests %}
+        <option value="{{ mr.pk }}"{% if preselect_master_request_id == mr.pk|stringformat:"s" %} selected{% endif %}>
+          #{{ mr.pk }} — {{ mr.subject|default:"(No subject)" }} — {{ mr.requested_by }}
+        </option>
+      {% endfor %}
+    </select>
+    <div class="form-field-hint mt-1">
+      Select the staff request you are fulfilling. The requester will be notified when you save.
+    </div>
+  </div>
+{% elif preselect_master_request_id %}
+  <input type="hidden" name="master_request_id" value="{{ preselect_master_request_id }}" />
+{% endif %}

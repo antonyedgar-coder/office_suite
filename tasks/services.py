@@ -217,7 +217,7 @@ def create_task_from_master(
         created_by,
         TaskActivity.TYPE_CREATED,
         message=(
-            f"Task created; users: {names} (awaiting verifier approval)."
+            f"Task created; users: {names} (awaiting user approval)."
             if needs_assignment_approval
             else f"Task created; users: {names}."
         )
@@ -230,13 +230,15 @@ def create_task_from_master(
         },
     )
     if needs_assignment_approval:
-        notify_user(
-            verifier,
-            f"Approve task assignment: {task.display_title} — {format_client_name_pan(client)}",
-            kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
-            link=f"/tasks/{task.pk}/",
-            task=task,
-        )
+        client_label = format_client_name_pan(client)
+        for u in assignee_users:
+            notify_user(
+                u,
+                f"Approve your task assignment: {task.display_title} — {client_label}",
+                kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
+                link=f"/tasks/{task.pk}/",
+                task=task,
+            )
     else:
         for u in assignee_users:
             notify_user(
@@ -249,16 +251,26 @@ def create_task_from_master(
     return task
 
 
+def user_can_approve_task_assignment(user, task: Task) -> bool:
+    if task.status != Task.STATUS_PENDING_ASSIGNMENT:
+        return False
+    if user.is_superuser:
+        return True
+    return task.assignments.filter(user_id=user.pk).exists()
+
+
 @transaction.atomic
 def approve_task_assignment(task: Task, user, message: str = "") -> Task:
-    if task.verifier_id != user.pk and not user.is_superuser:
-        raise ValidationError("Only the designated verifier can approve this assignment.")
+    if not user_can_approve_task_assignment(user, task):
+        raise ValidationError("Only an assigned user can approve this task assignment.")
     if task.status != Task.STATUS_PENDING_ASSIGNMENT:
-        raise ValidationError("This task is not awaiting assignment approval.")
+        raise ValidationError("This task is not awaiting user approval.")
 
     transition_task_status(task, Task.STATUS_ASSIGNED, user=user, message=message or "Assignment approved.")
     client_label = format_task_client_suffix(task)
     for assignment in task.assignments.select_related("user"):
+        if assignment.user_id == user.pk:
+            continue
         notify_user(
             assignment.user,
             f"You were assigned: {task.display_title} — {client_label}",

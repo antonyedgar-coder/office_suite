@@ -1,0 +1,24 @@
+<div class="modal fade" id="masterPickerModal" tabindex="-1" aria-labelledby="masterPickerModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-lg-down">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="masterPickerModalLabel">Add master</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0 position-relative master-picker-modal-body">
+        <div id="masterPickerLoading" class="master-picker-loading d-none d-flex align-items-center justify-content-center">
+          <div class="text-center text-secondary py-5">
+            <div class="spinner-border mb-2" role="status" aria-hidden="true"></div>
+            <div>Loading form…</div>
+          </div>
+        </div>
+        <iframe
+          id="masterPickerFrame"
+          title="Master setup form"
+          class="master-picker-frame"
+          src="about:blank"
+        ></iframe>
+      </div>
+    </div>
+  </div>
+</div>

@@ -9,7 +9,7 @@ from django.test import TestCase, modify_settings
 from core.models import Employee
 from masters.models import Client, ClientActivityLog, ClientGroup
 from tasks.checklist import master_checklist_labels, save_master_checklist, toggle_task_checklist_item
-from tasks.forms import TaskMasterForm
+from tasks.forms import TaskCreateForm, TaskMasterForm
 from tasks.models import (
     Task,
     TaskAssignment,
@@ -361,7 +361,7 @@ class TaskWorkflowTests(TestCase):
         self.assertFalse(enrollment.is_active)
         self.assertEqual(try_create_recurring_for_enrollment(enrollment, date(2026, 6, 1)), None)
 
-    def test_manual_task_requires_verifier_assignment_approval(self):
+    def test_manual_task_requires_assignee_approval(self):
         creator = User.objects.create_user(email="maker@example.com", password="pass12345")
         task = create_task_from_master(
             master=self.master,
@@ -383,21 +383,59 @@ class TaskWorkflowTests(TestCase):
         )
         self.assertTrue(
             TaskNotification.objects.filter(
+                user=self.user,
+                kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
+                task=task,
+            ).exists()
+        )
+        self.assertFalse(
+            TaskNotification.objects.filter(
                 user=self.verifier,
                 kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
                 task=task,
             ).exists()
         )
-        approve_task_assignment(task, self.verifier)
+        approve_task_assignment(task, self.user)
         task.refresh_from_db()
         self.assertEqual(task.status, Task.STATUS_ASSIGNED)
-        self.assertTrue(
-            TaskNotification.objects.filter(
-                user=self.user,
-                kind=TaskNotification.KIND_ASSIGNED,
-                task=task,
-            ).exists()
+
+    def test_creator_may_be_verifier_and_document_checker(self):
+        creator = User.objects.create_user(email="creatorvc@example.com", password="pass12345")
+        other = User.objects.create_user(email="assignee@example.com", password="pass12345")
+        form = TaskCreateForm(
+            data={
+                "task_master": self.master.pk,
+                "client": self.client.pk,
+                "assignee_ids": str(other.pk),
+                "verifier": creator.pk,
+                "document_checker": creator.pk,
+                "due_date": "2026-09-15",
+                "period_type": "monthly",
+                "period_month": "9",
+                "period_year": "2026",
+            },
+            user=creator,
         )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_creator_cannot_be_assignee(self):
+        creator = User.objects.create_user(email="creatora@example.com", password="pass12345")
+        form = TaskCreateForm(
+            data={
+                "task_master": self.master.pk,
+                "client": self.client.pk,
+                "assignee_ids": str(creator.pk),
+                "verifier": self.verifier.pk,
+                "document_checker": self.document_checker.pk,
+                "due_date": "2026-09-15",
+                "period_type": "monthly",
+                "period_month": "9",
+                "period_year": "2026",
+            },
+            user=creator,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("assignee_picker", form.errors)
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Master requests — CA Office Suite{% endblock %}
+{% block page_title %}Master requests{% endblock %}
+
+{% block content %}
+  {% include "includes/page_header.html" with title="Master requests" subtitle="Request setup items from users authorized to create them." %}
+
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    {% if perms.masters.add_masterrequest or perms.masters.view_client or user.is_superuser %}
+      <a class="btn btn-primary" href="{% url 'master_request_create' %}">New master request</a>
+    {% endif %}
+  </div>
+
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <a class="nav-link{% if tab == 'mine' %} active{% endif %}" href="{% url 'master_request_list' %}?tab=mine">My requests</a>
+    </li>
+    {% if show_assigned_tab %}
+      <li class="nav-item">
+        <a class="nav-link{% if tab == 'assigned' %} active{% endif %}" href="{% url 'master_request_list' %}?tab=assigned">
+          Assigned to me
+          {% if pending_assigned_count %}<span class="badge text-bg-danger ms-1">{{ pending_assigned_count }}</span>{% endif %}
+        </a>
+      </li>
+    {% endif %}
+    <li class="nav-item">
+      <a class="nav-link{% if tab == 'notifications' %} active{% endif %}" href="{% url 'master_request_list' %}?tab=notifications">
+        Notifications
+        {% if unread_notification_count %}<span class="badge text-bg-danger ms-1" data-master-request-unread-badge data-count="{{ unread_notification_count }}">{{ unread_notification_count }}</span>{% endif %}
+      </a>
+    </li>
+  </ul>
+
+  {% if tab == 'notifications' %}
+    <div
+      id="masterRequestInbox"
+      class="master-request-inbox"
+      data-notif-filter="{{ notif_filter }}"
+      data-selected-request="{% if selected_request_id %}{{ selected_request_id }}{% endif %}"
+    >
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Notification filter">
+          <a
+            class="btn btn-outline-secondary{% if notif_filter == 'all' %} active{% endif %}"
+            href="{{ notifications_all_url }}"
+          >All</a>
+          <a
+            class="btn btn-outline-secondary{% if notif_filter == 'unread' %} active{% endif %}"
+            href="{{ notifications_unread_url }}"
+          >Unread only</a>
+        </div>
+        {% if unread_notification_count %}
+          <form method="post" action="{% url 'master_request_notification_mark_all_read' %}">
+            {% csrf_token %}
+            <input type="hidden" name="notif_filter" value="{{ notif_filter }}" />
+            {% if selected_request_id %}<input type="hidden" name="request" value="{{ selected_request_id }}" />{% endif %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Mark all as read</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-5 col-xl-4">
+          <div class="card master-request-inbox-panel">
+            <div class="card-header py-2 small fw-semibold">Notifications</div>
+            <ul class="list-group list-group-flush master-request-inbox-list">
+              {% for n in notifications %}
+                <li class="list-group-item p-0{% if not n.is_read %} list-group-item-warning{% endif %}">
+                  <button
+                    type="button"
+                    class="master-request-inbox-item{% if selected_request_id and n.master_request_id == selected_request_id %} is-selected{% endif %}"
+                    data-notification-id="{{ n.pk }}"
+                    data-request-id="{{ n.master_request_id }}"
+                    data-read-url="{% url 'master_request_notification_mark_read' n.pk %}"
+                    data-unread="{% if not n.is_read %}1{% else %}0{% endif %}"
+                  >
+                    <span class="small text-secondary d-block">{{ n.created_at|date:"d-m-Y H:i" }}</span>
+                    <span class="d-block">{{ n.message }}</span>
+                    {% if n.master_request %}
+                      <span class="small text-secondary d-block mt-1">
+                        Request #{{ n.master_request.pk }}
+                        {% if n.master_request.subject %} · {{ n.master_request.subject }}{% endif %}
+                        · {{ n.master_request.get_request_type_display }}
+                        {% if n.master_request.client %} · {{ n.master_request.client.client_name }}{% endif %}
+                      </span>
+                    {% endif %}
+                  </button>
+                  {% if n.master_request_id %}
+                    <div class="px-3 pb-2 pt-0">
+                      <a
+                        class="btn btn-sm btn-outline-primary"
+                        href="{% url 'master_request_detail' n.master_request_id %}"
+                      >Open request</a>
+                    </div>
+                  {% endif %}
+                </li>
+              {% empty %}
+                <li class="list-group-item text-secondary">No notifications match this filter.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-lg-7 col-xl-8">
+          <div class="card master-request-inbox-panel d-none d-lg-flex flex-column">
+            <div class="card-header py-2 small fw-semibold">
+              Related requests
+              <span class="text-secondary fw-normal"> — click a notification to highlight</span>
+            </div>
+            <div class="card-body p-0 flex-grow-1 overflow-auto">
+              {% include "masters/includes/master_request_panel_table.html" %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-3 d-lg-none">
+        <div class="card-header py-2 small fw-semibold">Related requests</div>
+        <div class="card-body p-0">
+          {% include "masters/includes/master_request_panel_table.html" %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Subject</th>
+              <th>Type</th>
+              <th>Client</th>
+              <th>{% if tab == 'assigned' %}Requested by{% else %}Assigned to{% endif %}</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if tab == 'assigned' %}
+              {% for r in assigned_requests %}
+                <tr>
+                  <td>{{ r.pk }}</td>
+                  <td class="fw-medium">{{ r.subject|default:"—" }}</td>
+                  <td>{{ r.get_request_type_display }}</td>
+                  <td>{% if r.client %}{{ r.client.client_name }}{% else %}—{% endif %}</td>
+                  <td>{{ r.requested_by }}</td>
+                  <td><span class="badge text-bg-{% if r.status == 'submitted' %}warning{% elif r.status == 'completed' %}success{% else %}secondary{% endif %}">{{ r.get_status_display }}</span></td>
+                  <td class="text-nowrap">{{ r.created_at|date:"d-m-Y H:i" }}</td>
+                  <td><a class="btn btn-sm btn-outline-primary" href="{% url 'master_request_detail' r.pk %}">Open</a></td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="8" class="text-secondary p-3">No requests assigned to you.</td></tr>
+              {% endfor %}
+            {% else %}
+              {% for r in my_requests %}
+                <tr>
+                  <td>{{ r.pk }}</td>
+                  <td class="fw-medium">{{ r.subject|default:"—" }}</td>
+                  <td>{{ r.get_request_type_display }}</td>
+                  <td>{% if r.client %}{{ r.client.client_name }}{% else %}—{% endif %}</td>
+                  <td>{{ r.assigned_to }}</td>
+                  <td><span class="badge text-bg-{% if r.status == 'submitted' %}warning{% elif r.status == 'completed' %}success{% else %}secondary{% endif %}">{{ r.get_status_display }}</span></td>
+                  <td class="text-nowrap">{{ r.created_at|date:"d-m-Y H:i" }}</td>
+                  <td><a class="btn btn-sm btn-outline-primary" href="{% url 'master_request_detail' r.pk %}">Open</a></td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="8" class="text-secondary p-3">You have not submitted any master requests yet.</td></tr>
+              {% endfor %}
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if tab == 'notifications' %}
+    <script src="{% static 'js/master_request_inbox.js' %}"></script>
+  {% endif %}
+{% endblock %}

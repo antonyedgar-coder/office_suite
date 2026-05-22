@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}New master request — CA Office Suite{% endblock %}
+{% block page_title %}New master request{% endblock %}
+
+{% block content %}
+  <form method="post" class="card p-3 col-lg-8">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="mb-3">
+      <label class="form-label required-field" for="id_request_type">What to create</label>
+      {{ form.request_type }}
+      {% if form.request_type.errors %}<div class="text-danger small">{{ form.request_type.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3" id="masterRequestClientWrap" style="display:none">
+      <label class="form-label required-field" for="id_client">Client</label>
+      {{ form.client }}
+      {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
+      <div class="form-field-hint">Required only when requesting a new task.</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label required-field" for="id_assigned_to">Assign to</label>
+      {{ form.assigned_to }}
+      {% if form.assigned_to.errors %}<div class="text-danger small">{{ form.assigned_to.errors }}</div>{% endif %}
+      <div class="form-field-hint">Only users authorized to create the selected item are listed.</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label required-field" for="id_subject">Subject</label>
+      {{ form.subject }}
+      {% if form.subject.errors %}<div class="text-danger small">{{ form.subject.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label required-field" for="id_message">Message</label>
+      {{ form.message }}
+      {% if form.message.errors %}<div class="text-danger small">{{ form.message.errors }}</div>{% endif %}
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">Submit request</button>
+      <a class="btn btn-outline-secondary" href="{% url 'master_request_list' %}">Cancel</a>
+    </div>
+  </form>
+
+  {{ assignees_json|json_script:"master-request-assignees" }}
+  <script>
+    (function () {
+      var typeEl = document.getElementById("id_request_type");
+      var clientWrap = document.getElementById("masterRequestClientWrap");
+      var clientEl = document.getElementById("id_client");
+      var assigneeEl = document.getElementById("id_assigned_to");
+      var assignees = JSON.parse(document.getElementById("master-request-assignees").textContent || "{}");
+      var NEW_TASK = "new_task";
+
+      function syncAssignees() {
+        if (!typeEl || !assigneeEl) return;
+        var rt = typeEl.value;
+        var list = assignees[rt] || [];
+        var prev = assigneeEl.value;
+        assigneeEl.innerHTML = "";
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "— Select assignee —";
+        assigneeEl.appendChild(empty);
+        list.forEach(function (u) {
+          var opt = document.createElement("option");
+          opt.value = String(u.id);
+          opt.textContent = u.label;
+          if (String(u.id) === String(prev)) opt.selected = true;
+          assigneeEl.appendChild(opt);
+        });
+      }
+
+      function syncClient() {
+        if (!typeEl || !clientWrap) return;
+        var show = typeEl.value === NEW_TASK;
+        clientWrap.style.display = show ? "" : "none";
+        if (clientEl) clientEl.required = show;
+        if (!show && clientEl) clientEl.value = "";
+      }
+
+      if (typeEl) {
+        typeEl.addEventListener("change", function () {
+          syncClient();
+          syncAssignees();
+        });
+        syncClient();
+        syncAssignees();
+      }
+    })();
+  </script>
+{% endblock %}

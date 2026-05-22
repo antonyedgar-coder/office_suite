@@ -1,0 +1,5 @@
+{% extends "embed/popup_base.html" %}
+{% block title %}{% if mode == "create" %}New group{% else %}Edit group{% endif %}{% endblock %}
+{% block content %}
+  {% include "masters/includes/client_group_form_inner.html" %}
+{% endblock %}

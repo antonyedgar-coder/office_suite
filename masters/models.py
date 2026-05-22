@@ -1,8 +1,11 @@
 import re
 from datetime import date
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+
+from core.created_by import created_by_field
 
 
 BRANCH_CHOICES = [
@@ -205,6 +208,7 @@ class ClientGroup(models.Model):
     name = models.CharField(max_length=120, unique=True)
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -248,6 +252,45 @@ class ClientGroup(models.Model):
         super().save(*args, **kwargs)
 
 
+class ClientType(models.Model):
+    """
+    Configurable client types (Settings → Client types).
+    Client.client_type stores the type name (text) matching ClientType.name.
+    """
+
+    name = models.CharField(max_length=64, unique=True)
+    pan_mandatory = models.BooleanField(
+        default=True,
+        help_text="When enabled, PAN must be entered on Client Master for this type.",
+    )
+    allow_task_submit_without_pan = models.BooleanField(
+        default=True,
+        verbose_name="Allow task submit when PAN is not applicable",
+        help_text=(
+            "When PAN is not mandatory and left blank, assignees may submit tasks "
+            "for verification. Turn off for types like New Client."
+        ),
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_by = created_by_field()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "client type"
+        verbose_name_plural = "client types"
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self):
+        self.name = (self.name or "").strip()
+        if not self.name:
+            raise ValidationError({"name": "Client type name is required."})
+
+
 class Client(models.Model):
     """Client Master record. Non–superuser creates/updates require approval before use in MIS / mappings / KYC."""
 
@@ -283,7 +326,7 @@ class Client(models.Model):
     )
     approved_at = models.DateTimeField(null=True, blank=True)
 
-    client_type = models.CharField(max_length=32, choices=CLIENT_TYPES)
+    client_type = models.CharField(max_length=64)
     branch = models.CharField(max_length=32, choices=BRANCH_CHOICES, default="Trivandrum")
     client_name = models.CharField(max_length=200)
     client_group = models.ForeignKey(
@@ -365,6 +408,13 @@ class Client(models.Model):
                 "This group is inactive. Choose an active group or clear the group."
             )
 
+        from .client_type_service import lookup_client_type
+
+        if self.client_type and not lookup_client_type(self.client_type):
+            errors.setdefault("client_type", []).append(
+                "Unknown client type. Add or activate it under Settings → Client types."
+            )
+
         # Name keywords imply client type.
         #
         # IMPORTANT business override:
@@ -418,10 +468,12 @@ class Client(models.Model):
                     "Aadhaar No applies only to Individual or Foreign Citizen."
                 )
 
-        # PAN rules
-        if self.client_type not in PAN_OPTIONAL_CLIENT_TYPES and self.client_type != "Branch" and not self.pan:
+        # PAN rules (Settings → Client types: pan_mandatory)
+        from .client_type_service import is_pan_mandatory_for_type
+
+        if is_pan_mandatory_for_type(self.client_type) and not self.pan:
             errors.setdefault("pan", []).append(
-                "PAN is mandatory (except Client Type New Client, One Off Client, Foreign Citizen, or Branch)."
+                f"PAN is mandatory for Client Type {self.client_type}."
             )
         if self.pan and not PAN_RE.match(self.pan):
             errors.setdefault("pan", []).append("PAN must be 10 chars in format AAAAA9999A.")
@@ -696,6 +748,7 @@ class ExpenseCategory(models.Model):
 
     name = models.CharField(max_length=120, unique=True)
     is_active = models.BooleanField(default=True)
+    created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -716,6 +769,7 @@ class PortalName(models.Model):
 
     name = models.CharField(max_length=120, unique=True)
     is_active = models.BooleanField(default=True)
+    created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -892,6 +946,152 @@ class DSCNotification(models.Model):
     )
     message = models.TextField()
     link = models.CharField(max_length=512, blank=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "is_read", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} — {self.message[:60]}"
+
+
+class MasterRequest(models.Model):
+    """Staff request for an authorized user to create a master record or task."""
+
+    TYPE_CLIENT_GROUP = "client_group"
+    TYPE_TASK_MASTER = "task_master"
+    TYPE_TASK_GROUP = "task_group"
+    TYPE_NEW_TASK = "new_task"
+    TYPE_PORTAL_NAME = "portal_name"
+    TYPE_CLIENT_TYPE = "client_type"
+    TYPE_NEW_CLIENT = "new_client"
+
+    REQUEST_TYPE_CHOICES = [
+        (TYPE_CLIENT_GROUP, "Client group"),
+        (TYPE_TASK_MASTER, "Task master"),
+        (TYPE_TASK_GROUP, "Task group"),
+        (TYPE_NEW_TASK, "New task"),
+        (TYPE_PORTAL_NAME, "Portal name"),
+        (TYPE_CLIENT_TYPE, "Client type"),
+        (TYPE_NEW_CLIENT, "New client"),
+    ]
+
+    STATUS_SUBMITTED = "submitted"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_SUBMITTED, "Submitted"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    request_type = models.CharField(max_length=32, choices=REQUEST_TYPE_CHOICES, db_index=True)
+    client = models.ForeignKey(
+        "Client",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="master_requests",
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="master_requests_submitted",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="master_requests_assigned",
+    )
+    subject = models.CharField(max_length=200, blank=True, default="")
+    message = models.TextField()
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_SUBMITTED,
+        db_index=True,
+    )
+    content_type = models.ForeignKey(
+        "contenttypes.ContentType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    object_id = models.CharField(max_length=64, blank=True, db_index=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="master_requests_completed",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "master request"
+        verbose_name_plural = "master requests"
+        indexes = [
+            models.Index(fields=["assigned_to", "status", "request_type"]),
+            models.Index(fields=["requested_by", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        title = (self.subject or "").strip() or self.get_request_type_display()
+        return f"#{self.pk} {title} ({self.get_status_display()})"
+
+    @property
+    def linked_object(self):
+        if not self.content_type_id or not self.object_id:
+            return None
+        return self.content_type.get_object_for_this_type(pk=self.object_id)
+
+    @linked_object.setter
+    def linked_object(self, obj):
+        if obj is None:
+            self.content_type = None
+            self.object_id = ""
+            return
+        ct = ContentType.objects.get_for_model(obj)
+        self.content_type = ct
+        self.object_id = str(obj.pk)
+
+    def linked_summary(self) -> str:
+        obj = self.linked_object
+        if obj is None:
+            return ""
+        return f"Created: {obj}"
+
+
+class MasterRequestNotification(models.Model):
+    KIND_SUBMITTED_ASSIGNEE = "submitted_assignee"
+    KIND_SUBMITTED_REQUESTER = "submitted_requester"
+    KIND_COMPLETED = "completed"
+    KIND_CHOICES = [
+        (KIND_SUBMITTED_ASSIGNEE, "Assigned to you"),
+        (KIND_SUBMITTED_REQUESTER, "Your submission"),
+        (KIND_COMPLETED, "Completed"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="master_request_notifications",
+    )
+    master_request = models.ForeignKey(
+        MasterRequest,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    message = models.TextField()
     is_read = models.BooleanField(default=False, db_index=True)
     read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

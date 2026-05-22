@@ -1,0 +1,105 @@
+<script>
+(function () {
+  var cfg = JSON.parse(document.getElementById("recurrence-config-data").textContent || "{}");
+  var recurring = document.getElementById("id_is_recurring");
+  var freq = document.getElementById("id_frequency");
+  var panel = document.getElementById("recurrencePanel");
+  var fields = document.getElementById("recurrenceFields");
+  var hidden = document.getElementById("id_recurrence_config_json");
+  if (!recurring || !freq || !panel || !fields || !hidden) return;
+
+  function fieldRow(label, name, type, val) {
+    var d = document.createElement("div");
+    d.className = "mb-2";
+    d.innerHTML = '<label class="form-label">' + label + '</label><input class="form-control" data-rc="' + name + '" type="' + type + '" value="' + (val != null ? val : "") + '">';
+    return d;
+  }
+  function selectRow(label, name, opts, val) {
+    var d = document.createElement("div");
+    d.className = "mb-2";
+    var html = '<label class="form-label">' + label + '</label><select class="form-select" data-rc="' + name + '">';
+    opts.forEach(function (o) { html += '<option value="' + o + '"' + (val === o ? " selected" : "") + ">" + o + "</option>"; });
+    html += "</select>";
+    d.innerHTML = html;
+    return d;
+  }
+  function render() {
+    fields.innerHTML = "";
+    if (!recurring.checked) { panel.style.display = "none"; hidden.value = "{}"; return; }
+    panel.style.display = "block";
+    var f = freq.value;
+    var c = cfg || {};
+    if (f === "monthly") {
+      fields.appendChild(selectRow("Month anchor", "month_anchor", ["same_month", "subsequent_month"], c.month_anchor));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "quarterly") {
+      fields.appendChild(selectRow("Quarter anchor", "quarter_anchor", ["first_month_same_qtr", "last_month_same_qtr", "first_month_next_qtr"], c.quarter_anchor));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "half_yearly") {
+      fields.appendChild(selectRow("Half anchor", "half_anchor", ["first_month_same_half", "last_month_same_half", "first_month_next_half"], c.half_anchor));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "annually") {
+      fields.appendChild(selectRow("FY anchor", "fy_anchor", ["same_fy", "next_fy"], c.fy_anchor));
+      fields.appendChild(fieldRow("Month (1-12)", "month", "number", c.month));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    } else if (f === "every_3_years" || f === "every_5_years") {
+      fields.appendChild(fieldRow("Create month", "create_month", "number", c.create_month));
+      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
+      fields.appendChild(fieldRow("Due month", "due_month", "number", c.due_month));
+      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+    }
+  }
+  var checklistRows = document.getElementById("checklistRows");
+  var checklistHidden = document.getElementById("id_checklist_json");
+  var checklistLabels = JSON.parse(document.getElementById("checklist-labels-data").textContent || "[]");
+  function addChecklistRow(val) {
+    var row = document.createElement("div");
+    row.className = "input-group mb-2";
+    row.innerHTML =
+      '<input type="text" class="form-control checklist-input" value="' +
+      (val ? String(val).replace(/"/g, "&quot;") : "") +
+      '" placeholder="Checklist item" />' +
+      '<button type="button" class="btn btn-outline-danger checklist-remove">Remove</button>';
+    row.querySelector(".checklist-remove").addEventListener("click", function () {
+      row.remove();
+    });
+    checklistRows.appendChild(row);
+  }
+  if (checklistRows && checklistHidden) {
+    (checklistLabels || []).forEach(addChecklistRow);
+    if (!checklistLabels || !checklistLabels.length) addChecklistRow("");
+    document.getElementById("checklistAddBtn").addEventListener("click", function () {
+      addChecklistRow("");
+    });
+  }
+
+  document.getElementById("taskMasterForm").addEventListener("submit", function () {
+    var out = {};
+    fields.querySelectorAll("[data-rc]").forEach(function (el) {
+      var k = el.getAttribute("data-rc");
+      if (el.type === "number") {
+        var n = parseInt(el.value, 10);
+        if (!Number.isNaN(n)) out[k] = n;
+      } else if (el.value) {
+        out[k] = el.value;
+      }
+    });
+    hidden.value = JSON.stringify(out);
+    if (checklistHidden) {
+      var labels = [];
+      checklistRows.querySelectorAll(".checklist-input").forEach(function (inp) {
+        var v = (inp.value || "").trim();
+        if (v) labels.push(v);
+      });
+      checklistHidden.value = JSON.stringify(labels);
+    }
+  });
+  recurring.addEventListener("change", render);
+  freq.addEventListener("change", render);
+  render();
+})();
+</script>

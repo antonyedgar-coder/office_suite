@@ -1,18 +1,25 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.forms import BaseFormSet, formset_factory
 
 from core.activity_remarks import ACTIVITY_REMARKS_MAX_LENGTH
 
+User = get_user_model()
+
+from .client_type_service import _client_type_table_ready, client_type_choices_for_form, lookup_client_type
+from .master_request_service import users_authorized_for_request_type
 from .models import (
     CESSATION_REASON_CHOICES,
     Client,
     ClientDSC,
     ClientGroup,
     ClientPortalCredential,
+    ClientType,
     DSCInOut,
     ExpenseCategory,
+    MasterRequest,
     PortalName,
     DIRECTOR_COMPANY_TYPES,
     DIRECTOR_ELIGIBLE_CLIENT_TYPES,
@@ -24,12 +31,60 @@ REMARKS_WIDGET = forms.Textarea(
 )
 
 
+class ClientTypeForm(forms.ModelForm):
+    class Meta:
+        model = ClientType
+        fields = [
+            "name",
+            "pan_mandatory",
+            "allow_task_submit_without_pan",
+            "is_active",
+            "sort_order",
+        ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Individual"}),
+            "pan_mandatory": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "allow_task_submit_without_pan": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "sort_order": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+        }
+        labels = {
+            "allow_task_submit_without_pan": "Allow task submit when PAN is not applicable",
+        }
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise ValidationError("Name is required.")
+        qs = ClientType.objects.filter(name__iexact=name)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError("A client type with this name already exists.")
+        if self.instance and self.instance.pk and name != self.instance.name:
+            if Client.objects.filter(client_type=self.instance.name).exists():
+                raise ValidationError(
+                    "Cannot rename this type while clients use it. Deactivate and add a new type instead."
+                )
+        return name
+
+
 class ExpenseCategoryForm(forms.ModelForm):
     class Meta:
         model = ExpenseCategory
         fields = ["name", "is_active"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Category name"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+class PortalNameForm(forms.ModelForm):
+    class Meta:
+        model = PortalName
+        fields = ["name", "is_active"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. GST portal"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
@@ -99,6 +154,19 @@ class ClientForm(forms.ModelForm):
         self.fields["llpin"].widget.attrs.setdefault("placeholder", "AAA-9999 (LLP only)")
         self.fields["cin"].widget.attrs.setdefault("placeholder", "21 characters (optional)")
         self.fields["din"].widget.attrs.setdefault("placeholder", "8 digits (Individual Director only)")
+
+        self.fields["client_type"].required = True
+        self.fields["client_type"].widget = forms.HiddenInput(
+            attrs={"id": "id_client_type", "data-client-type-hidden": "1"}
+        )
+
+    def clean_client_type(self):
+        value = (self.cleaned_data.get("client_type") or "").strip()
+        if not value:
+            raise ValidationError("Client type is required.")
+        if _client_type_table_ready() and lookup_client_type(value) is None:
+            raise ValidationError("Select a valid client type from Settings → Client types.")
+        return value
 
     class Meta:
         model = Client
@@ -533,5 +601,62 @@ class DSCInOutForm(forms.ModelForm):
         out_d = data.get("out_date")
         if self.instance and self.instance.pk and self.instance.in_date and out_d and out_d < self.instance.in_date:
             self.add_error("out_date", "Out date cannot be before in date.")
+        return data
+
+
+class MasterRequestForm(forms.ModelForm):
+    class Meta:
+        model = MasterRequest
+        fields = ["request_type", "client", "assigned_to", "subject", "message"]
+        labels = {
+            "message": "Message",
+        }
+        widgets = {
+            "request_type": forms.Select(attrs={"class": "form-select", "id": "id_request_type"}),
+            "client": forms.Select(attrs={"class": "form-select", "id": "id_client"}),
+            "assigned_to": forms.Select(attrs={"class": "form-select", "id": "id_assigned_to"}),
+            "subject": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Short summary of the request"}
+            ),
+            "message": forms.Textarea(
+                attrs={"class": "form-control", "rows": 3, "placeholder": "Describe what is needed…"}
+            ),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._submitting_user = user
+        from core.branch_access import approved_clients_for_user
+
+        if user is not None:
+            self.fields["client"].queryset = approved_clients_for_user(user).order_by("client_name")
+        else:
+            self.fields["client"].queryset = Client.approved_objects().order_by("client_name")
+        self.fields["client"].required = False
+        self.fields["client"].empty_label = "— Select client —"
+        self.fields["assigned_to"].queryset = User.objects.none()
+        self.fields["assigned_to"].empty_label = "— Select assignee —"
+        self.fields["subject"].required = True
+        if self.is_bound:
+            rt = self.data.get("request_type") or ""
+            if rt:
+                self.fields["assigned_to"].queryset = users_authorized_for_request_type(rt)
+
+    def clean(self):
+        data = super().clean()
+        rt = data.get("request_type")
+        client = data.get("client")
+        assignee = data.get("assigned_to")
+        if rt == MasterRequest.TYPE_NEW_TASK and not client:
+            self.add_error("client", "Client is required for a new task request.")
+        if rt and rt != MasterRequest.TYPE_NEW_TASK:
+            data["client"] = None
+        if rt and assignee:
+            allowed = users_authorized_for_request_type(rt)
+            if assignee not in allowed:
+                self.add_error(
+                    "assigned_to",
+                    "This user is not authorized to create the selected item type.",
+                )
         return data
 

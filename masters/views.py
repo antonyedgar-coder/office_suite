@@ -14,6 +14,17 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.core.exceptions import PermissionDenied, ValidationError
 
+from core.created_by import CREATED_BY_SELECT, save_form_with_creator, stamp_created_by
+from core.embed_popup import (
+    PICKER_CLIENT_GROUP,
+    PICKER_CLIENT_TYPE,
+    PICKER_PORTAL_NAME,
+    allow_embed_popup_frame,
+    embed_form_template,
+    embed_popup_context,
+    embed_popup_request,
+    render_popup_created,
+)
 from core.ui_breadcrumbs import breadcrumbs as ui_breadcrumbs
 
 from .director_mapping_import import (
@@ -21,6 +32,10 @@ from .director_mapping_import import (
     attach_client_master_validation,
     parse_director_mappings_csv,
     validate_director_mapping_import_active_uniqueness_in_file,
+)
+from .master_request_service import (
+    master_request_link_context,
+    try_complete_master_request,
 )
 from .forms import (
     ClientDSCForm,
@@ -31,7 +46,9 @@ from .forms import (
     DirectorCompanyPickForm,
     DirectorForm,
     DirectorMappingRowFormSet,
+    ClientTypeForm,
     ExpenseCategoryForm,
+    PortalNameForm,
     individual_clients_for_user,
 )
 from .dsc_expiry_notifications import reset_dsc_expiry_notification_schedule
@@ -53,9 +70,11 @@ from .models import (
     ClientActivityLog,
     ClientDSC,
     ClientGroup,
+    MasterRequest,
     ClientPortalCredential,
     DSCInOut,
     DirectorMapping,
+    ClientType,
     ExpenseCategory,
     PortalName,
 )
@@ -120,6 +139,13 @@ def _group_options_for_client_form(client: Client | None = None) -> list[dict[st
     if client and getattr(client, "client_group_id", None):
         qs = ClientGroup.objects.filter(Q(is_active=True) | Q(pk=client.client_group_id)).order_by("name")
     return [{"id": str(g.pk), "label": f"{g.name} — {g.group_id}"} for g in qs]
+
+
+def _client_type_options_for_client_form(client: Client | None = None) -> list[dict[str, str]]:
+    from .client_type_service import client_type_choices_for_form
+
+    names = [n for n, _ in client_type_choices_for_form(instance=client)]
+    return [{"id": n, "label": n} for n in names]
 
 
 def _parse_client_detail_task_filters(request, client_id: str) -> dict:
@@ -447,6 +473,14 @@ def client_create(request):
             client = form.save(commit=False)
             _apply_new_client_approval(client, request.user)
             client.save()
+            mr = try_complete_master_request(
+                request,
+                client,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_NEW_CLIENT,
+            )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
             if client.approval_status == Client.APPROVED:
                 log_client_activity(
                     client=client,
@@ -474,17 +508,20 @@ def client_create(request):
             return redirect("client_list")
     else:
         form = ClientForm()
-    return render(
-        request,
-        "masters/client_form.html",
-        {
-            "form": form,
-            "mode": "create",
-            "groups_opts": _group_options_for_client_form(None),
-            "cancel_url": reverse("client_list"),
-            "breadcrumbs": ui_breadcrumbs(("Client Master", "client_list"), ("New client",)),
-        },
-    )
+    ctx = {
+        "form": form,
+        "mode": "create",
+        "groups_opts": _group_options_for_client_form(None),
+        "client_types_opts": _client_type_options_for_client_form(None),
+        "can_add_client_type": request.user.is_superuser
+        or request.user.has_perm("masters.add_clienttype"),
+        "can_add_client_group": request.user.is_superuser
+        or request.user.has_perm("masters.add_clientgroup"),
+        "cancel_url": reverse("client_list"),
+        "breadcrumbs": ui_breadcrumbs(("Client Master", "client_list"), ("New client",)),
+    }
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_NEW_CLIENT))
+    return render(request, "masters/client_form.html", ctx)
 
 
 @require_perm("masters.change_client")
@@ -518,6 +555,11 @@ def client_edit(request, client_id: str):
         "mode": "edit",
         "client": client,
         "groups_opts": _group_options_for_client_form(client),
+        "client_types_opts": _client_type_options_for_client_form(client),
+        "can_add_client_type": request.user.is_superuser
+        or request.user.has_perm("masters.add_clienttype"),
+        "can_add_client_group": request.user.is_superuser
+        or request.user.has_perm("masters.add_clientgroup"),
         "cancel_url": reverse("client_list"),
         "breadcrumbs": ui_breadcrumbs(
             ("Client Master", "client_list"),
@@ -1239,7 +1281,7 @@ def director_mapping_bulk_import(request):
 @require_perm("masters.view_clientgroup")
 def client_group_list(request):
     q = (request.GET.get("q") or "").strip()
-    groups = ClientGroup.objects.all().order_by("name")
+    groups = ClientGroup.objects.select_related(*CREATED_BY_SELECT).order_by("name")
     if q:
         qu = q.upper()
         groups = groups.filter(
@@ -1248,17 +1290,40 @@ def client_group_list(request):
     return render(request, "masters/client_group_list.html", {"groups": groups, "q": q})
 
 
+@allow_embed_popup_frame
 @require_perm("masters.add_clientgroup")
 def client_group_create(request):
     if request.method == "POST":
         form = ClientGroupForm(request.POST)
         if form.is_valid():
-            obj = form.save()
+            obj = save_form_with_creator(form, request.user)
+            mr = try_complete_master_request(
+                request,
+                obj,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_CLIENT_GROUP,
+            )
+            if embed_popup_request(request):
+                return render_popup_created(
+                    request,
+                    picker_kind=PICKER_CLIENT_GROUP,
+                    item_id=obj.pk,
+                    item_label=f"{obj.name} — {obj.group_id}",
+                )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
             messages.success(request, f"Group created: {obj.group_id} — {obj.name}")
             return redirect("client_group_list")
     else:
         form = ClientGroupForm()
-    return render(request, "masters/client_group_form.html", {"form": form, "mode": "create"})
+    ctx = embed_popup_context(request, form=form, mode="create")
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_CLIENT_GROUP))
+    template = embed_form_template(
+        request,
+        normal="masters/client_group_form.html",
+        popup="masters/client_group_form_popup.html",
+    )
+    return render(request, template, ctx)
 
 
 @require_perm("masters.change_clientgroup")
@@ -1558,6 +1623,112 @@ def portal_password_edit(request, pk: int):
     )
 
 
+@require_perm("masters.add_clienttype")
+def client_type_create_api(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required."}, status=405)
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "Client type name is required."}, status=400)
+    from .models import ClientType
+
+    existing = ClientType.objects.filter(name__iexact=name).first()
+    if existing:
+        if not existing.is_active:
+            existing.is_active = True
+            existing.save(update_fields=["is_active", "updated_at"])
+        return JsonResponse({"id": existing.name, "label": existing.name, "created": False})
+    try:
+        obj = ClientType(
+            name=name,
+            pan_mandatory=False,
+            allow_task_submit_without_pan=True,
+            is_active=True,
+            sort_order=999,
+        )
+        stamp_created_by(obj, request.user)
+        obj.full_clean()
+        obj.save()
+    except ValidationError as e:
+        detail = "; ".join(
+            msg for msgs in getattr(e, "message_dict", {}).values() for msg in msgs
+        ) or str(e)
+        return JsonResponse({"detail": detail}, status=400)
+    return JsonResponse({"id": obj.name, "label": obj.name, "created": True})
+
+
+@require_perm("masters.add_clientgroup")
+def client_group_create_api(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required."}, status=405)
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "Group name is required."}, status=400)
+    try:
+        group = ClientGroup(name=name)
+        stamp_created_by(group, request.user)
+        group.full_clean()
+        group.save()
+    except ValidationError as e:
+        detail = "; ".join(
+            msg for msgs in getattr(e, "message_dict", {}).values() for msg in msgs
+        ) or str(e)
+        return JsonResponse({"detail": detail}, status=400)
+    label = f"{group.name} — {group.group_id}"
+    return JsonResponse({"id": group.pk, "label": label, "created": True})
+
+
+@require_perm("masters.view_portalname")
+def portal_name_list(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = PortalName.objects.select_related(*CREATED_BY_SELECT)
+    if q:
+        qs = qs.filter(name__icontains=q)
+    rows = qs.order_by("name")[:500]
+    return render(request, "masters/portal_name_list.html", {"rows": rows, "q": q})
+
+
+@allow_embed_popup_frame
+@require_perm("masters.add_portalname")
+def portal_name_create(request):
+    if request.method == "POST":
+        form = PortalNameForm(request.POST)
+        if form.is_valid():
+            obj = save_form_with_creator(form, request.user)
+            mr = try_complete_master_request(
+                request,
+                obj,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_PORTAL_NAME,
+            )
+            if embed_popup_request(request):
+                return render_popup_created(
+                    request,
+                    picker_kind=PICKER_PORTAL_NAME,
+                    item_id=obj.pk,
+                    item_label=obj.name,
+                )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
+            messages.success(request, "Portal name saved.")
+            return redirect("portal_name_list")
+    else:
+        form = PortalNameForm()
+    ctx = embed_popup_context(
+        request,
+        form=form,
+        mode="create",
+        cancel_url=reverse("portal_name_list"),
+    )
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_PORTAL_NAME))
+    template = embed_form_template(
+        request,
+        normal="masters/portal_name_form.html",
+        popup="masters/portal_name_form_popup.html",
+    )
+    return render(request, template, ctx)
+
+
 @require_perm("masters.add_portalname")
 def portal_name_create_api(request):
     if request.method != "POST":
@@ -1571,7 +1742,7 @@ def portal_name_create_api(request):
             existing.is_active = True
             existing.save(update_fields=["is_active"])
         return JsonResponse({"id": existing.pk, "name": existing.name, "created": False})
-    portal = PortalName.objects.create(name=name)
+    portal = PortalName.objects.create(name=name, created_by=request.user)
     return JsonResponse({"id": portal.pk, "name": portal.name, "created": True})
 
 
@@ -2115,7 +2286,7 @@ def dsc_bulk_import_template(request):
 @require_perm("masters.view_expensecategory")
 def expense_category_list(request):
     q = (request.GET.get("q") or "").strip()
-    qs = ExpenseCategory.objects.all()
+    qs = ExpenseCategory.objects.select_related(*CREATED_BY_SELECT)
     if q:
         qs = qs.filter(name__icontains=q)
     rows = qs.order_by("name")[:500]
@@ -2131,7 +2302,7 @@ def expense_category_create(request):
     if request.method == "POST":
         form = ExpenseCategoryForm(request.POST)
         if form.is_valid():
-            form.save()
+            save_form_with_creator(form, request.user)
             messages.success(request, "Expense category saved.")
             return redirect("expense_category_list")
     else:
@@ -2186,4 +2357,95 @@ def expense_category_delete(request, pk: int):
         messages.success(request, f"Deleted: {label}.")
         return redirect("expense_category_list")
     return render(request, "masters/expense_category_confirm_delete.html", {"obj": obj})
+
+
+@require_perm("masters.view_clienttype")
+def client_type_list(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = ClientType.objects.select_related(*CREATED_BY_SELECT)
+    if q:
+        qs = qs.filter(name__icontains=q)
+    rows = qs.order_by("sort_order", "name")[:500]
+    return render(request, "masters/client_type_list.html", {"rows": rows, "q": q})
+
+
+@allow_embed_popup_frame
+@require_perm("masters.add_clienttype")
+def client_type_create(request):
+    if request.method == "POST":
+        form = ClientTypeForm(request.POST)
+        if form.is_valid():
+            obj = save_form_with_creator(form, request.user)
+            mr = try_complete_master_request(
+                request,
+                obj,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_CLIENT_TYPE,
+            )
+            if embed_popup_request(request):
+                return render_popup_created(
+                    request,
+                    picker_kind=PICKER_CLIENT_TYPE,
+                    item_id=obj.name,
+                    item_label=obj.name,
+                )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
+            messages.success(request, "Client type saved.")
+            return redirect("client_type_list")
+    else:
+        form = ClientTypeForm()
+    ctx = embed_popup_context(
+        request,
+        form=form,
+        mode="create",
+        cancel_url=reverse("client_type_list"),
+    )
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_CLIENT_TYPE))
+    template = embed_form_template(
+        request,
+        normal="masters/client_type_form.html",
+        popup="masters/client_type_form_popup.html",
+    )
+    return render(request, template, ctx)
+
+
+@require_perm("masters.change_clienttype")
+def client_type_edit(request, pk: int):
+    obj = get_object_or_404(ClientType, pk=pk)
+    if request.method == "POST":
+        form = ClientTypeForm(request.POST, instance=obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Client type updated.")
+            return redirect("client_type_list")
+    else:
+        form = ClientTypeForm(instance=obj)
+    return render(
+        request,
+        "masters/client_type_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("client_type_list"),
+        },
+    )
+
+
+@require_perm("masters.delete_clienttype")
+def client_type_delete(request, pk: int):
+    obj = get_object_or_404(ClientType, pk=pk)
+    if request.method == "POST":
+        if Client.objects.filter(client_type=obj.name).exists():
+            messages.error(
+                request,
+                f"Cannot delete “{obj.name}”: clients still use this type. Deactivate it instead.",
+            )
+            return redirect("client_type_edit", pk=pk)
+        label = str(obj)
+        obj.delete()
+        messages.success(request, f"Deleted: {label}.")
+        return redirect("client_type_list")
+    return render(request, "masters/client_type_confirm_delete.html", {"obj": obj})
 

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load record_labels %}
 {% block title %}Access groups — CA Office Suite{% endblock %}
 {% block page_title %}Access groups{% endblock %}
 
@@ -19,6 +20,7 @@
           <tr>
             <th>Group name</th>
             <th>Permissions</th>
+            <th>Created by</th>
             <th></th>
           </tr>
         </thead>
@@ -27,13 +29,16 @@
             <tr>
               <td class="fw-medium">{{ g.name }}</td>
               <td class="text-secondary small">{{ g.permissions.count }} assigned</td>
+              <td class="small text-secondary">
+                {% if g.access_meta %}{{ g.access_meta.created_by|creator_name }}{% else %}—{% endif %}
+              </td>
               <td class="text-end">
                 <a class="btn btn-sm btn-outline-primary" href="{% url 'user_group_edit' g.pk %}">Edit</a>
                 <a class="btn btn-sm btn-outline-danger" href="{% url 'user_group_delete' g.pk %}">Delete</a>
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="3" class="text-secondary">No groups yet. Create one to reuse the same access profile for several users.</td></tr>
+            <tr><td colspan="4" class="text-secondary">No groups yet. Create one to reuse the same access profile for several users.</td></tr>
           {% endfor %}
         </tbody>
       </table>

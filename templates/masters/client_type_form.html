@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Client type — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New client type{% else %}Edit client type{% endif %}{% endblock %}
+{% block content %}
+  {% include "masters/includes/client_type_form_inner.html" %}
+{% endblock %}

@@ -1,0 +1,9 @@
+{% if embed_popup %}
+  <input type="hidden" name="embed" value="popup" />
+  <div class="d-flex gap-2 justify-content-end mt-3 pt-3 border-top embed-popup-actions">
+    <button type="button" class="btn btn-outline-secondary" data-embed-picker-cancel>Cancel</button>
+    <button type="submit" class="btn btn-primary">{{ save_label|default:"Save" }}</button>
+  </div>
+{% else %}
+  {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url save_label=save_label %}
+{% endif %}

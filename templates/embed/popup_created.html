@@ -1,0 +1,31 @@
+{% extends "embed/popup_base.html" %}
+{% block title %}Saved{% endblock %}
+{% block content %}
+  <div class="text-center py-5">
+    <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+    <p class="mb-0 text-secondary">Saved. Returning to your form…</p>
+  </div>
+{% endblock %}
+{% block extra_js %}
+  {{ extra_json|json_script:"picker-extra-data" }}
+  <script>
+    (function () {
+      var extraEl = document.getElementById("picker-extra-data");
+      var extra = {};
+      try {
+        extra = JSON.parse(extraEl ? extraEl.textContent : "{}") || {};
+      } catch (e) {}
+      window.parent.postMessage(
+        {
+          source: "caOfficePicker",
+          event: "created",
+          kind: "{{ picker_kind }}",
+          id: "{{ item_id|escapejs }}",
+          label: "{{ item_label|escapejs }}",
+          extra: extra,
+        },
+        "*"
+      );
+    })();
+  </script>
+{% endblock %}

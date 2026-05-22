@@ -5,14 +5,15 @@ from django import forms
 from core.branch_access import branch_access_for_user
 from dirkyc.fy import fy_start_year, mis_report_financial_year_choices
 from masters.forms import ClientNamePanChoiceField
-from masters.models import BRANCH_CHOICES, CLIENT_TYPES, Client, PortalName
+from masters.client_type_service import client_type_choices_for_reports
+from masters.models import BRANCH_CHOICES, Client, PortalName
 
 
 class ClientMasterReportFilterForm(forms.Form):
     """All filters optional; combined with AND when multiple are filled."""
 
     client_type = forms.ChoiceField(
-        choices=[("", "— Any type —")] + list(CLIENT_TYPES),
+        choices=[("", "— Any type —")] + client_type_choices_for_reports(),
         required=False,
     )
     branch = forms.ChoiceField(
@@ -88,7 +89,7 @@ class MISClientWiseFilterForm(MISPeriodFilterForm):
 
 class MISTypeWiseFilterForm(MISPeriodFilterForm):
     client_type = forms.ChoiceField(
-        choices=[("", "— All types —")] + list(CLIENT_TYPES),
+        choices=[("", "— All types —")] + client_type_choices_for_reports(),
         required=False,
         widget=forms.Select(attrs={"class": "form-select"}),
         label="Type of client",
@@ -198,7 +199,7 @@ class MISFlexibleReportForm(MISPeriodFilterForm):
         ),
     )
     client_type = forms.ChoiceField(
-        choices=[("", "ALL")] + list(CLIENT_TYPES),
+        choices=[("", "ALL")] + client_type_choices_for_reports(),
         required=False,
         label="Type of client",
         widget=forms.Select(attrs={"class": "form-select"}),

@@ -71,6 +71,7 @@ TEMPLATES = [
                 "core.context_processors.task_nav_counts",
                 "core.context_processors.dsc_nav_counts",
                 "core.context_processors.settings_hub_access",
+                "core.context_processors.master_request_nav_counts",
             ],
         },
     },

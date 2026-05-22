@@ -1,21 +1,27 @@
 {# Sidebar sections: Masters → Tasks → DSC Management → MIS → DIR-3 eKYC → Reports #}
 {% with url_name=request.resolver_match.url_name|default:"" nav_prefix=nav_id_prefix|default:"main" %}
-  {% if user.is_superuser or perms.masters.view_client or perms.masters.approve_client or perms.masters.view_clientportalcredential or perms.masters.view_directormapping %}
+  {% if user.is_superuser or perms.masters.view_client or perms.masters.approve_client or perms.masters.view_clientportalcredential or perms.masters.view_directormapping or perms.masters.add_masterrequest %}
     <div
-      class="nav-accordion-item{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %} is-open{% endif %}"
+      class="nav-accordion-item{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template master_request_list master_request_create master_request_detail master_request_notification_list master_request_notification_mark_read' %} is-open{% endif %}"
       data-nav-section="masters"
     >
       <button
         type="button"
         class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %}true{% else %}false{% endif %}"
+        aria-expanded="{% if url_name in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template master_request_list master_request_create master_request_detail master_request_notification_list master_request_notification_mark_read' %}true{% else %}false{% endif %}"
         aria-controls="nav-panel-{{ nav_prefix }}-masters"
       >
         <i class="bi bi-database nav-link-icon" aria-hidden="true"></i>
         <span>Masters</span>
         <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
       </button>
-      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template' %} hidden{% endif %}>
+      <div id="nav-panel-{{ nav_prefix }}-masters" class="nav-accordion-panel"{% if url_name not in 'client_list client_create client_detail client_edit client_delete client_import client_pending_list client_approve client_reject portal_password_list portal_password_create portal_password_edit portal_password_delete portal_password_bulk_import portal_password_bulk_import_template director_list director_create director_edit director_delete director_mapping_bulk_import director_mapping_bulk_import_template master_request_list master_request_create master_request_detail master_request_notification_list master_request_notification_mark_read' %} hidden{% endif %}>
+        {% if show_master_requests_nav %}
+          <a class="nav-link {% if url_name in 'master_request_list master_request_create master_request_detail master_request_notification_list master_request_notification_mark_read' %}active{% endif %}" href="{% url 'master_request_list' %}">
+            <i class="bi bi-send nav-link-icon" aria-hidden="true"></i><span>Master requests</span>
+            {% if master_request_nav_pending_count %}<span class="badge rounded-pill text-bg-danger ms-auto">{{ master_request_nav_pending_count }}</span>{% endif %}
+          </a>
+        {% endif %}
         {% if user.is_superuser or perms.masters.view_client %}
           <a class="nav-link {% if url_name in 'client_list client_create client_detail client_edit client_delete client_import' %}active{% endif %}" href="{% url 'client_list' %}"><i class="bi bi-people nav-link-icon" aria-hidden="true"></i><span>Client Master</span></a>
         {% endif %}

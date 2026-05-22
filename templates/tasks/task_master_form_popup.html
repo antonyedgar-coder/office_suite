@@ -1,0 +1,8 @@
+{% extends "embed/popup_base.html" %}
+{% block title %}{% if mode == 'create' %}New task master{% else %}Edit task master{% endif %}{% endblock %}
+{% block content %}
+  {% include "tasks/includes/task_master_form_inner.html" %}
+{% endblock %}
+{% block extra_js %}
+  {% include "tasks/includes/task_master_form_scripts.html" %}
+{% endblock %}

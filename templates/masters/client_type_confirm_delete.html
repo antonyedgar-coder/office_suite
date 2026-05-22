@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Delete client type — CA Office Suite{% endblock %}
+
+{% block page_title %}Delete client type{% endblock %}
+
+
+
+{% block content %}
+
+  <div class="card p-3">
+
+    <p class="mb-2">Delete client type <strong>{{ obj.name }}</strong>?</p>
+
+    <p class="text-secondary small mb-3">
+
+      This cannot be undone. Types still used on any client cannot be deleted — deactivate instead.
+
+    </p>
+
+    <form method="post" class="d-inline-flex gap-2 flex-wrap">
+
+      {% csrf_token %}
+
+      <button type="submit" class="btn btn-danger">Delete</button>
+
+      <a class="btn btn-outline-secondary" href="{% url 'client_type_list' %}">Cancel</a>
+
+    </form>
+
+  </div>
+
+{% endblock %}
+

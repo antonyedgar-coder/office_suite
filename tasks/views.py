@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 
 from core.branch_access import approved_clients_for_user
 from core.decorators import require_perm
+from core.embed_popup import allow_embed_popup_frame
 
 from .forms import (
     TaskCreateForm,
@@ -56,6 +57,7 @@ from .services import (
     submit_task,
     task_team_is_editable,
     update_task_team,
+    user_can_approve_task_assignment,
     verify_task,
 )
 
@@ -71,7 +73,9 @@ def task_detail_queryset(user):
 @require_perm("tasks.view_taskgroup")
 def task_group_list(request):
     q = (request.GET.get("q") or "").strip()
-    qs = TaskGroup.objects.all()
+    from core.created_by import CREATED_BY_SELECT
+
+    qs = TaskGroup.objects.select_related(*CREATED_BY_SELECT)
     if q:
         qs = qs.filter(name__icontains=q)
     return render(request, "tasks/task_group_list.html", {"groups": qs, "q": q})
@@ -79,15 +83,33 @@ def task_group_list(request):
 
 @require_perm("tasks.add_taskgroup")
 def task_group_create(request):
+    from masters.master_request_service import (
+        master_request_link_context,
+        try_complete_master_request,
+    )
+    from masters.models import MasterRequest
+
     if request.method == "POST":
         form = TaskGroupForm(request.POST)
         if form.is_valid():
-            form.save()
+            from core.created_by import save_form_with_creator
+
+            group = save_form_with_creator(form, request.user)
+            mr = try_complete_master_request(
+                request,
+                group,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_TASK_GROUP,
+            )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
             messages.success(request, "Task group created.")
             return redirect("task_group_list")
     else:
         form = TaskGroupForm()
-    return render(request, "tasks/task_group_form.html", {"form": form, "mode": "create"})
+    ctx = {"form": form, "mode": "create"}
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_TASK_GROUP))
+    return render(request, "tasks/task_group_form.html", ctx)
 
 
 @require_perm("tasks.change_taskgroup")
@@ -127,7 +149,11 @@ def task_master_list(request):
     q = (request.GET.get("q") or "").strip()
     group_id = request.GET.get("group")
     active_filter = (request.GET.get("active") or "").strip().lower()
-    qs = TaskMaster.objects.select_related("task_group").order_by("task_group__sort_order", "name")
+    from core.created_by import CREATED_BY_SELECT
+
+    qs = TaskMaster.objects.select_related("task_group", *CREATED_BY_SELECT).order_by(
+        "task_group__sort_order", "name"
+    )
     if q:
         qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q))
     if group_id:
@@ -174,22 +200,72 @@ def _task_master_form_context(form, *, mode: str, master: TaskMaster | None = No
     }
 
 
+@allow_embed_popup_frame
 @require_perm("tasks.add_taskmaster")
 def task_master_create(request):
+    from core.embed_popup import (
+        PICKER_TASK_MASTER,
+        embed_form_template,
+        embed_popup_context,
+        embed_popup_request,
+        render_popup_created,
+    )
+    from .period_keys import period_type_for_task_master
+
     if request.method == "POST":
         form = TaskMasterForm(request.POST)
         if form.is_valid():
-            form.save()
+            from core.created_by import save_form_with_creator
+
+            master = save_form_with_creator(form, request.user)
+            from masters.master_request_service import try_complete_master_request
+            from masters.models import MasterRequest
+
+            mr = try_complete_master_request(
+                request,
+                master,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_TASK_MASTER,
+            )
+            if embed_popup_request(request):
+                return render_popup_created(
+                    request,
+                    picker_kind=PICKER_TASK_MASTER,
+                    item_id=master.pk,
+                    item_label=f"{master.task_group.name} — {master.name}",
+                    extra={
+                        "period_type": period_type_for_task_master(master) or "",
+                        "default_fees_amount": (
+                            str(master.default_fees_amount)
+                            if master.default_fees_amount is not None
+                            else ""
+                        ),
+                    },
+                )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
             messages.success(request, "Task master created.")
             return redirect("task_master_list")
         messages.error(request, "Could not save task master. Please fix the errors below.")
     else:
         form = TaskMasterForm()
-    return render(
-        request,
-        "tasks/task_master_form.html",
-        _task_master_form_context(form, mode="create"),
+    from masters.master_request_service import master_request_link_context
+    from masters.models import MasterRequest
+
+    ctx = _task_master_form_context(form, mode="create")
+    ctx.update(
+        embed_popup_context(
+            request,
+            cancel_url=reverse("task_master_list"),
+        )
     )
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_TASK_MASTER))
+    template = embed_form_template(
+        request,
+        normal="tasks/task_master_form.html",
+        popup="tasks/task_master_form_popup.html",
+    )
+    return render(request, template, ctx)
 
 
 @require_perm("tasks.change_taskmaster")
@@ -543,10 +619,21 @@ def task_create(request):
             if task.status == Task.STATUS_PENDING_ASSIGNMENT:
                 messages.success(
                     request,
-                    f"Task created: {task.title}. The verifier must approve the assignment before users are notified.",
+                    f"Task created: {task.title}. Assigned users must approve the task before work can begin.",
                 )
             else:
                 messages.success(request, f"Task created: {task.title}")
+            from masters.master_request_service import try_complete_master_request
+            from masters.models import MasterRequest
+
+            mr = try_complete_master_request(
+                request,
+                task,
+                request.POST.get("master_request_id"),
+                MasterRequest.TYPE_NEW_TASK,
+            )
+            if mr:
+                messages.info(request, f"Linked to master request #{mr.pk}. Requester notified.")
             return redirect("task_detail", pk=task.pk)
     else:
         form = TaskCreateForm(user=request.user)
@@ -572,16 +659,53 @@ def task_create(request):
             "pk", "is_recurring", "frequency", "default_fees_amount"
         )
     }
-    return render(
-        request,
-        "tasks/task_create.html",
-        {
-            "form": form,
-            "staff_users_json": staff_users,
-            "clients_json": clients,
-            "masters_meta_json": masters_meta,
-        },
-    )
+    task_groups = [
+        {"id": g.pk, "name": g.name}
+        for g in TaskGroup.objects.filter(is_active=True).order_by("sort_order", "name")
+    ]
+    from masters.master_request_service import master_request_link_context
+    from masters.models import MasterRequest
+
+    ctx = {
+        "form": form,
+        "staff_users_json": staff_users,
+        "clients_json": clients,
+        "masters_meta_json": masters_meta,
+        "can_add_task_master": request.user.is_superuser
+        or request.user.has_perm("tasks.add_taskmaster"),
+        "task_groups_json": task_groups,
+    }
+    ctx.update(master_request_link_context(request, MasterRequest.TYPE_NEW_TASK))
+    return render(request, "tasks/task_create.html", ctx)
+
+
+@require_perm("tasks.add_taskmaster")
+def task_master_quick_create_api(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required."}, status=405)
+    name = (request.POST.get("name") or "").strip()
+    group_id = (request.POST.get("task_group") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "Task master name is required."}, status=400)
+    if not group_id:
+        return JsonResponse({"detail": "Task group is required."}, status=400)
+    group = get_object_or_404(TaskGroup, pk=group_id)
+    try:
+        master = TaskMaster(
+            task_group=group,
+            name=name,
+            is_active=True,
+            is_recurring=False,
+        )
+        master.full_clean()
+        master.save()
+    except ValidationError as e:
+        detail = "; ".join(
+            msg for msgs in getattr(e, "message_dict", {}).values() for msg in msgs
+        ) or str(e)
+        return JsonResponse({"detail": detail}, status=400)
+    label = f"{group.name} — {master.name}"
+    return JsonResponse({"id": master.pk, "label": label, "created": True})
 
 
 TASK_IMPORT_SESSION_KEY = "task_import_csv"
@@ -797,7 +921,7 @@ def task_detail(request, pk: int):
         or is_verifier
         or is_document_checker
         or is_creator
-        or (is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT)
+        or is_assignee
     )
     if not can_view_task:
         raise PermissionDenied
@@ -823,9 +947,7 @@ def task_detail(request, pk: int):
         is_document_checker or request.user.is_superuser
     ) and task.status == Task.STATUS_VERIFIED
     can_send_back_documents = can_complete_documents
-    can_approve_assignment = (
-        is_verifier or request.user.is_superuser
-    ) and task.status == Task.STATUS_PENDING_ASSIGNMENT
+    can_approve_assignment = user_can_approve_task_assignment(request.user, task)
     can_toggle_checklist = assignee_active and task.status in (
         Task.STATUS_ASSIGNED,
         Task.STATUS_REWORK,
@@ -877,7 +999,7 @@ def task_detail(request, pk: int):
             return redirect("task_list")
         if action == "approve_assignment" and can_approve_assignment:
             approve_task_assignment(task, request.user)
-            messages.success(request, "Assignment approved. Assigned users have been notified.")
+            messages.success(request, "Task approved. You and other assigned users can now work on it.")
             return redirect("task_detail", pk=pk)
         if action == "submit" and can_submit:
             resubmit_for_documents = task.status == Task.STATUS_DOCUMENT_REWORK
@@ -954,11 +1076,7 @@ def task_detail(request, pk: int):
 
 @login_required
 def task_my_list(request):
-    base = (
-        tasks_for_user(request.user)
-        .filter(assignments__user=request.user)
-        .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
-    )
+    base = tasks_for_user(request.user).filter(assignments__user=request.user)
     filters = parse_task_list_filters(request)
     if not filters.status:
         base = base.exclude(status__in=Task.DONE_FOR_ASSIGNEE_STATUSES)
@@ -977,11 +1095,7 @@ def task_my_list(request):
 
 @login_required
 def task_my_list_csv(request):
-    base = (
-        tasks_for_user(request.user)
-        .filter(assignments__user=request.user)
-        .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
-    )
+    base = tasks_for_user(request.user).filter(assignments__user=request.user)
     filters = parse_task_list_filters(request)
     if not filters.status:
         base = base.exclude(status__in=Task.DONE_FOR_ASSIGNEE_STATUSES)
@@ -997,10 +1111,7 @@ def task_my_list_csv(request):
 @require_perm("tasks.verify_task")
 def task_verify_queue(request):
     user = request.user
-    assignment_base = tasks_for_user(user).filter(
-        status=Task.STATUS_PENDING_ASSIGNMENT,
-        verifier=user,
-    )
+    assignment_base = tasks_for_user(user).none()
     submitted_base = tasks_for_user(user).filter(
         status=Task.STATUS_SUBMITTED,
         verifier=user,
@@ -1026,21 +1137,21 @@ def task_verify_queue(request):
     return render(request, "tasks/task_verify_queue.html", ctx)
 
 
-@require_perm("tasks.verify_task")
+@login_required
 @require_POST
 def task_assignment_approve(request, pk: int):
     task = get_object_or_404(
         tasks_for_user(request.user).filter(
             status=Task.STATUS_PENDING_ASSIGNMENT,
-            verifier=request.user,
+            assignments__user=request.user,
         ),
         pk=pk,
     )
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""
     approve_task_assignment(task, request.user, message=message)
-    messages.success(request, "Assignment approved. Users have been notified.")
-    return redirect("task_verify_queue")
+    messages.success(request, "Task approved. You can now work on this task.")
+    return redirect("task_my_list")
 
 
 @require_perm("tasks.verify_task")

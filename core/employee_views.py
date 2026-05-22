@@ -55,7 +55,10 @@ def sync_employee_from_client_master(employee: Employee) -> None:
 
 @require_perm("core.view_employee")
 def employee_list(request):
-    employees = Employee.objects.select_related("user", "linked_client").order_by("full_name")
+    employees = (
+        Employee.objects.select_related("user", "linked_client", "created_by__employee_profile")
+        .order_by("full_name")
+    )
     return render(
         request,
         "employees/employee_list.html",
@@ -97,6 +100,7 @@ def employee_create(request):
                 receive_dsc_expiry_notifications=form.cleaned_data.get(
                     "receive_dsc_expiry_notifications", False
                 ),
+                created_by=request.user,
             )
             messages.success(
                 request,

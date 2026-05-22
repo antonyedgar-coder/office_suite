@@ -187,18 +187,12 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
             errors.append(f"Unknown document checker email: {document_checker_email}")
 
         if user.is_authenticated:
-            if verifier and user.pk == verifier.pk:
-                errors.append("Creator cannot be the verifier.")
-            if document_checker and user.pk == document_checker.pk:
-                errors.append("Creator cannot be the document checker.")
             if user.pk in {u.pk for u in assignees}:
                 errors.append("Creator cannot be an assignee.")
             if verifier and verifier.pk in {u.pk for u in assignees}:
                 errors.append("Verifier cannot be an assignee.")
             if document_checker and document_checker.pk in {u.pk for u in assignees}:
                 errors.append("Document checker cannot be an assignee.")
-            if verifier and document_checker and verifier.pk == document_checker.pk:
-                errors.append("Document checker must be different from the verifier.")
 
         due_date = _parse_due_date(due_raw)
         if not due_raw:

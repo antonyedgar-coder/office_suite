@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Master request #{{ obj.pk }} — CA Office Suite{% endblock %}
+{% block page_title %}Master request #{{ obj.pk }}{% endblock %}
+
+{% block content %}
+  <div class="card p-3 col-lg-8">
+    <dl class="row mb-0">
+      <dt class="col-sm-4">Type</dt>
+      <dd class="col-sm-8">{{ obj.get_request_type_display }}</dd>
+      <dt class="col-sm-4">Status</dt>
+      <dd class="col-sm-8">
+        <span class="badge text-bg-{% if obj.status == 'submitted' %}warning{% elif obj.status == 'completed' %}success{% else %}secondary{% endif %}">
+          {{ obj.get_status_display }}
+        </span>
+      </dd>
+      <dt class="col-sm-4">Client</dt>
+      <dd class="col-sm-8">{% if obj.client %}{{ obj.client.client_name }}{% if obj.client.pan %} — {{ obj.client.pan|upper }}{% endif %}{% else %}—{% endif %}</dd>
+      <dt class="col-sm-4">Requested by</dt>
+      <dd class="col-sm-8">{{ obj.requested_by }}</dd>
+      <dt class="col-sm-4">Assigned to</dt>
+      <dd class="col-sm-8">{{ obj.assigned_to }}</dd>
+      <dt class="col-sm-4">Subject</dt>
+      <dd class="col-sm-8">{{ obj.subject|default:"—" }}</dd>
+      <dt class="col-sm-4">Message</dt>
+      <dd class="col-sm-8">{{ obj.message|linebreaksbr }}</dd>
+      <dt class="col-sm-4">Submitted</dt>
+      <dd class="col-sm-8">{{ obj.created_at|date:"d-m-Y H:i" }}</dd>
+      {% if obj.status == 'completed' %}
+        <dt class="col-sm-4">Completed</dt>
+        <dd class="col-sm-8">
+          {{ obj.completed_at|date:"d-m-Y H:i" }}
+          {% if obj.completed_by %} by {{ obj.completed_by }}{% endif %}
+        </dd>
+        <dt class="col-sm-4">Created record</dt>
+        <dd class="col-sm-8">{{ obj.linked_summary|default:"—" }}</dd>
+      {% endif %}
+    </dl>
+
+    <div class="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
+      <a class="btn btn-outline-secondary" href="{% url 'master_request_list' %}">Back to list</a>
+      {% if create_url %}
+        <a class="btn btn-primary" href="{{ create_url }}">Create now</a>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load record_labels %}
 {% block title %}Group Master — CA Office Suite{% endblock %}
 {% block page_title %}Group Master{% endblock %}
 
@@ -46,6 +47,7 @@
             <th>Name</th>
             <th style="width: 100px">Active</th>
             <th>Notes</th>
+            <th>Created by</th>
             <th style="width: 180px"></th>
           </tr>
         </thead>
@@ -68,6 +70,7 @@
               <td class="fw-medium">{{ g.name }}</td>
               <td>{% if g.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}</td>
               <td class="small text-secondary">{{ g.notes|default:"—"|truncatechars:80 }}</td>
+              <td class="small text-secondary">{{ g.created_by|creator_name }}</td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
                   {% if perms.masters.change_clientgroup %}
@@ -81,7 +84,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="{% if user.is_superuser %}6{% else %}5{% endif %}" class="text-secondary">No groups yet. Create groups here before linking clients.</td>
+              <td colspan="{% if user.is_superuser %}7{% else %}6{% endif %}" class="text-secondary">No groups yet. Create groups here before linking clients.</td>
             </tr>
           {% endfor %}
         </tbody>

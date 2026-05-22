@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load record_labels %}
+{% block title %}Portal names — CA Office Suite{% endblock %}
+{% block page_title %}Portal names{% endblock %}
+
+{% block content %}
+  {% include "includes/page_header.html" with title="Portal names" subtitle="GST, MCA, and other portal labels used in password management." %}
+
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}"><i class="bi bi-arrow-left"></i> Settings</a>
+    <a class="btn btn-sm btn-outline-primary ms-1" href="{% url 'portal_password_list' %}">Password management</a>
+  </p>
+
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-8">
+        <label class="form-label" for="portalNameQ">Search</label>
+        <input class="form-control" id="portalNameQ" name="q" value="{{ q }}" placeholder="Portal name" />
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Search</button>
+        <a class="btn btn-outline-secondary" href="{% url 'portal_name_list' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card data-table-card">
+    <div class="p-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+      <div class="fw-semibold">Portals</div>
+      {% if perms.masters.add_portalname %}
+        <a class="btn btn-sm btn-primary" href="{% url 'portal_name_create' %}">New portal name</a>
+      {% endif %}
+    </div>
+    <div class="data-table-wrap">
+      <table class="table table-sm table-striped data-table mb-0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Active</th>
+            <th>Created by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-medium">{{ row.name }}</td>
+              <td>{% if row.is_active %}Yes{% else %}No{% endif %}</td>
+              <td class="small text-secondary">{{ row.created_by|creator_name }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-secondary">No portal names yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

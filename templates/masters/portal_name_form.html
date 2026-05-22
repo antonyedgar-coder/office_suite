@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Portal name — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New portal name{% else %}Edit portal name{% endif %}{% endblock %}
+{% block content %}
+  {% include "masters/includes/portal_name_form_inner.html" %}
+{% endblock %}

@@ -1,0 +1,48 @@
+  {% if not embed_popup %}
+    <p class="mb-3">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'client_type_list' %}"><i class="bi bi-arrow-left"></i> Client types</a>
+    </p>
+  {% endif %}
+
+  <form method="post" class="{% if not embed_popup %}app-form-with-sticky-bar{% endif %}">
+    {% csrf_token %}
+    {% include "includes/master_request_link_field.html" %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label required-field" for="{{ form.name.id_for_label }}">Type name</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+          <div class="form-field-hint">Must match exactly on existing clients (e.g. Individual, New Client).</div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="{{ form.sort_order.id_for_label }}">Sort order</label>
+          {{ form.sort_order }}
+          {% if form.sort_order.errors %}<div class="text-danger small">{{ form.sort_order.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-3 d-flex align-items-end">
+          <div class="form-check">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="form-check mb-2">
+            {{ form.pan_mandatory }}
+            <label class="form-check-label" for="{{ form.pan_mandatory.id_for_label }}">PAN mandatory</label>
+          </div>
+          <div class="form-check">
+            {{ form.allow_task_submit_without_pan }}
+            <label class="form-check-label" for="{{ form.allow_task_submit_without_pan.id_for_label }}">
+              Allow task submit when PAN is not applicable
+            </label>
+          </div>
+          <div class="form-field-hint mt-2">
+            The second option applies when PAN is not mandatory and left blank on the client. New Client should have this off.
+            Name-based rules (verify/complete, director, CIN) still apply for known type names.
+          </div>
+        </div>
+      </div>
+    </div>
+    {% include "includes/embed_form_actions.html" with cancel_url=cancel_url %}
+  </form>

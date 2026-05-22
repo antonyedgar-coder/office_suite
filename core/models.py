@@ -1,8 +1,9 @@
-from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.contrib.auth.models import AbstractUser, BaseUserManager, Group
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from .branch_access import EMPLOYEE_BRANCH_ACCESS_CHOICES
+from .created_by import created_by_field
 
 
 class UserManager(BaseUserManager):
@@ -105,6 +106,7 @@ class Employee(models.Model):
         default=False,
         help_text="Receive DSC expiry reminders (in addition to users with DSC Management view access).",
     )
+    created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -113,6 +115,25 @@ class Employee(models.Model):
 
     def __str__(self) -> str:
         return f"{self.full_name} ({self.user.email})"
+
+
+class AccessGroupMeta(models.Model):
+    """Tracks who created a Django auth Group (access group)."""
+
+    group = models.OneToOneField(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="access_meta",
+    )
+    created_by = created_by_field()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "access group metadata"
+        verbose_name_plural = "access group metadata"
+
+    def __str__(self) -> str:
+        return f"Meta for {self.group.name}"
 
 
 class ActivityLog(models.Model):
