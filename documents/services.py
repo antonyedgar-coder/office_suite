@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
@@ -31,6 +32,32 @@ from .periods import (
     resolve_period,
 )
 from .task_bridge import user_can_change_task_linked_document
+
+logger = logging.getLogger(__name__)
+
+
+def _save_uploaded_file(doc: ClientDocument, generated: str, uploaded_file) -> None:
+    """Persist file to local disk or Spaces; surface a clear error instead of HTTP 500."""
+    try:
+        doc.file.save(generated, uploaded_file, save=False)
+    except Exception as exc:
+        logger.exception(
+            "Document file save failed (client=%s folder=%s name=%s)",
+            doc.client_id,
+            doc.folder_id,
+            generated,
+        )
+        storage = getattr(settings, "DOCUMENT_STORAGE", "local")
+        if storage == "spaces":
+            raise ValidationError(
+                "Could not save the file to cloud storage. "
+                "Check that Spaces credentials, bucket name, and endpoint are correct "
+                "(Settings → App → Environment variables), and that the access key has "
+                "Read/Write/Delete on the bucket."
+            ) from exc
+        raise ValidationError(
+            "Could not save the uploaded file. Please try again or contact support."
+        ) from exc
 
 
 def folder_templates_for_client(client: Client):
@@ -488,7 +515,7 @@ def save_client_document(
         uploaded_by=user,
         task=link_task,
     )
-    doc.file.save(generated, uploaded_file, save=False)
+    _save_uploaded_file(doc, generated, uploaded_file)
     doc.save()
 
     log_client_activity(

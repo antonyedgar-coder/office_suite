@@ -1,5 +1,6 @@
 import mimetypes
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -519,6 +520,16 @@ def client_document_upload(request, client_id: str):
                         form.add_error(None, err)
                 else:
                     form.add_error(None, str(exc))
+            except Exception as exc:
+                import logging
+
+                logging.getLogger(__name__).exception("Client document upload failed")
+                form.add_error(
+                    None,
+                    str(exc)
+                    if settings.DEBUG
+                    else "Upload failed. Cloud storage may be misconfigured — contact support.",
+                )
             else:
                 messages.success(request, "File uploaded.")
                 return redirect("document_file_list")
@@ -754,6 +765,15 @@ def task_document_upload(request, pk: int):
                 messages.error(request, err)
         else:
             messages.error(request, str(exc))
+        return redirect(next_url)
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).exception("Task document upload failed")
+        messages.error(
+            request,
+            str(exc) if settings.DEBUG else "Upload failed. Please try again or contact support.",
+        )
         return redirect(next_url)
 
     messages.success(request, f"Uploaded {doc.generated_filename} (v{doc.version}).")

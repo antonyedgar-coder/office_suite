@@ -204,19 +204,12 @@ _staticfiles_backend = {
 
 if documents_module_enabled():
     if DOCUMENT_STORAGE == "spaces":
+        from documents.storage_config import spaces_storage_options
+
         STORAGES = {
             "default": {
                 "BACKEND": "storages.backends.s3.S3Storage",
-                "OPTIONS": {
-                    "access_key": os.environ["DO_SPACES_KEY"],
-                    "secret_key": os.environ["DO_SPACES_SECRET"],
-                    "bucket_name": os.environ["DO_SPACES_BUCKET"],
-                    "endpoint_url": os.environ["DO_SPACES_ENDPOINT"],
-                    "region_name": os.getenv("DO_SPACES_REGION", ""),
-                    "default_acl": "private",
-                    "file_overwrite": False,
-                    "object_parameters": {"CacheControl": "private, max-age=3600"},
-                },
+                "OPTIONS": spaces_storage_options(),
             },
             "staticfiles": _staticfiles_backend,
         }
