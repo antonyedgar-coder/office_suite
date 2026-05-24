@@ -62,6 +62,9 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL cannot ALTER a table in the same transaction after RunPython
+    # has updated rows on it ("pending trigger events"). Commit each step.
+    atomic = False
 
     dependencies = [
         ("documents", "0012_standard_client_folders"),
