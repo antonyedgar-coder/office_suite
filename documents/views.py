@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Q
+from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -16,6 +17,7 @@ from masters.models import Client
 from masters.views import client_master_queryset_for_user
 
 from .client_forms import ClientDocumentClientForm
+from .folder_constants import STANDARD_CLIENT_FOLDER_SLUGS
 from .models import (
     ClientDocument,
     ClientDocumentFolder,
@@ -27,6 +29,7 @@ from .services import (
     create_client_document_folders,
     delete_client_document,
     document_types_for_folder_json,
+    folder_upload_meta_json,
     replace_client_document,
     existing_folder_template_ids,
     folder_templates_for_client,
@@ -154,6 +157,50 @@ def document_folder_template_edit(request, pk: int):
                 ("Settings", "settings_hub"),
                 ("Folder creation", "document_folder_template_list"),
                 (obj.name,),
+            ),
+        },
+    )
+
+
+@login_required
+def document_folder_template_delete(request, pk: int):
+    _require_template_admin(request)
+    obj = get_object_or_404(DocumentFolderTemplate, pk=pk)
+    if obj.slug in STANDARD_CLIENT_FOLDER_SLUGS:
+        messages.error(
+            request,
+            "Supporting Documents and KYC Documents are system folders and cannot be deleted.",
+        )
+        return redirect("document_folder_template_list")
+    if request.method == "POST":
+        name = obj.name
+        try:
+            obj.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "This folder cannot be deleted because clients already have files or folder rows "
+                "linked to it. Remove those documents first, or set the folder to inactive instead.",
+            )
+            return redirect("document_folder_template_edit", pk=pk)
+        messages.success(request, f"Folder deleted: {name}.")
+        return redirect("document_folder_template_list")
+    return render(
+        request,
+        "documents/folder_template_delete_confirm.html",
+        {
+            "folder": obj,
+            "file_type_count": obj.document_types.count(),
+            "client_folder_count": ClientDocumentFolder.objects.filter(template=obj).count(),
+            "active_doc_count": ClientDocument.objects.filter(
+                folder__template=obj,
+                status=ClientDocument.STATUS_ACTIVE,
+            ).count(),
+            "task_link_count": TaskMasterDocumentMapping.objects.filter(folder=obj).count(),
+            "breadcrumbs": ui_breadcrumbs(
+                ("Settings", "settings_hub"),
+                ("Folder creation", "document_folder_template_list"),
+                ("Delete folder",),
             ),
         },
     )
@@ -460,6 +507,7 @@ def client_document_upload(request, client_id: str):
                     period_label=form.cleaned_data["period_label"],
                     uploaded_file=form.cleaned_data["file"],
                     user=request.user,
+                    custom_display_name=form.cleaned_data.get("custom_display_name") or "",
                 )
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
@@ -484,6 +532,7 @@ def client_document_upload(request, client_id: str):
             "client": client,
             "form": form,
             "types_json": document_types_for_folder_json(),
+            "folder_meta_json": folder_upload_meta_json(client),
             "breadcrumbs": _doc_breadcrumbs(
                 ("Upload file", "client_document_upload_pick"),
                 (client.client_name,),
@@ -605,30 +654,29 @@ def task_document_mapping_list(request):
         TaskMasterDocumentMapping.objects.select_related(
             "task_master",
             "task_master__task_group",
-            "document_type",
-            "document_type__folder",
+            "folder",
         )
+        .prefetch_related("folder__document_types")
         .order_by("task_master__task_group__name", "task_master__name", "sort_order")
     )
     q = (request.GET.get("q") or "").strip()
     if q:
         rows = rows.filter(
             Q(task_master__name__icontains=q)
-            | Q(document_type__name__icontains=q)
-            | Q(document_type__folder__name__icontains=q)
+            | Q(folder__name__icontains=q)
         )
 
     if request.method == "POST" and request.POST.get("action") == "add":
         task_master_id = request.POST.get("task_master")
-        doc_type_id = request.POST.get("document_type")
-        if task_master_id.isdigit() and doc_type_id.isdigit():
+        folder_id = request.POST.get("folder")
+        if task_master_id.isdigit() and folder_id.isdigit():
             TaskMasterDocumentMapping.objects.get_or_create(
                 task_master_id=int(task_master_id),
-                document_type_id=int(doc_type_id),
+                folder_id=int(folder_id),
             )
-            messages.success(request, "Mapping added.")
+            messages.success(request, "Folder linked to task type.")
         else:
-            messages.error(request, "Select both a task type and a file type.")
+            messages.error(request, "Select both a task type and a folder.")
         return redirect("task_document_mapping_list")
 
     if request.method == "POST" and request.POST.get("action") == "delete":
@@ -644,6 +692,7 @@ def task_document_mapping_list(request):
     doc_types = DocumentTypeTemplate.objects.filter(
         is_active=True, folder__is_active=True
     ).select_related("folder").order_by("folder__sort_order", "name")
+    folders = DocumentFolderTemplate.objects.filter(is_active=True).order_by("sort_order", "name")
 
     return render(
         request,
@@ -652,8 +701,9 @@ def task_document_mapping_list(request):
             "rows": rows,
             "q": q,
             "task_masters": task_masters,
+            "folders": folders,
             "doc_types": doc_types,
-            "breadcrumbs": _doc_breadcrumbs(("Task → document links",)),
+            "breadcrumbs": _doc_breadcrumbs(("Task → folder links",)),
         },
     )
 
@@ -696,6 +746,7 @@ def task_document_upload(request, pk: int):
             document_type_id=int(doc_type_id),
             uploaded_file=uploaded,
             user=request.user,
+            custom_display_name=(request.POST.get("custom_display_name") or "").strip(),
         )
     except ValidationError as exc:
         if hasattr(exc, "messages"):
@@ -707,3 +758,32 @@ def task_document_upload(request, pk: int):
 
     messages.success(request, f"Uploaded {doc.generated_filename} (v{doc.version}).")
     return redirect(next_url)
+
+
+@login_required
+@require_perm("documents.change_clientdocument")
+def client_document_rename(request, pk: int):
+    doc = get_object_or_404(
+        ClientDocument.objects.select_related(
+            "client",
+            "folder__template",
+            "document_type",
+            "task",
+        ),
+        pk=pk,
+        status=ClientDocument.STATUS_ACTIVE,
+    )
+    if not client_allowed_for_user(request.user, doc.client):
+        raise PermissionDenied
+    if request.method != "POST":
+        raise Http404
+    new_name = (request.POST.get("display_name") or "").strip()
+    try:
+        from .services import rename_client_document
+
+        doc = rename_client_document(doc, new_display_name=new_name, user=request.user)
+    except ValidationError as exc:
+        messages.error(request, str(exc))
+        return _document_action_redirect(request)
+    messages.success(request, f"File renamed to: {doc.generated_filename}")
+    return _document_action_redirect(request)

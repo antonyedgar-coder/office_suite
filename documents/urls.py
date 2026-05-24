@@ -27,6 +27,11 @@ urlpatterns = [
         name="document_folder_template_edit",
     ),
     path(
+        "settings/folders/<int:pk>/delete/",
+        views.document_folder_template_delete,
+        name="document_folder_template_delete",
+    ),
+    path(
         "settings/file-types/",
         views.document_type_template_list,
         name="document_type_template_list",
@@ -50,6 +55,11 @@ urlpatterns = [
         "<int:pk>/replace/",
         views.client_document_replace,
         name="client_document_replace",
+    ),
+    path(
+        "<int:pk>/rename/",
+        views.client_document_rename,
+        name="client_document_rename",
     ),
     path(
         "<int:pk>/view/",

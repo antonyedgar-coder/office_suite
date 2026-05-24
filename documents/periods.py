@@ -69,12 +69,16 @@ def period_kind_label(kind: str) -> str:
     return dict(PERIOD_KIND_CHOICES).get(kind, kind)
 
 
-_FY_MONTH_KEY_RE = re.compile(r"^(\d{4}-\d{2})-(\d{4}-\d{2})$")
+_FY_MONTH_KEY_RE = re.compile(r"^(\d{4}-\d{2})-(\d{4}-\d{2})(?:-\d+)?$")
+_ONE_TIME_DOC_KEY_RE = re.compile(r"^FY(\d{4}-\d{2})-(\d{4}-\d{2})(?:-(\d+))?$")
 
 
 def extract_fy_from_period_key(period_key: str) -> str:
     """Indian FY label (e.g. 2024-25) parsed from period_key."""
     pk = (period_key or "").strip()
+    m = _ONE_TIME_DOC_KEY_RE.match(pk)
+    if m:
+        return m.group(1)
     if not pk.startswith("FY"):
         if len(pk) == 7 and pk[4] == "-":
             try:
@@ -104,6 +108,9 @@ def period_fy_display(
     pk = (period_key or "").strip()
     if pk == "once":
         return "—"
+    m = _ONE_TIME_DOC_KEY_RE.match(pk)
+    if m:
+        return m.group(1)
     fy = (financial_year or "").strip() or extract_fy_from_period_key(pk)
     if fy:
         return fy
@@ -137,9 +144,16 @@ def _month_name_from_ym(ym: str) -> str:
 
 
 def _parse_period_key_parts(period_key: str) -> dict[str, str]:
-    """Extract fy, month ym, quarter, half from period_key."""
+    """Extract fy, month ym, quarter, half, and optional one-time sequence from period_key."""
     pk = (period_key or "").strip()
-    out = {"fy": "", "ym": "", "quarter": "", "half": ""}
+    out = {"fy": "", "ym": "", "quarter": "", "half": "", "sequence": ""}
+    m = _ONE_TIME_DOC_KEY_RE.match(pk)
+    if m:
+        out["fy"] = m.group(1)
+        out["ym"] = m.group(2)
+        if m.group(3):
+            out["sequence"] = m.group(3)
+        return out
     if not pk.startswith("FY"):
         if len(pk) == 7 and pk[4] == "-":
             out["ym"] = pk
@@ -169,8 +183,14 @@ def period_detail_display(period_kind: str, period_key: str, *, period_label: st
     """Value for the Period column: month name, Q1–Q4, H1/H2, Yearly, or —."""
     kind = (period_kind or PERIOD_NONE).strip()
     pk = (period_key or "").strip()
-    if pk == "once" or kind == PERIOD_NONE:
+    if pk == "once" or (kind == PERIOD_NONE and not _ONE_TIME_DOC_KEY_RE.match(pk)):
         return "—"
+    if _ONE_TIME_DOC_KEY_RE.match(pk):
+        parts = _parse_period_key_parts(pk)
+        label = _month_name_from_ym(parts["ym"]) if parts["ym"] else "—"
+        if parts.get("sequence"):
+            return f"{label} ({parts['sequence']})"
+        return label
     if kind == PERIOD_INDIAN_FY:
         return "Yearly"
     parts = _parse_period_key_parts(pk)
@@ -230,6 +250,74 @@ def build_standard_filename(
         else:
             base = f"{type_part}_{client_part}_{fy}"
 
+    return f"{base}.{ext}" if ext else base
+
+
+def build_one_time_task_filename(
+    *,
+    task_master_name: str,
+    client_name: str,
+    period_key: str,
+    extension: str,
+    sanitize,
+) -> str:
+    """
+    One-time task upload filename:
+    TaskType-ClientName_FY2024-25_Mar (first in month);
+    TaskType-ClientName_FY2024-25_Mar_2 when multiple in the same month.
+    """
+    type_part = sanitize(task_master_name)
+    client_part = sanitize(client_name)
+    ext = (extension or "").lower().lstrip(".")
+    parts = _parse_period_key_parts(period_key)
+    fy = parts["fy"] or extract_fy_from_period_key(period_key)
+    abbr = _month_abbr_from_ym(parts["ym"]) if parts["ym"] else ""
+    if fy and abbr:
+        base = f"{type_part}-{client_part}_FY{fy}_{abbr}"
+    elif fy:
+        base = f"{type_part}-{client_part}_FY{fy}"
+    else:
+        base = f"{type_part}-{client_part}"
+    seq = (parts.get("sequence") or "").strip()
+    if seq and seq != "1":
+        base = f"{base}_{seq}"
+    return f"{base}.{ext}" if ext else base
+
+
+def build_custom_user_filename(
+    *,
+    user_label: str,
+    period_key: str,
+    period_label: str,
+    extension: str,
+    sanitize,
+) -> str:
+    """User-chosen label with FY and period appended (Supporting Documents)."""
+    name_part = sanitize(user_label)
+    pk = (period_key or "").strip()
+    ext = (extension or "").lower().lstrip(".")
+    ot = _ONE_TIME_DOC_KEY_RE.match(pk)
+    if ot:
+        fy = ot.group(1)
+        abbr = _month_abbr_from_ym(ot.group(2))
+        seq = ot.group(3)
+        base = f"{name_part}_FY{fy}_{abbr}" if abbr else f"{name_part}_FY{fy}"
+        if seq and seq != "1":
+            base = f"{base}_{seq}"
+        return f"{base}.{ext}" if ext else base
+
+    fy = extract_fy_from_period_key(period_key)
+    period_part = sanitize((period_label or "").strip() or "Once")
+    ext = (extension or "").lower().lstrip(".")
+
+    if fy and period_part and period_part != "Once" and period_part != "—":
+        base = f"{name_part}_FY{fy}_{period_part}"
+    elif fy:
+        base = f"{name_part}_FY{fy}"
+    elif period_part and period_part not in ("Once", "—"):
+        base = f"{name_part}_{period_part}"
+    else:
+        base = name_part
     return f"{base}.{ext}" if ext else base
 
 

@@ -153,15 +153,19 @@
       </div>
 
       <div class="row">
-        <div class="col-md-6 mb-3">
-          <label class="form-label">Due date</label>
+        <div class="col-md-6 mb-3" id="taskDueDateWrap">
+          <label class="form-label" for="id_due_date">Due date</label>
           {{ form.due_date }}
+          {% if form.due_date.help_text %}<div class="form-text" id="taskDueDateHint">{{ form.due_date.help_text }}</div>{% endif %}
           {% if form.due_date.errors %}<div class="text-danger small">{{ form.due_date.errors }}</div>{% endif %}
         </div>
         <div class="col-md-6 mb-3">
           <label class="form-label">Priority</label>
           {{ form.priority }}
         </div>
+      </div>
+      <div id="taskDueDateRecurringNote" class="mb-3 small text-secondary" style="display:none">
+        Due date is set automatically from the task master schedule (recurring task).
       </div>
 
       <div class="d-flex gap-2">
@@ -345,6 +349,28 @@
   var taskMasterSelect = document.getElementById("id_task_master");
   var mastersMeta = JSON.parse(document.getElementById("task-masters-meta").textContent || "{}");
   var periodLockedHint = document.getElementById("periodTypeLockedHint");
+  var dueWrap = document.getElementById("taskDueDateWrap");
+  var dueInput = document.getElementById("id_due_date");
+  var dueRecurringNote = document.getElementById("taskDueDateRecurringNote");
+  var dueHint = document.getElementById("taskDueDateHint");
+
+  function syncDueDateUi(isRecurring) {
+    if (dueWrap) dueWrap.style.display = isRecurring ? "none" : "";
+    if (dueRecurringNote) dueRecurringNote.style.display = isRecurring ? "block" : "none";
+    if (dueInput) {
+      if (isRecurring) {
+        dueInput.removeAttribute("required");
+        dueInput.value = "";
+      } else {
+        dueInput.setAttribute("required", "required");
+      }
+    }
+    if (dueHint) {
+      dueHint.textContent = isRecurring
+        ? "Calculated automatically from the task master schedule for recurring tasks."
+        : "Required for one-time tasks.";
+    }
+  }
 
   function syncBillableUi() {
     if (!billableCb || !feesWrap) return;
@@ -355,7 +381,11 @@
   function applyMasterDefaults() {
     if (!taskMasterSelect) return;
     var cfg = mastersMeta[taskMasterSelect.value];
-    if (!cfg) return;
+    if (!cfg) {
+      syncDueDateUi(false);
+      return;
+    }
+    syncDueDateUi(!!cfg.is_recurring);
     if (periodType) {
       if (cfg.period_type) {
         periodType.value = cfg.period_type;
@@ -425,6 +455,7 @@
         if (mastersMeta && msg.extra) {
           mastersMeta[id] = {
             period_type: msg.extra.period_type || "",
+            is_recurring: !!msg.extra.is_recurring,
             default_fees_amount: msg.extra.default_fees_amount || "",
           };
         }

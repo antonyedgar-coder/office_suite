@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import ActivityLog, Employee, User
+from .models import ActivityLog, Employee, SiteSettings, User
 
 
 @admin.register(ActivityLog)
@@ -31,6 +31,20 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+
+@admin.register(SiteSettings)
+class SiteSettingsAdmin(admin.ModelAdmin):
+    list_display = ("company_name", "updated_at")
+
+    def has_add_permission(self, request):
+        return not SiteSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def has_module_permission(self, request):
         return request.user.is_superuser

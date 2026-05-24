@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Company branding — CA Office Suite{% endblock %}
+{% block page_title %}Company branding{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}">
+      <i class="bi bi-arrow-left"></i> Settings
+    </a>
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="app-form-with-sticky-bar">
+    {% csrf_token %}
+    <div class="card p-3 mb-3">
+      <div class="row g-3">
+        <div class="col-12 col-md-8">
+          <label class="form-label" for="{{ form.company_name.id_for_label }}">Company name</label>
+          {{ form.company_name }}
+          {% if form.company_name.errors %}
+            <div class="text-danger small">{{ form.company_name.errors }}</div>
+          {% endif %}
+          <div class="form-field-hint">
+            Shown above <strong>CA Office Suite</strong> in the sidebar and on the login page.
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          {% if settings.logo %}
+            <label class="form-label">Current logo</label>
+            <div class="border rounded p-2 bg-white mb-2">
+              <img src="{% url 'site_logo' %}" alt="" class="sidebar-brand-logo-preview" />
+            </div>
+            <div class="form-check">
+              {{ form.remove_logo }}
+              <label class="form-check-label" for="{{ form.remove_logo.id_for_label }}">
+                {{ form.remove_logo.label }}
+              </label>
+            </div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-md-8">
+          <label class="form-label" for="{{ form.logo.id_for_label }}">
+            {% if settings.logo %}Replace logo{% else %}Logo{% endif %}
+          </label>
+          {{ form.logo }}
+          {% if form.logo.errors %}
+            <div class="text-danger small">{{ form.logo.errors }}</div>
+          {% endif %}
+          <div class="form-field-hint">PNG, JPG, WEBP, GIF, or SVG. Max 2 MB. About 40px tall works best.</div>
+        </div>
+      </div>
+    </div>
+    {% url 'settings_hub' as settings_hub_url %}
+    {% include "includes/sticky_save_bar.html" with cancel_url=settings_hub_url save_label="Save branding" %}
+  </form>
+{% endblock %}

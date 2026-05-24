@@ -46,6 +46,24 @@ from .client_type_rules import (
     may_submit_for_client_type,
     none_client_submit_block_message,
 )
+
+
+def _provision_task_master_documents(task_master, *, user=None) -> None:
+    if not documents_module_enabled():
+        return
+    from documents.task_master_folders import provision_task_master_document_folder
+
+    provision_task_master_document_folder(task_master, user=user)
+
+
+def _sync_task_master_documents(task_master) -> None:
+    if not documents_module_enabled():
+        return
+    from documents.task_master_folders import sync_task_master_folder_name
+
+    sync_task_master_folder_name(task_master)
+
+
 from .services import (
     approve_task_assignment,
     complete_task,
@@ -219,6 +237,7 @@ def task_master_create(request):
             from core.created_by import save_form_with_creator
 
             master = save_form_with_creator(form, request.user)
+            _provision_task_master_documents(master, user=request.user)
             from masters.master_request_service import try_complete_master_request
             from masters.models import MasterRequest
 
@@ -276,6 +295,7 @@ def task_master_edit(request, pk: int):
         form = TaskMasterForm(request.POST, instance=master)
         if form.is_valid():
             form.save()
+            _sync_task_master_documents(master)
             messages.success(request, "Task master updated.")
             return redirect("task_master_list")
         messages.error(request, "Could not save task master. Please fix the errors below.")
@@ -450,6 +470,7 @@ def task_master_bulk_import(request):
                 checklist = d.pop("checklist_items", [])
                 master = TaskMaster.objects.create(**d)
                 save_master_checklist(master, checklist)
+                _provision_task_master_documents(master, user=request.user)
         request.session.pop(TASK_MASTER_IMPORT_SESSION_KEY, None)
         messages.success(request, f"Imported {len(rows)} task master(s).")
         return redirect("task_master_list")
@@ -654,6 +675,7 @@ def task_create(request):
     masters_meta = {
         str(m.pk): {
             "period_type": period_type_for_task_master(m) or "",
+            "is_recurring": m.is_recurring,
             "default_fees_amount": str(m.default_fees_amount) if m.default_fees_amount is not None else "",
         }
         for m in TaskMaster.objects.filter(is_active=True, archived_at__isnull=True).only(
@@ -700,6 +722,7 @@ def task_master_quick_create_api(request):
         )
         master.full_clean()
         master.save()
+        _provision_task_master_documents(master, user=request.user)
     except ValidationError as e:
         detail = "; ".join(
             msg for msgs in getattr(e, "message_dict", {}).values() for msg in msgs
@@ -1048,19 +1071,28 @@ def task_detail(request, pk: int):
     task_doc_ctx: dict = {"show_task_documents": False}
     if documents_module_enabled() and task_module_enabled():
         from documents.periods import extract_fy_from_period_key
-        from documents.task_bridge import document_period_from_task, task_allows_document_changes
+        from documents.task_bridge import document_period_from_task, task_documents_locked, user_can_change_task_linked_document
         from documents.task_services import build_task_document_slots
 
         try:
             period_key, period_label = document_period_from_task(task)
         except ValidationError:
             period_key, period_label = "once", (task.period_key or "—")
+        task_doc_slots = build_task_document_slots(task)
+        for slot in task_doc_slots:
+            doc = slot.get("document")
+            if doc:
+                slot["can_change"] = user_can_change_task_linked_document(
+                    request.user, doc, task=task
+                )
+            else:
+                slot["can_change"] = slot["can_upload"]
         task_doc_ctx = {
             "show_task_documents": True,
-            "task_doc_slots": build_task_document_slots(task),
+            "task_doc_slots": task_doc_slots,
             "task_doc_period_label": period_label,
             "task_doc_period_fy": extract_fy_from_period_key(period_key),
-            "task_doc_locked": not task_allows_document_changes(task),
+            "task_doc_locked": task_documents_locked(task),
         }
 
     return render(

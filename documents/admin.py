@@ -27,6 +27,7 @@ class DocumentTypeTemplateInline(admin.TabularInline):
 class DocumentFolderTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "sort_order", "is_active")
     list_filter = ("is_active", "client_types")
+    search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ("client_types",)
     inlines = [DocumentTypeTemplateInline]
@@ -42,9 +43,9 @@ class DocumentTypeTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(TaskMasterDocumentMapping)
 class TaskMasterDocumentMappingAdmin(admin.ModelAdmin):
-    list_display = ("task_master", "document_type", "sort_order")
-    list_filter = ("task_master__task_group",)
-    autocomplete_fields = ("task_master", "document_type")
+    list_display = ("task_master", "folder", "sort_order")
+    list_filter = ("task_master__task_group", "folder")
+    autocomplete_fields = ("task_master", "folder")
 
 
 @admin.register(ClientDocumentFolder)

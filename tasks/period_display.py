@@ -6,6 +6,7 @@ import calendar
 import re
 from dataclasses import dataclass
 
+from .one_time_period import is_one_time_period_key, parse_one_time_period_key
 from .period_keys import fy_choice_label
 from .recurrence import next_period_key
 
@@ -38,7 +39,7 @@ def _fy_label_from_start(y: int) -> str:
 
 def _infer_frequency_from_period_key(period_key: str) -> str:
     pk = (period_key or "").strip()
-    if not pk or pk == "one-time":
+    if is_one_time_period_key(pk) or not pk or pk == "one-time":
         return _FREQUENCY_LABEL["one_time"]
     if re.match(r"^\d{4}-\d{2}$", pk):
         return "Monthly"
@@ -59,6 +60,12 @@ def _infer_frequency_from_period_key(period_key: str) -> str:
 
 def _period_text_from_period_key(period_key: str) -> str:
     pk = (period_key or "").strip()
+    parsed = parse_one_time_period_key(pk)
+    if parsed:
+        label = f"{parsed['month_abbr']} {parsed['ym'][:4]}"
+        if parsed["sequence"] >= 2:
+            return f"{label} ({parsed['sequence']})"
+        return label
     if not pk or pk == "one-time":
         return "—"
     if re.match(r"^\d{4}-\d{2}$", pk):

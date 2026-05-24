@@ -18,7 +18,18 @@ from .models import (
     DocumentFolderTemplate,
     DocumentTypeTemplate,
 )
-from .periods import build_standard_filename, extract_fy_from_period_key, resolve_period
+from .folder_constants import (
+    KYC_DOCUMENTS_SLUG,
+    LEGACY_KYC_SLUG,
+    SUPPORTING_DOCUMENTS_SLUG,
+)
+from .periods import (
+    build_custom_user_filename,
+    build_one_time_task_filename,
+    build_standard_filename,
+    extract_fy_from_period_key,
+    resolve_period,
+)
 from .task_bridge import user_can_change_task_linked_document
 
 
@@ -79,6 +90,89 @@ def create_client_document_folders(
     return created
 
 
+def ensure_standard_folder_templates() -> list[DocumentFolderTemplate]:
+    """Create or update Supporting Documents and KYC Documents master folders."""
+    supporting, _ = DocumentFolderTemplate.objects.update_or_create(
+        slug=SUPPORTING_DOCUMENTS_SLUG,
+        defaults={
+            "name": "Supporting Documents",
+            "sort_order": 5,
+            "is_active": True,
+            "allow_custom_filename": True,
+        },
+    )
+    kyc = DocumentFolderTemplate.objects.filter(slug=KYC_DOCUMENTS_SLUG).first()
+    if not kyc:
+        legacy = DocumentFolderTemplate.objects.filter(slug=LEGACY_KYC_SLUG).first()
+        if legacy:
+            legacy.name = "KYC Documents"
+            legacy.slug = KYC_DOCUMENTS_SLUG
+            legacy.sort_order = 6
+            legacy.is_active = True
+            legacy.allow_custom_filename = False
+            legacy.save(
+                update_fields=["name", "slug", "sort_order", "is_active", "allow_custom_filename"]
+            )
+            kyc = legacy
+        else:
+            kyc, _ = DocumentFolderTemplate.objects.update_or_create(
+                slug=KYC_DOCUMENTS_SLUG,
+                defaults={
+                    "name": "KYC Documents",
+                    "sort_order": 6,
+                    "is_active": True,
+                    "allow_custom_filename": False,
+                },
+            )
+    DocumentTypeTemplate.objects.get_or_create(
+        folder=supporting,
+        slug="supporting-file",
+        defaults={
+            "name": "Supporting file",
+            "allowed_extensions": "pdf,jpg,jpeg,png,xlsx,xls,doc,docx",
+            "period_kind": "none",
+            "sort_order": 10,
+            "is_active": True,
+        },
+    )
+    DocumentTypeTemplate.objects.get_or_create(
+        folder=kyc,
+        slug="kyc-file",
+        defaults={
+            "name": "KYC file",
+            "allowed_extensions": "pdf,jpg,jpeg,png",
+            "period_kind": "none",
+            "sort_order": 10,
+            "is_active": True,
+        },
+    )
+    return [supporting, kyc]
+
+
+def provision_standard_client_folders(client: Client, *, user=None) -> int:
+    """Create Supporting Documents and KYC Documents folders for every client."""
+    templates = ensure_standard_folder_templates()
+    created = 0
+    for tmpl in templates:
+        if not tmpl.is_active:
+            continue
+        _, was_created = ClientDocumentFolder.objects.get_or_create(
+            client=client,
+            template=tmpl,
+        )
+        if was_created:
+            created += 1
+    if created and user:
+        log_client_activity(
+            client=client,
+            user=user,
+            category=ClientActivityLog.CATEGORY_CLIENT,
+            activity=f"Standard document folders created ({created}).",
+            metadata={"standard_document_folders_created": created},
+        )
+    return created
+
+
 def provision_client_document_folders(client: Client) -> int:
     """Management command helper: create all applicable templates for a client."""
     if client.approval_status != Client.APPROVED:
@@ -101,7 +195,22 @@ def render_generated_filename(
     period_key: str,
     period_label: str,
     extension: str,
+    task=None,
 ) -> str:
+    if task is not None and (task.period_type or "").strip() == "one_time":
+        master = getattr(task, "task_master", None)
+        if master is None and getattr(task, "task_master_id", None):
+            from tasks.models import TaskMaster
+
+            master = TaskMaster.objects.filter(pk=task.task_master_id).first()
+        if master:
+            return build_one_time_task_filename(
+                task_master_name=master.name,
+                client_name=client.client_name,
+                period_key=period_key,
+                extension=extension,
+                sanitize=_sanitize_filename_part,
+            )
     return build_standard_filename(
         document_type_name=template.name,
         client_name=client.client_name,
@@ -181,6 +290,88 @@ def _require_document_editable(user, doc: ClientDocument | None = None, *, task=
         )
 
 
+def _user_label_from_generated_filename(
+    generated: str,
+    *,
+    period_key: str,
+    period_label: str,
+) -> str:
+    """Best-effort reverse of build_custom_user_filename for replace/versioning."""
+    stem = Path(generated or "").stem
+    if not stem:
+        return "Document"
+    fy = extract_fy_from_period_key(period_key)
+    pl = (period_label or "").strip()
+    if fy and pl and pl not in ("Once", "—"):
+        suffix = f"_FY{fy}_{_sanitize_filename_part(pl)}"
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)] or "Document"
+    if fy:
+        suffix = f"_FY{fy}"
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)] or "Document"
+    if pl and pl not in ("Once", "—"):
+        suffix = f"_{_sanitize_filename_part(pl)}"
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)] or "Document"
+    return stem
+
+
+def _ensure_unique_generated_filename(
+    *,
+    client: Client,
+    folder: ClientDocumentFolder,
+    generated: str,
+    exclude_pk: int | None = None,
+) -> str:
+    """Avoid duplicate active filenames in multi-upload folders."""
+    qs = ClientDocument.objects.filter(
+        client=client,
+        folder=folder,
+        generated_filename=generated,
+        status=ClientDocument.STATUS_ACTIVE,
+    )
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    if not qs.exists():
+        return generated
+    path = Path(generated)
+    stem, ext = path.stem, path.suffix
+    n = 2
+    while True:
+        candidate = f"{stem}_{n}{ext}" if ext else f"{stem}_{n}"
+        dup = ClientDocument.objects.filter(
+            client=client,
+            folder=folder,
+            generated_filename=candidate,
+            status=ClientDocument.STATUS_ACTIVE,
+        )
+        if exclude_pk:
+            dup = dup.exclude(pk=exclude_pk)
+        if not dup.exists():
+            return candidate
+        n += 1
+
+
+def default_document_type_for_folder(folder: ClientDocumentFolder) -> DocumentTypeTemplate | None:
+    """Default file type for folders that allow free-form uploads (Supporting Documents)."""
+    template = folder.template
+    if not template.allow_custom_filename:
+        return None
+    dt = DocumentTypeTemplate.objects.filter(
+        folder=template,
+        slug="supporting-file",
+        is_active=True,
+    ).first()
+    if dt:
+        return dt
+    return (
+        DocumentTypeTemplate.objects.filter(folder=template, is_active=True)
+        .order_by("sort_order", "name")
+        .first()
+    )
+
+
 def save_client_document(
     *,
     client: Client,
@@ -191,6 +382,8 @@ def save_client_document(
     uploaded_file,
     user,
     task=None,
+    custom_display_name: str = "",
+    replace_document: ClientDocument | None = None,
 ) -> ClientDocument:
     if folder.client_id != client.pk:
         raise ValidationError("Folder does not belong to this client.")
@@ -202,33 +395,78 @@ def save_client_document(
 
     ext = validate_upload_file(uploaded_file, document_type)
     content_hash = compute_content_hash(uploaded_file)
-    generated = render_generated_filename(
-        document_type,
-        client=client,
-        period_key=period_key,
-        period_label=period_label,
-        extension=ext,
-    )
-
-    active_qs = _active_document_queryset(
-        client=client,
-        folder=folder,
-        document_type=document_type,
-        period_key=period_key,
-    )
-    active = active_qs.select_for_update().first()
-    if active:
-        _require_document_editable(user, active, task=task)
-    if active and active.content_hash == content_hash:
-        raise ValidationError(
-            "This file is identical to the current version already on file."
+    folder_template = folder.template
+    custom_name = (custom_display_name or "").strip()
+    if custom_name and not folder_template.allow_custom_filename:
+        raise ValidationError("Custom file names are not allowed for this folder.")
+    if folder_template.allow_custom_filename:
+        if not custom_name:
+            raise ValidationError("Enter a name for this file.")
+        generated = build_custom_user_filename(
+            user_label=custom_name,
+            period_key=period_key,
+            period_label=period_label,
+            extension=ext,
+            sanitize=_sanitize_filename_part,
+        )
+    else:
+        generated = render_generated_filename(
+            document_type,
+            client=client,
+            period_key=period_key,
+            period_label=period_label,
+            extension=ext,
+            task=task,
         )
 
+    multi_upload = folder_template.allow_custom_filename and replace_document is None
+    if multi_upload:
+        generated = _ensure_unique_generated_filename(
+            client=client,
+            folder=folder,
+            generated=generated,
+        )
+
+    active = None
     next_version = 1
-    if active:
+    if replace_document is not None:
+        active = (
+            ClientDocument.objects.select_for_update()
+            .filter(
+                pk=replace_document.pk,
+                client=client,
+                status=ClientDocument.STATUS_ACTIVE,
+            )
+            .first()
+        )
+        if not active:
+            raise ValidationError("This file is no longer active and cannot be replaced.")
+        _require_document_editable(user, active, task=task)
+        if active.content_hash == content_hash:
+            raise ValidationError(
+                "This file is identical to the current version already on file."
+            )
         next_version = active.version + 1
         active.status = ClientDocument.STATUS_SUPERSEDED
         active.save(update_fields=["status"])
+    elif not multi_upload:
+        active_qs = _active_document_queryset(
+            client=client,
+            folder=folder,
+            document_type=document_type,
+            period_key=period_key,
+        )
+        active = active_qs.select_for_update().first()
+        if active:
+            _require_document_editable(user, active, task=task)
+        if active and active.content_hash == content_hash:
+            raise ValidationError(
+                "This file is identical to the current version already on file."
+            )
+        if active:
+            next_version = active.version + 1
+            active.status = ClientDocument.STATUS_SUPERSEDED
+            active.save(update_fields=["status"])
 
     fy_legacy = extract_fy_from_period_key(period_key)
     link_task = task
@@ -282,6 +520,13 @@ def replace_client_document(
     if doc.status != ClientDocument.STATUS_ACTIVE:
         raise ValidationError("Only active files can be replaced.")
     _require_document_editable(user, doc)
+    custom_name = ""
+    if doc.folder.template.allow_custom_filename:
+        custom_name = _user_label_from_generated_filename(
+            doc.generated_filename,
+            period_key=doc.period_key,
+            period_label=doc.period_label,
+        )
     new_doc = save_client_document(
         client=doc.client,
         folder=doc.folder,
@@ -291,6 +536,8 @@ def replace_client_document(
         uploaded_file=uploaded_file,
         user=user,
         task=doc.task,
+        custom_display_name=custom_name,
+        replace_document=doc,
     )
     if doc.task_id and not new_doc.task_id:
         new_doc.task_id = doc.task_id
@@ -307,6 +554,50 @@ def replace_client_document(
         },
     )
     return new_doc
+
+
+@transaction.atomic
+def rename_client_document(
+    doc: ClientDocument,
+    *,
+    new_display_name: str,
+    user,
+) -> ClientDocument:
+    """Rename display filename (Supporting Documents only; FY and period kept)."""
+    if doc.status != ClientDocument.STATUS_ACTIVE:
+        raise ValidationError("Only active files can be renamed.")
+    _require_document_editable(user, doc)
+    folder_template = doc.folder.template
+    if not folder_template.allow_custom_filename:
+        raise ValidationError("This folder does not allow custom file names.")
+    label = (new_display_name or "").strip()
+    if not label:
+        raise ValidationError("Enter a file name.")
+    ext = _file_extension(doc.generated_filename)
+    generated = build_custom_user_filename(
+        user_label=label,
+        period_key=doc.period_key,
+        period_label=doc.period_label,
+        extension=ext,
+        sanitize=_sanitize_filename_part,
+    )
+    generated = _ensure_unique_generated_filename(
+        client=doc.client,
+        folder=doc.folder,
+        generated=generated,
+        exclude_pk=doc.pk,
+    )
+    old_label = doc.generated_filename
+    doc.generated_filename = generated
+    doc.save(update_fields=["generated_filename"])
+    log_client_activity(
+        client=doc.client,
+        user=user,
+        category=ClientActivityLog.CATEGORY_CLIENT,
+        activity=f"Document renamed: {old_label} → {generated}.",
+        metadata={"document_id": doc.pk, "old_filename": old_label, "new_filename": generated},
+    )
+    return doc
 
 
 @transaction.atomic
@@ -367,3 +658,17 @@ def document_types_for_folder_json() -> dict[str, list[dict]]:
             }
         )
     return out
+
+
+def folder_upload_meta_json(client: Client) -> dict[str, dict]:
+    """Per client folder pk: whether custom names are used and default type id."""
+    meta: dict[str, dict] = {}
+    for folder in ClientDocumentFolder.objects.filter(client=client).select_related("template"):
+        template = folder.template
+        default_type = default_document_type_for_folder(folder)
+        meta[str(folder.pk)] = {
+            "allow_custom_filename": template.allow_custom_filename,
+            "default_type_id": default_type.pk if default_type else None,
+            "slug": template.slug,
+        }
+    return meta

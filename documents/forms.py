@@ -2,7 +2,7 @@ from django import forms
 
 from .models import ClientDocumentFolder, DocumentTypeTemplate
 from .periods import HALF_YEAR_CHOICES, QUARTER_CHOICES, fy_choices, month_value_choices
-from .services import parse_upload_period
+from .services import default_document_type_for_folder, parse_upload_period
 
 
 class ClientDocumentUploadForm(forms.Form):
@@ -46,6 +46,14 @@ class ClientDocumentUploadForm(forms.Form):
         ),
         label="File",
     )
+    custom_display_name = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "id": "id_doc_custom_name", "maxlength": "120"}
+        ),
+        label="File name",
+    )
 
     def __init__(self, *args, client, **kwargs):
         super().__init__(*args, **kwargs)
@@ -61,6 +69,7 @@ class ClientDocumentUploadForm(forms.Form):
             is_active=True,
             folder__is_active=True,
         )
+        self.fields["document_type"].required = False
         month_choices = [("", "— Select month —")] + month_value_choices()
         fy_choices_list = [("", "— Select FY —")] + fy_choices()
         self.fields["period_month"].choices = month_choices
@@ -76,8 +85,21 @@ class ClientDocumentUploadForm(forms.Form):
         data = super().clean()
         folder = data.get("folder")
         doc_type = data.get("document_type")
+        if folder:
+            default_type = default_document_type_for_folder(folder)
+            if default_type:
+                data["document_type"] = default_type
+                doc_type = default_type
         if folder and doc_type and doc_type.folder_id != folder.template_id:
             self.add_error("document_type", "This file type does not belong to the selected folder.")
+        elif folder and not doc_type and not default_document_type_for_folder(folder):
+            self.add_error("document_type", "Select a file type.")
+        if folder and folder.template.allow_custom_filename:
+            name = (data.get("custom_display_name") or "").strip()
+            if not name:
+                self.add_error("custom_display_name", "Enter a name for this file.")
+            else:
+                data["custom_display_name"] = name
         if doc_type:
             try:
                 pk, pl = parse_upload_period(doc_type, data)

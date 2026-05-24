@@ -10,6 +10,7 @@ from datetime import date, timedelta
 from django.core.exceptions import ValidationError
 
 from .models import Task, TaskMaster
+from .one_time_period import is_one_time_period_key
 from .period_keys import (
     PERIOD_EVERY_3_YEARS,
     PERIOD_EVERY_5_YEARS,
@@ -86,7 +87,7 @@ def period_interval(
 ) -> PeriodInterval | None:
     pk = (period_key or "").strip()
     pt = (period_type or "").strip()
-    if not pk or pt == PERIOD_ONE_TIME or pk == "one-time":
+    if not pk or pt == PERIOD_ONE_TIME or pk == "one-time" or is_one_time_period_key(pk):
         return None
 
     if pt == PERIOD_MONTHLY and len(pk) == 7 and pk[4] == "-":

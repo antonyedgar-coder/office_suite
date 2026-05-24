@@ -22,6 +22,18 @@ class DocumentFolderTemplate(models.Model):
     slug = models.SlugField(max_length=80, unique=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    allow_custom_filename = models.BooleanField(
+        default=False,
+        help_text="When enabled, uploader may choose the file name; FY and period are still appended.",
+    )
+    task_master = models.OneToOneField(
+        "tasks.TaskMaster",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="document_folder_template",
+        help_text="Set when this folder was auto-created from a task master.",
+    )
     client_types = models.ManyToManyField(
         "masters.ClientType",
         blank=True,
@@ -89,32 +101,32 @@ class DocumentTypeTemplate(models.Model):
 
 
 class TaskMasterDocumentMapping(models.Model):
-    """Links a task type to a document file type for upload-from-task."""
+    """Links a task type to a document folder; all file types in that folder appear on the task."""
 
     task_master = models.ForeignKey(
         "tasks.TaskMaster",
         on_delete=models.CASCADE,
         related_name="document_mappings",
     )
-    document_type = models.ForeignKey(
-        DocumentTypeTemplate,
+    folder = models.ForeignKey(
+        DocumentFolderTemplate,
         on_delete=models.CASCADE,
         related_name="task_mappings",
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
-        ordering = ["sort_order", "document_type__name"]
+        ordering = ["sort_order", "folder__sort_order", "folder__name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["task_master", "document_type"],
-                name="documents_taskmaster_doctype_uniq",
+                fields=["task_master", "folder"],
+                name="documents_taskmaster_folder_uniq",
             ),
         ]
-        verbose_name = "task document mapping"
+        verbose_name = "task document folder mapping"
 
     def __str__(self) -> str:
-        return f"{self.task_master} → {self.document_type.name}"
+        return f"{self.task_master} → {self.folder.name}"
 
 
 class ClientDocumentFolder(models.Model):

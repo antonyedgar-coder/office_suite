@@ -1,5 +1,6 @@
 from core.feature_flags import documents_module_enabled, task_module_enabled
 from core.settings_hub import user_may_open_settings
+from core.site_settings import get_site_settings
 from core.user_display import user_display_name
 
 
@@ -39,6 +40,17 @@ def settings_hub_access(request):
     if not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}
     return {"show_settings_hub": user_may_open_settings(request.user)}
+
+
+def site_branding(request):
+    from django.urls import reverse
+
+    settings = get_site_settings()
+    logo_url = reverse("site_logo") if settings.logo else ""
+    return {
+        "site_company_name": (settings.company_name or "").strip(),
+        "site_logo_url": logo_url,
+    }
 
 
 def topbar_user(request):

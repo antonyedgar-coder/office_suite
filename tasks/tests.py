@@ -437,6 +437,46 @@ class TaskWorkflowTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("assignee_picker", form.errors)
 
+    def test_recurring_create_form_sets_due_date_from_master(self):
+        self.master.is_recurring = True
+        self.master.frequency = TaskMaster.FREQ_MONTHLY
+        self.master.recurrence_config = {"month_anchor": "same_month", "create_day": 1, "due_day": 15}
+        self.master.save()
+        other = User.objects.create_user(email="recassign@example.com", password="pass12345")
+        form = TaskCreateForm(
+            data={
+                "task_master": self.master.pk,
+                "client": self.client.pk,
+                "assignee_ids": str(other.pk),
+                "verifier": self.verifier.pk,
+                "document_checker": self.document_checker.pk,
+                "period_type": "monthly",
+                "period_month": "5",
+                "period_year": "2026",
+            },
+            user=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["due_date"], date(2026, 5, 15))
+
+    def test_one_time_create_form_requires_due_date(self):
+        other = User.objects.create_user(email="onceassign@example.com", password="pass12345")
+        form = TaskCreateForm(
+            data={
+                "task_master": self.master.pk,
+                "client": self.client.pk,
+                "assignee_ids": str(other.pk),
+                "verifier": self.verifier.pk,
+                "document_checker": self.document_checker.pk,
+                "period_type": "monthly",
+                "period_month": "5",
+                "period_year": "2026",
+            },
+            user=self.user,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("due_date", form.errors)
+
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class DatePresetTests(TestCase):

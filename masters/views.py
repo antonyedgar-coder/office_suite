@@ -274,6 +274,10 @@ def client_detail(request, client_id: str):
     }
 
     if tab == "documents" and show_documents:
+        from documents.services import provision_standard_client_folders
+
+        provision_standard_client_folders(client, user=request.user)
+
         from django.db.models import Q
 
         from documents.models import ClientDocument, DocumentFolderTemplate, DocumentTypeTemplate
@@ -557,6 +561,12 @@ def client_create(request):
             client = form.save(commit=False)
             _apply_new_client_approval(client, request.user)
             client.save()
+            from core.feature_flags import documents_module_enabled
+
+            if documents_module_enabled():
+                from documents.services import provision_standard_client_folders
+
+                provision_standard_client_folders(client, user=request.user)
             mr = try_complete_master_request(
                 request,
                 client,
@@ -708,6 +718,12 @@ def client_approve(request, client_id: str):
     client.approved_by = request.user
     client.approved_at = now
     client.save(update_fields=["approval_status", "approved_by", "approved_at", "updated_at"])
+    from core.feature_flags import documents_module_enabled
+
+    if documents_module_enabled():
+        from documents.services import provision_standard_client_folders
+
+        provision_standard_client_folders(client, user=request.user)
     log_client_activity(
         client=client,
         user=request.user,
@@ -809,6 +825,12 @@ def client_import(request):
                 c = Client(**r.data)
                 _apply_new_client_approval(c, request.user)
                 c.save()
+                from core.feature_flags import documents_module_enabled
+
+                if documents_module_enabled():
+                    from documents.services import provision_standard_client_folders
+
+                    provision_standard_client_folders(c, user=request.user)
                 if c.approval_status == Client.APPROVED:
                     log_client_activity(
                         client=c,

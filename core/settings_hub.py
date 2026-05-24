@@ -141,8 +141,8 @@ def _documents_setup_cards(user) -> tuple[SettingsCard, ...]:
         cards = (
             *cards,
             SettingsCard(
-                title="Task → document links",
-                description="Map task types to document file types for upload from tasks and period alignment.",
+                title="Task → folder links",
+                description="Map task types to document folders. All file types in a linked folder appear on that task.",
                 url_name="task_document_mapping_list",
                 icon="bi-link-45deg",
                 icon_bg="settings-icon-violet",
@@ -166,8 +166,25 @@ def _billing_setup_cards(user) -> tuple[SettingsCard, ...]:
     return tuple(cards)
 
 
+def _general_setup_cards(user) -> tuple[SettingsCard, ...]:
+    if not user.is_superuser:
+        return ()
+    return (
+        SettingsCard(
+            title="Company branding",
+            description="Set your firm name and logo shown above CA Office Suite in the sidebar and login page.",
+            url_name="site_settings_edit",
+            icon="bi-building",
+            icon_bg="settings-icon-blue",
+        ),
+    )
+
+
 def build_settings_sections(user) -> list[SettingsSection]:
     sections: list[SettingsSection] = []
+    general_cards = _general_setup_cards(user)
+    if general_cards:
+        sections.append(SettingsSection(title="General", cards=general_cards))
     user_cards = _user_cards(user)
     if user_cards:
         sections.append(SettingsSection(title="User", cards=user_cards))

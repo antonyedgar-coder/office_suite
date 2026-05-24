@@ -1,0 +1,68 @@
+{% load document_extras %}
+
+<div class="dropdown d-inline-block">
+  <button
+    type="button"
+    class="btn btn-sm btn-link text-secondary px-1 py-0 doc-actions-toggle"
+    data-bs-toggle="dropdown"
+    aria-expanded="false"
+    aria-label="File actions"
+    title="Actions"
+  >
+    <i class="bi bi-three-dots-vertical fs-5"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end shadow-sm doc-actions-menu">
+    <li>
+      <a
+        class="dropdown-item"
+        href="{% url 'client_document_view' doc.pk %}"
+        target="_blank"
+        rel="noopener noreferrer"
+      >View</a>
+    </li>
+    {% if can_change and perms.documents.add_clientdocument %}
+      <li>
+        <button
+          type="button"
+          class="dropdown-item js-task-doc-replace-open"
+          data-replace-url="{% url 'client_document_replace' doc.pk %}"
+          data-next="{% url 'task_detail' task.pk %}"
+          data-client="{{ task.client.client_name }}"
+          data-folder="{{ slot.folder_name }}"
+          data-file-type="{{ slot.document_type.name }}"
+          data-fy="{{ doc|document_fy }}"
+          data-period="{{ doc|document_period }}"
+          data-filename="{{ doc.generated_filename }}"
+          data-version="{{ doc.version }}"
+          data-extensions="{{ slot.document_type.allowed_extensions }}"
+        >Replace</button>
+      </li>
+    {% endif %}
+    {% if can_change and slot.allow_custom_filename and perms.documents.change_clientdocument %}
+      <li>
+        <button
+          type="button"
+          class="dropdown-item js-task-doc-edit-open"
+          data-rename-url="{% url 'client_document_rename' doc.pk %}"
+          data-next="{% url 'task_detail' task.pk %}"
+          data-filename="{{ doc.generated_filename }}"
+          data-display-name="{{ doc.generated_filename }}"
+        >Edit</button>
+      </li>
+    {% endif %}
+    {% if can_change and perms.documents.delete_clientdocument %}
+      <li><hr class="dropdown-divider my-1"></li>
+      <li>
+        <form method="post" action="{% url 'client_document_delete' doc.pk %}" class="m-0" onsubmit="return confirm('Delete this file?');">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'task_detail' task.pk %}" />
+          <button type="submit" class="dropdown-item text-danger">Delete</button>
+        </form>
+      </li>
+    {% endif %}
+    {% if not can_change %}
+      <li><hr class="dropdown-divider my-1"></li>
+      <li><span class="dropdown-item-text small text-secondary">Locked</span></li>
+    {% endif %}
+  </ul>
+</div>

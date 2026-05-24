@@ -75,6 +75,7 @@ TEMPLATES = [
                 "core.context_processors.task_nav_counts",
                 "core.context_processors.dsc_nav_counts",
                 "core.context_processors.settings_hub_access",
+                "core.context_processors.site_branding",
                 "core.context_processors.master_request_nav_counts",
             ],
         },
@@ -197,10 +198,11 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DOCUMENT_STORAGE = os.getenv("DOCUMENT_STORAGE", "local").strip().lower()
 DOCUMENT_MAX_UPLOAD_BYTES = int(os.getenv("DOCUMENT_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 
+_staticfiles_backend = {
+    "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+}
+
 if documents_module_enabled():
-    _staticfiles_backend = {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
     if DOCUMENT_STORAGE == "spaces":
         STORAGES = {
             "default": {
@@ -227,6 +229,17 @@ if documents_module_enabled():
             },
             "staticfiles": _staticfiles_backend,
         }
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+            "OPTIONS": {"location": MEDIA_ROOT},
+        },
+        "staticfiles": _staticfiles_backend,
+    }
+
+MEDIA_URL = "/media/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

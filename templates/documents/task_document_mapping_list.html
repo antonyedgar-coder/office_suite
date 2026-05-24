@@ -1,90 +1,103 @@
-{% extends "base.html" %}
-{% block title %}Task → document links — CA Office Suite{% endblock %}
-{% block page_title %}Task → document links{% endblock %}
-
-{% block content %}
-  <p class="mb-3">
-    <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}"><i class="bi bi-arrow-left"></i> Settings</a>
-  </p>
-
-  <p class="text-secondary small mb-3">
-    Link each <strong>task type</strong> to the <strong>file types</strong> staff must upload for that task.
-    Folder comes from the file type. Task period is mapped automatically when uploading from a task.
-  </p>
-
-  <div class="card p-3 mb-3">
-    <h6 class="mb-3">Add link</h6>
-    <form method="post" class="row g-2 align-items-end">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="add" />
-      <div class="col-12 col-md-5">
-        <label class="form-label" for="mapTaskMaster">Task type</label>
-        <select class="form-select" id="mapTaskMaster" name="task_master" required>
-          <option value="">— Select —</option>
-          {% for tm in task_masters %}
-            <option value="{{ tm.pk }}">{{ tm.task_group.name }} — {{ tm.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-12 col-md-5">
-        <label class="form-label" for="mapDocType">File type</label>
-        <select class="form-select" id="mapDocType" name="document_type" required>
-          <option value="">— Select —</option>
-          {% for dt in doc_types %}
-            <option value="{{ dt.pk }}">{{ dt.folder.name }} — {{ dt.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-12 col-md-2">
-        <button type="submit" class="btn btn-primary w-100">Add</button>
-      </div>
-    </form>
-  </div>
-
-  <div class="card p-3 mb-3">
-    <form method="get" class="row g-2 align-items-end">
-      <div class="col-12 col-md-8">
-        <label class="form-label" for="mapQ">Search</label>
-        <input class="form-control" id="mapQ" name="q" value="{{ q }}" placeholder="Task or file type" />
-      </div>
-      <div class="col-12 col-md-4 d-flex gap-2">
-        <button type="submit" class="btn btn-outline-primary">Search</button>
-        <a class="btn btn-outline-secondary" href="{% url 'task_document_mapping_list' %}">Clear</a>
-      </div>
-    </form>
-  </div>
-
-  <div class="card data-table-card">
-    <div class="data-table-wrap">
-      <table class="table table-sm table-striped mb-0">
-        <thead>
-          <tr>
-            <th>Task type</th>
-            <th>Folder</th>
-            <th>File type</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in rows %}
-            <tr>
-              <td>{{ row.task_master.task_group.name }} — {{ row.task_master.name }}</td>
-              <td>{{ row.document_type.folder.name }}</td>
-              <td>{{ row.document_type.name }}</td>
-              <td class="text-end">
-                <form method="post" class="d-inline" onsubmit="return confirm('Remove this link?');">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="delete" />
-                  <input type="hidden" name="mapping_id" value="{{ row.pk }}" />
-                  <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-                </form>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="4" class="text-secondary">No links yet. Add one above.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Task → folder links — CA Office Suite{% endblock %}
+
+{% block page_title %}Task → folder links{% endblock %}
+
+{% block content %}
+
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}"><i class="bi bi-arrow-left"></i> Settings</a>
+  </p>
+
+  <p class="text-secondary small mb-3">
+    Link each <strong>task type</strong> to one or more <strong>document folders</strong>.
+    When staff open a task, every <strong>file type</strong> defined in those folders appears for upload.
+    A folder named like the task type is created automatically when you add a task master; link extra folders here (e.g. Supporting Documents, KYC Documents).
+  </p>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-3">Add link</h6>
+    <form method="post" class="row g-2 align-items-end">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add" />
+      <div class="col-12 col-md-5">
+        <label class="form-label" for="mapTaskMaster">Task type</label>
+        <select class="form-select" id="mapTaskMaster" name="task_master" required>
+          <option value="">— Select —</option>
+          {% for tm in task_masters %}
+            <option value="{{ tm.pk }}">{{ tm.task_group.name }} — {{ tm.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-5">
+        <label class="form-label" for="mapFolder">Folder</label>
+        <select class="form-select" id="mapFolder" name="folder" required>
+          <option value="">— Select —</option>
+          {% for folder in folders %}
+            <option value="{{ folder.pk }}">{{ folder.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-2">
+        <button type="submit" class="btn btn-primary w-100">Add</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-8">
+        <label class="form-label" for="mapQ">Search</label>
+        <input class="form-control" id="mapQ" name="q" value="{{ q }}" placeholder="Task or folder name" />
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary">Search</button>
+        <a class="btn btn-outline-secondary" href="{% url 'task_document_mapping_list' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card data-table-card">
+    <div class="data-table-wrap">
+      <table class="table table-sm table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Task type</th>
+            <th>Folder</th>
+            <th>File types in folder</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.task_master.task_group.name }} — {{ row.task_master.name }}</td>
+              <td>{{ row.folder.name }}</td>
+              <td class="small text-secondary">
+                {% with types=row.folder.document_types.all %}
+                  {% if types %}
+                    {% for dt in types %}{% if dt.is_active %}{{ dt.name }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
+                  {% else %}
+                    <span class="text-warning">No file types yet — add under Settings → File creation</span>
+                  {% endif %}
+                {% endwith %}
+              </td>
+              <td class="text-end">
+                <form method="post" class="d-inline" onsubmit="return confirm('Remove this link?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete" />
+                  <input type="hidden" name="mapping_id" value="{{ row.pk }}" />
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-secondary">No links yet. Task masters get their own folder automatically; add Supporting Documents or KYC here if needed.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+{% endblock %}

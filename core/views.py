@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Count, OuterRef, Subquery, Sum
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import redirect, render
 
 from dirkyc.fy import earliest_next_dirkyc_allowed_date, fy_label_for_date, fy_label_to_date_range
@@ -18,7 +18,9 @@ from mis.models import ExpenseDetail, FeesDetail, Receipt
 
 from .activity_log import log_activity_from_request
 from .feature_flags import task_module_enabled
+from .forms import SiteSettingsForm
 from .settings_hub import build_settings_sections, user_may_open_settings
+from .site_settings import get_site_settings
 
 
 def login_view(request):
@@ -269,6 +271,47 @@ def settings_hub(request):
         request,
         "core/settings.html",
         {"sections": build_settings_sections(request.user)},
+    )
+
+
+_LOGO_CONTENT_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+}
+
+
+def site_logo(request):
+    settings = get_site_settings()
+    if not settings.logo:
+        raise Http404
+    ext = (settings.logo.name or "").rsplit(".", 1)[-1].lower()
+    content_type = _LOGO_CONTENT_TYPES.get(ext, "application/octet-stream")
+    response = FileResponse(settings.logo.open("rb"), content_type=content_type)
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
+@login_required
+def site_settings_edit(request):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    settings = get_site_settings()
+    if request.method == "POST":
+        form = SiteSettingsForm(request.POST, request.FILES, instance=settings)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Company branding updated.")
+            return redirect("site_settings_edit")
+    else:
+        form = SiteSettingsForm(instance=settings)
+    return render(
+        request,
+        "core/site_settings_form.html",
+        {"form": form, "settings": settings},
     )
 
 

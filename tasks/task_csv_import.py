@@ -10,14 +10,17 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from core.branch_access import approved_clients_for_user, client_allowed_for_user
 from masters.models import Client
 
 from .models import Task, TaskMaster
-from .period_keys import build_period_key, period_type_for_task_master
+from .one_time_period import allocate_one_time_period_key
+from .period_keys import PERIOD_ONE_TIME, build_period_key, period_type_for_task_master
 from .period_overlap import find_overlapping_task, overlap_error_message
+from .recurrence import compute_create_due_dates
 from .user_labels import staff_users_queryset
 
 User = get_user_model()
@@ -195,10 +198,6 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
                 errors.append("Document checker cannot be an assignee.")
 
         due_date = _parse_due_date(due_raw)
-        if not due_raw:
-            errors.append("DUE_DATE is required (YYYY-MM-DD or DD-MM-YYYY).")
-        elif not due_date:
-            errors.append(f"Invalid DUE_DATE: {due_raw}")
 
         locked_period = period_type_for_task_master(master) if master else None
         if locked_period:
@@ -230,6 +229,22 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         except (ValueError, DjangoValidationError) as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
             errors.append(f"Period: {msg}")
+
+        if master and master.is_recurring and period_key and not errors:
+            _, due_date = compute_create_due_dates(master, period_key, timezone.localdate())
+        elif not due_raw:
+            errors.append("DUE_DATE is required for one-time tasks (YYYY-MM-DD or DD-MM-YYYY).")
+        elif not due_date:
+            errors.append(f"Invalid DUE_DATE: {due_raw}")
+
+        if (
+            period_type == PERIOD_ONE_TIME
+            and client
+            and master
+            and due_date
+            and not errors
+        ):
+            period_key = allocate_one_time_period_key(client, master, due_date)
 
         priority = _cell(raw, header_map, "PRIORITY").lower() or TaskMaster.PRIORITY_NORMAL
         if priority not in dict(TaskMaster.PRIORITY_CHOICES):

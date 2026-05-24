@@ -1,190 +1,237 @@
-{% load document_extras %}
-
-<div class="card p-3 mb-3">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-    <h6 class="mb-0">Documents for this task</h6>
-    {% if task_doc_locked %}
-      <span class="badge text-bg-secondary">Locked — task complete</span>
-    {% elif task.status == "document_rework" %}
-      <span class="badge text-bg-warning text-dark">Upload corrections</span>
-    {% endif %}
-  </div>
-
-  {% if not task_doc_slots %}
-    <p class="text-secondary small mb-0">
-      No file types linked to <strong>{{ task.task_master.name }}</strong>.
-      <a href="{% url 'task_document_mapping_list' %}">Configure task → document links</a> in Settings.
-    </p>
-  {% else %}
-    <p class="text-secondary small mb-3">
-      Period for this task: <strong>{{ task_doc_period_label }}</strong>
-      {% if task_doc_period_fy and task_doc_period_fy != "—" %}(FY {{ task_doc_period_fy }}){% endif %}
-    </p>
-    <div class="table-responsive">
-      <table class="table table-sm mb-0">
-        <thead>
-          <tr>
-            <th>Folder</th>
-            <th>File type</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for slot in task_doc_slots %}
-            <tr>
-              <td>{{ slot.folder_name }}</td>
-              <td>{{ slot.document_type.name }}</td>
-              <td class="small">
-                {% if slot.document %}
-                  <span class="text-success">Uploaded</span><br>
-                  <span class="text-secondary">{{ slot.document.generated_filename }} (v{{ slot.document.version }})</span>
-                {% else %}
-                  <span class="text-warning">Missing</span>
-                {% endif %}
-              </td>
-              <td class="text-end text-nowrap">
-                {% if slot.document %}
-                  <a
-                    class="btn btn-sm btn-outline-secondary"
-                    href="{% url 'client_document_view' slot.document.pk %}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >View</a>
-                  {% if slot.can_upload %}
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-outline-primary js-task-doc-replace-open"
-                      data-replace-url="{% url 'client_document_replace' slot.document.pk %}"
-                      data-next="{% url 'task_detail' task.pk %}"
-                      data-client="{{ task.client.client_name }}"
-                      data-folder="{{ slot.folder_name }}"
-                      data-file-type="{{ slot.document_type.name }}"
-                      data-fy="{{ slot.document|document_fy }}"
-                      data-period="{{ slot.document|document_period }}"
-                      data-filename="{{ slot.document.generated_filename }}"
-                      data-version="{{ slot.document.version }}"
-                      data-extensions="{{ slot.document_type.allowed_extensions }}"
-                    >Replace</button>
-                  {% endif %}
-                {% elif slot.can_upload %}
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-primary js-task-doc-upload-open"
-                    data-doc-type-id="{{ slot.document_type.pk }}"
-                    data-doc-type-name="{{ slot.document_type.name }}"
-                    data-folder="{{ slot.folder_name }}"
-                    data-fy="{{ task_doc_period_fy }}"
-                    data-period="{{ task_doc_period_label }}"
-                    data-extensions="{{ slot.document_type.allowed_extensions }}"
-                  >Upload</button>
-                {% else %}
-                  <span class="small text-secondary">—</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% endif %}
-
-  {% if task_doc_locked and perms.documents.override_task_document_lock %}
-    <p class="small text-secondary mb-0 mt-2">You have permission to change documents on completed tasks (use ⋮ on files in the list below).</p>
-  {% endif %}
-</div>
-
-{% if perms.documents.add_clientdocument %}
-  <div class="modal fade" id="taskDocUploadModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <form method="post" action="{% url 'task_document_upload' task.pk %}" enctype="multipart/form-data" id="taskDocUploadForm">
-          {% csrf_token %}
-          <div class="modal-header">
-            <h5 class="modal-title">Upload file</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <dl class="row mb-3 small doc-replace-details">
-              <dt class="col-sm-4 text-secondary">Client</dt>
-              <dd class="col-sm-8 mb-2">{{ task.client.client_name }}</dd>
-              <dt class="col-sm-4 text-secondary">Folder</dt>
-              <dd class="col-sm-8 mb-2" id="taskUploadFolder">—</dd>
-              <dt class="col-sm-4 text-secondary">File type</dt>
-              <dd class="col-sm-8 mb-2" id="taskUploadFileType">—</dd>
-              <dt class="col-sm-4 text-secondary">FY</dt>
-              <dd class="col-sm-8 mb-2 mono" id="taskUploadFy">—</dd>
-              <dt class="col-sm-4 text-secondary">Period</dt>
-              <dd class="col-sm-8 mb-2 mono" id="taskUploadPeriod">—</dd>
-            </dl>
-            <input type="hidden" name="document_type_id" id="taskUploadDocTypeId" value="" />
-            <div class="mb-0">
-              <label class="form-label required-field" for="taskUploadFile">File</label>
-              <input type="file" name="file" class="form-control" id="taskUploadFile" required />
-              <div class="form-field-hint" id="taskUploadExtHint"></div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">Upload</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  {% include "documents/includes/document_replace_modal.html" %}
-  <script>
-    (function () {
-      var uploadModal = document.getElementById("taskDocUploadModal");
-      if (!uploadModal) return;
-      document.addEventListener("click", function (e) {
-        var btn = e.target.closest(".js-task-doc-upload-open");
-        if (!btn) return;
-        document.getElementById("taskUploadDocTypeId").value = btn.getAttribute("data-doc-type-id") || "";
-        document.getElementById("taskUploadFolder").textContent = btn.getAttribute("data-folder") || "—";
-        document.getElementById("taskUploadFileType").textContent = btn.getAttribute("data-doc-type-name") || "—";
-        document.getElementById("taskUploadFy").textContent = btn.getAttribute("data-fy") || "—";
-        document.getElementById("taskUploadPeriod").textContent = btn.getAttribute("data-period") || "—";
-        var exts = (btn.getAttribute("data-extensions") || "").split(",").map(function (x) {
-          return x.trim().toLowerCase();
-        }).filter(Boolean);
-        var hint = document.getElementById("taskUploadExtHint");
-        var fileEl = document.getElementById("taskUploadFile");
-        if (hint) hint.textContent = exts.length ? "Allowed: " + exts.join(", ").toUpperCase() : "";
-        if (fileEl) {
-          fileEl.value = "";
-          fileEl.accept = exts.length ? exts.map(function (e) { return "." + e; }).join(",") : "";
-        }
-        if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(uploadModal).show();
-      });
-      document.querySelectorAll(".js-task-doc-replace-open").forEach(function (btn) {
-        btn.addEventListener("click", function (e) {
-          e.preventDefault();
-          var next = btn.getAttribute("data-next");
-          var nextInput = document.getElementById("docReplaceNext");
-          if (nextInput && next) nextInput.value = next;
-          var form = document.getElementById("docReplaceForm");
-          if (form) form.action = btn.getAttribute("data-replace-url") || "";
-          document.getElementById("docReplaceClient").textContent = btn.getAttribute("data-client") || "—";
-          document.getElementById("docReplaceFolder").textContent = btn.getAttribute("data-folder") || "—";
-          document.getElementById("docReplaceFileType").textContent = btn.getAttribute("data-file-type") || "—";
-          document.getElementById("docReplaceFy").textContent = btn.getAttribute("data-fy") || "—";
-          document.getElementById("docReplacePeriod").textContent = btn.getAttribute("data-period") || "—";
-          document.getElementById("docReplaceFilename").textContent = btn.getAttribute("data-filename") || "—";
-          document.getElementById("docReplaceVersion").textContent = btn.getAttribute("data-version") ? "v" + btn.getAttribute("data-version") : "—";
-          var exts = (btn.getAttribute("data-extensions") || "").split(",").filter(Boolean);
-          var hint = document.getElementById("docReplaceExtHint");
-          var fileInput = document.getElementById("id_doc_replace_file");
-          if (hint) hint.textContent = exts.length ? "Allowed: " + exts.join(", ").toUpperCase() : "";
-          if (fileInput) {
-            fileInput.value = "";
-            fileInput.accept = exts.length ? exts.map(function (e) { return "." + e.replace(/^\./, ""); }).join(",") : "";
-          }
-          var repModal = document.getElementById("docReplaceModal");
-          if (repModal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(repModal).show();
-        });
-      });
-    })();
-  </script>
-{% endif %}
+{% load document_extras %}
+
+<div class="card p-3 mb-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <h6 class="mb-0">Documents for this task</h6>
+    {% if task_doc_locked %}
+      <span class="badge text-bg-secondary">Locked — task complete</span>
+    {% elif task.status == "document_rework" %}
+      <span class="badge text-bg-warning text-dark">Upload corrections</span>
+    {% elif task.status == "pending_assignment" %}
+      <span class="badge text-bg-info text-dark">Supporting &amp; KYC only until approved</span>
+    {% endif %}
+  </div>
+
+  {% if not task_doc_slots %}
+    <p class="text-secondary small mb-0">
+      No folders linked to <strong>{{ task.task_master.name }}</strong>, or no file types defined in those folders yet.
+      <a href="{% url 'task_document_mapping_list' %}">Configure task → folder links</a> in Settings.
+    </p>
+  {% else %}
+    <p class="text-secondary small mb-3">
+      Period for this task: <strong>{{ task_doc_period_label }}</strong>
+      {% if task_doc_period_fy and task_doc_period_fy != "—" %}(FY {{ task_doc_period_fy }}){% endif %}
+    </p>
+    {% if task.status == "pending_assignment" %}
+      <p class="text-secondary small mb-3">
+        Other documents can be uploaded after assignees approve this task. Supporting Documents and KYC Documents are available now.
+      </p>
+    {% endif %}
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Folder</th>
+            <th>File type</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for slot in task_doc_slots %}
+            <tr>
+              <td>{% if not slot.upload_only or not slot.document %}{{ slot.folder_name }}{% else %}<span class="text-secondary">—</span>{% endif %}</td>
+              <td>{% if not slot.upload_only %}{{ slot.document_type.name }}{% else %}<span class="text-secondary small">Add another file</span>{% endif %}</td>
+              <td class="small">
+                {% if slot.upload_only %}
+                  <span class="text-secondary">—</span>
+                {% elif slot.document %}
+                  <span class="text-success">Uploaded</span><br>
+                  <span class="text-secondary">{{ slot.document.generated_filename }}{% if slot.document.version > 1 %} (v{{ slot.document.version }}){% endif %}</span>
+                {% else %}
+                  <span class="text-warning">No files yet</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if slot.document %}
+                  {% include "tasks/includes/task_document_row_actions.html" with doc=slot.document can_change=slot.can_change slot=slot task=task %}
+                {% elif slot.can_upload %}
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary js-task-doc-upload-open"
+                    data-doc-type-id="{{ slot.document_type.pk }}"
+                    data-doc-type-name="{{ slot.document_type.name }}"
+                    data-folder="{{ slot.folder_name }}"
+                    data-fy="{{ task_doc_period_fy }}"
+                    data-period="{{ task_doc_period_label }}"
+                    data-extensions="{{ slot.document_type.allowed_extensions }}"
+                    data-allow-custom-name="{% if slot.allow_custom_filename %}1{% else %}0{% endif %}"
+                  >{% if slot.upload_only %}Upload another{% else %}Upload{% endif %}</button>
+                {% else %}
+                  <span class="small text-secondary">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if task_doc_locked and perms.documents.override_task_document_lock %}
+    <p class="small text-secondary mb-0 mt-2">You have permission to change documents on completed tasks.</p>
+  {% endif %}
+</div>
+
+{% if perms.documents.add_clientdocument %}
+  <div class="modal fade" id="taskDocUploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form method="post" action="{% url 'task_document_upload' task.pk %}" enctype="multipart/form-data" id="taskDocUploadForm">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title">Upload file</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <dl class="row mb-3 small doc-replace-details">
+              <dt class="col-sm-4 text-secondary">Client</dt>
+              <dd class="col-sm-8 mb-2">{{ task.client.client_name }}</dd>
+              <dt class="col-sm-4 text-secondary">Folder</dt>
+              <dd class="col-sm-8 mb-2" id="taskUploadFolder">—</dd>
+              <dt class="col-sm-4 text-secondary">File type</dt>
+              <dd class="col-sm-8 mb-2" id="taskUploadFileType">—</dd>
+              <dt class="col-sm-4 text-secondary">FY</dt>
+              <dd class="col-sm-8 mb-2 mono" id="taskUploadFy">—</dd>
+              <dt class="col-sm-4 text-secondary">Period</dt>
+              <dd class="col-sm-8 mb-2 mono" id="taskUploadPeriod">—</dd>
+            </dl>
+            <input type="hidden" name="document_type_id" id="taskUploadDocTypeId" value="" />
+            <div class="mb-3 d-none" id="taskUploadNameWrap">
+              <label class="form-label required-field" for="taskUploadDisplayName">File name</label>
+              <input type="text" name="custom_display_name" class="form-control" id="taskUploadDisplayName" maxlength="120" placeholder="e.g. Board resolution" />
+              <div class="form-field-hint">FY and period are added automatically to the saved file name.</div>
+            </div>
+            <div class="mb-0">
+              <label class="form-label required-field" for="taskUploadFile">File</label>
+              <input type="file" name="file" class="form-control" id="taskUploadFile" required />
+              <div class="form-field-hint" id="taskUploadExtHint"></div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="taskDocEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form method="post" action="" enctype="multipart/form-data" id="taskDocEditForm">
+          {% csrf_token %}
+          <input type="hidden" name="next" id="taskDocEditNext" value="{% url 'task_detail' task.pk %}" />
+          <div class="modal-header">
+            <h5 class="modal-title">Edit file name</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-secondary small">Change the name only. FY and period stay the same.</p>
+            <label class="form-label required-field" for="taskDocEditName">File name</label>
+            <input type="text" name="display_name" class="form-control" id="taskDocEditName" maxlength="120" required />
+            <p class="form-field-hint mb-0 mt-2" id="taskDocEditCurrent"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {% include "documents/includes/document_replace_modal.html" %}
+
+  <script>
+    (function () {
+      var uploadModal = document.getElementById("taskDocUploadModal");
+      if (!uploadModal) return;
+
+      document.addEventListener("click", function (e) {
+        var btn = e.target.closest(".js-task-doc-upload-open");
+        if (!btn) return;
+        document.getElementById("taskUploadDocTypeId").value = btn.getAttribute("data-doc-type-id") || "";
+        document.getElementById("taskUploadFolder").textContent = btn.getAttribute("data-folder") || "—";
+        document.getElementById("taskUploadFileType").textContent = btn.getAttribute("data-doc-type-name") || "—";
+        document.getElementById("taskUploadFy").textContent = btn.getAttribute("data-fy") || "—";
+        document.getElementById("taskUploadPeriod").textContent = btn.getAttribute("data-period") || "—";
+        var nameWrap = document.getElementById("taskUploadNameWrap");
+        var nameInput = document.getElementById("taskUploadDisplayName");
+        var allowCustom = btn.getAttribute("data-allow-custom-name") === "1";
+        if (nameWrap) nameWrap.classList.toggle("d-none", !allowCustom);
+        if (nameInput) {
+          nameInput.required = allowCustom;
+          nameInput.value = "";
+        }
+        var exts = (btn.getAttribute("data-extensions") || "").split(",").map(function (x) {
+          return x.trim().toLowerCase();
+        }).filter(Boolean);
+        var hint = document.getElementById("taskUploadExtHint");
+        var fileEl = document.getElementById("taskUploadFile");
+        if (hint) hint.textContent = exts.length ? "Allowed: " + exts.join(", ").toUpperCase() : "";
+        if (fileEl) {
+          fileEl.value = "";
+          fileEl.accept = exts.length ? exts.map(function (e) { return "." + e; }).join(",") : "";
+        }
+        if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(uploadModal).show();
+      });
+
+      document.addEventListener("click", function (e) {
+        var btn = e.target.closest(".js-task-doc-replace-open");
+        if (!btn) return;
+        e.preventDefault();
+        var nextInput = document.getElementById("docReplaceNext");
+        if (nextInput) nextInput.value = btn.getAttribute("data-next") || "";
+        var form = document.getElementById("docReplaceForm");
+        if (form) form.action = btn.getAttribute("data-replace-url") || "";
+        document.getElementById("docReplaceClient").textContent = btn.getAttribute("data-client") || "—";
+        document.getElementById("docReplaceFolder").textContent = btn.getAttribute("data-folder") || "—";
+        document.getElementById("docReplaceFileType").textContent = btn.getAttribute("data-file-type") || "—";
+        document.getElementById("docReplaceFy").textContent = btn.getAttribute("data-fy") || "—";
+        document.getElementById("docReplacePeriod").textContent = btn.getAttribute("data-period") || "—";
+        document.getElementById("docReplaceFilename").textContent = btn.getAttribute("data-filename") || "—";
+        document.getElementById("docReplaceVersion").textContent = btn.getAttribute("data-version") ? "v" + btn.getAttribute("data-version") : "—";
+        var exts = (btn.getAttribute("data-extensions") || "").split(",").filter(Boolean);
+        var hint = document.getElementById("docReplaceExtHint");
+        var fileInput = document.getElementById("id_doc_replace_file");
+        if (hint) hint.textContent = exts.length ? "Allowed: " + exts.join(", ").toUpperCase() : "";
+        if (fileInput) {
+          fileInput.value = "";
+          fileInput.accept = exts.length ? exts.map(function (e) { return "." + e.replace(/^\./, ""); }).join(",") : "";
+        }
+        var repModal = document.getElementById("docReplaceModal");
+        if (repModal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(repModal).show();
+      });
+
+      document.addEventListener("click", function (e) {
+        var btn = e.target.closest(".js-task-doc-edit-open");
+        if (!btn) return;
+        e.preventDefault();
+        var form = document.getElementById("taskDocEditForm");
+        if (form) form.action = btn.getAttribute("data-rename-url") || "";
+        var nameInput = document.getElementById("taskDocEditName");
+        var current = btn.getAttribute("data-filename") || "";
+        if (nameInput) {
+          var base = current.replace(/\.[^.]+$/, "").replace(/_FY[^_]+(?:_.*)?$/, "");
+          nameInput.value = base;
+        }
+        var curEl = document.getElementById("taskDocEditCurrent");
+        if (curEl) curEl.textContent = current ? "Current: " + current : "";
+        var editModal = document.getElementById("taskDocEditModal");
+        if (editModal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(editModal).show();
+      });
+    })();
+  </script>
+{% endif %}

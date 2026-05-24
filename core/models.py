@@ -161,3 +161,46 @@ class ActivityLog(models.Model):
         who = self.user_email or (self.user.email if self.user_id else "—")
         return f"{who} {self.method} {self.path}"
 
+
+def site_settings_upload_to(instance, filename: str) -> str:
+    ext = (filename.rsplit(".", 1)[-1] if "." in filename else "bin").lower()
+    return f"branding/logo.{ext}"
+
+
+class SiteSettings(models.Model):
+    """Singleton office branding (company name + logo)."""
+
+    company_name = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="Shown above CA Office Suite in the sidebar and on the login page.",
+    )
+    logo = models.FileField(
+        upload_to=site_settings_upload_to,
+        blank=True,
+        null=True,
+        help_text="PNG, JPG, WEBP, GIF, or SVG. Recommended height about 40px.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Site settings"
+        verbose_name_plural = "Site settings"
+
+    def __str__(self) -> str:
+        return self.company_name or "Site settings"
+
+    @classmethod
+    def load(cls) -> "SiteSettings":
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.logo:
+            self.logo.delete(save=False)
+        super().delete(*args, **kwargs)
+

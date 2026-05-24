@@ -1,101 +1,202 @@
-<div class="modal fade" id="docReplaceModal" tabindex="-1" aria-labelledby="docReplaceModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <form method="post" enctype="multipart/form-data" id="docReplaceForm" action="">
-        {% csrf_token %}
-        <input type="hidden" name="next" id="docReplaceNext" value="" />
-        <div class="modal-header">
-          <h5 class="modal-title" id="docReplaceModalLabel">Replace file</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p class="text-secondary small mb-3">
-            Folder, file type, and period cannot be changed. Upload a new file to create the next version.
-          </p>
-          <dl class="row mb-3 small doc-replace-details">
-            <dt class="col-sm-4 text-secondary">Client</dt>
-            <dd class="col-sm-8 mb-2" id="docReplaceClient">—</dd>
-            <dt class="col-sm-4 text-secondary">Folder</dt>
-            <dd class="col-sm-8 mb-2" id="docReplaceFolder">—</dd>
-            <dt class="col-sm-4 text-secondary">File type</dt>
-            <dd class="col-sm-8 mb-2" id="docReplaceFileType">—</dd>
-            <dt class="col-sm-4 text-secondary">FY</dt>
-            <dd class="col-sm-8 mb-2 mono" id="docReplaceFy">—</dd>
-            <dt class="col-sm-4 text-secondary">Period</dt>
-            <dd class="col-sm-8 mb-2 mono" id="docReplacePeriod">—</dd>
-            <dt class="col-sm-4 text-secondary">Current file</dt>
-            <dd class="col-sm-8 mb-2" id="docReplaceFilename">—</dd>
-            <dt class="col-sm-4 text-secondary">Version</dt>
-            <dd class="col-sm-8 mb-0" id="docReplaceVersion">—</dd>
-          </dl>
-          <div class="mb-0">
-            <label class="form-label required-field" for="id_doc_replace_file">New file</label>
-            <input
-              type="file"
-              name="file"
-              class="form-control"
-              id="id_doc_replace_file"
-              required
-            />
-            <div class="form-field-hint" id="docReplaceExtHint"></div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Upload replacement</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-<script>
-  (function () {
-    var modalEl = document.getElementById("docReplaceModal");
-    if (!modalEl) return;
-    var form = document.getElementById("docReplaceForm");
-    var fileInput = document.getElementById("id_doc_replace_file");
-    var extHint = document.getElementById("docReplaceExtHint");
-
-    function setText(id, value) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = value || "—";
-    }
-
-    document.addEventListener("click", function (e) {
-      var btn = e.target.closest(".js-doc-replace-open");
-      if (!btn) return;
-      e.preventDefault();
-      if (form) form.action = btn.getAttribute("data-replace-url") || "";
-      var next = document.getElementById("docReplaceNext");
-      if (next) next.value = window.location.pathname + window.location.search;
-      setText("docReplaceClient", btn.getAttribute("data-client"));
-      setText("docReplaceFolder", btn.getAttribute("data-folder"));
-      setText("docReplaceFileType", btn.getAttribute("data-file-type"));
-      setText("docReplaceFy", btn.getAttribute("data-fy"));
-      setText("docReplacePeriod", btn.getAttribute("data-period"));
-      setText("docReplaceFilename", btn.getAttribute("data-filename"));
-      setText("docReplaceVersion", btn.getAttribute("data-version") ? "v" + btn.getAttribute("data-version") : "—");
-      var exts = (btn.getAttribute("data-extensions") || "").split(",").map(function (x) {
-        return x.trim().toLowerCase();
-      }).filter(Boolean);
-      if (extHint) {
-        extHint.textContent = exts.length ? "Allowed: " + exts.join(", ").toUpperCase() : "";
-      }
-      if (fileInput) {
-        fileInput.value = "";
-        if (exts.length) {
-          fileInput.accept = exts.map(function (e) { return "." + e.replace(/^\./, ""); }).join(",");
-        } else {
-          fileInput.removeAttribute("accept");
-        }
-      }
-      if (window.bootstrap && bootstrap.Modal) {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
-      }
-    });
-
-    modalEl.addEventListener("hidden.bs.modal", function () {
-      if (fileInput) fileInput.value = "";
-    });
-  })();
-</script>
+<div class="modal fade" id="docReplaceModal" tabindex="-1" aria-labelledby="docReplaceModalLabel" aria-hidden="true">
+
+  <div class="modal-dialog modal-dialog-centered">
+
+    <div class="modal-content">
+
+      <form method="post" enctype="multipart/form-data" id="docReplaceForm" action="">
+
+        {% csrf_token %}
+
+        <input type="hidden" name="next" id="docReplaceNext" value="" />
+
+        <div class="modal-header">
+
+          <h5 class="modal-title" id="docReplaceModalLabel">Replace file</h5>
+
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+        </div>
+
+        <div class="modal-body">
+
+          <p class="text-secondary small mb-3">
+
+            Folder, file type, and period cannot be changed. Upload a new file to create the next version.
+
+          </p>
+
+          <dl class="row mb-3 small doc-replace-details">
+
+            <dt class="col-sm-4 text-secondary">Client</dt>
+
+            <dd class="col-sm-8 mb-2" id="docReplaceClient">—</dd>
+
+            <dt class="col-sm-4 text-secondary">Folder</dt>
+
+            <dd class="col-sm-8 mb-2" id="docReplaceFolder">—</dd>
+
+            <dt class="col-sm-4 text-secondary">File type</dt>
+
+            <dd class="col-sm-8 mb-2" id="docReplaceFileType">—</dd>
+
+            <dt class="col-sm-4 text-secondary">FY</dt>
+
+            <dd class="col-sm-8 mb-2 mono" id="docReplaceFy">—</dd>
+
+            <dt class="col-sm-4 text-secondary">Period</dt>
+
+            <dd class="col-sm-8 mb-2 mono" id="docReplacePeriod">—</dd>
+
+            <dt class="col-sm-4 text-secondary">Current file</dt>
+
+            <dd class="col-sm-8 mb-2" id="docReplaceFilename">—</dd>
+
+            <dt class="col-sm-4 text-secondary">Version</dt>
+
+            <dd class="col-sm-8 mb-0" id="docReplaceVersion">—</dd>
+
+          </dl>
+
+          <div class="mb-0">
+
+            <label class="form-label required-field" for="id_doc_replace_file">New file</label>
+
+            <input
+
+              type="file"
+
+              name="file"
+
+              class="form-control"
+
+              id="id_doc_replace_file"
+
+              required
+
+            />
+
+            <div class="form-field-hint" id="docReplaceExtHint"></div>
+
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+
+          <button type="submit" class="btn btn-primary">Upload replacement</button>
+
+        </div>
+
+      </form>
+
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+
+  (function () {
+
+    var modalEl = document.getElementById("docReplaceModal");
+
+    if (!modalEl) return;
+
+    var form = document.getElementById("docReplaceForm");
+
+    var fileInput = document.getElementById("id_doc_replace_file");
+
+    var extHint = document.getElementById("docReplaceExtHint");
+
+
+
+    function setText(id, value) {
+
+      var el = document.getElementById(id);
+
+      if (el) el.textContent = value || "—";
+
+    }
+
+
+
+    document.addEventListener("click", function (e) {
+
+      var btn = e.target.closest(".js-doc-replace-open");
+
+      if (!btn) return;
+
+      e.preventDefault();
+
+      if (form) form.action = btn.getAttribute("data-replace-url") || "";
+
+      var next = document.getElementById("docReplaceNext");
+
+      if (next) next.value = window.location.pathname + window.location.search;
+
+      setText("docReplaceClient", btn.getAttribute("data-client"));
+
+      setText("docReplaceFolder", btn.getAttribute("data-folder"));
+
+      setText("docReplaceFileType", btn.getAttribute("data-file-type"));
+
+      setText("docReplaceFy", btn.getAttribute("data-fy"));
+
+      setText("docReplacePeriod", btn.getAttribute("data-period"));
+
+      setText("docReplaceFilename", btn.getAttribute("data-filename"));
+
+      setText("docReplaceVersion", btn.getAttribute("data-version") ? "v" + btn.getAttribute("data-version") : "—");
+
+      var exts = (btn.getAttribute("data-extensions") || "").split(",").map(function (x) {
+
+        return x.trim().toLowerCase();
+
+      }).filter(Boolean);
+
+      if (extHint) {
+
+        extHint.textContent = exts.length ? "Allowed: " + exts.join(", ").toUpperCase() : "";
+
+      }
+
+      if (fileInput) {
+
+        fileInput.value = "";
+
+        if (exts.length) {
+
+          fileInput.accept = exts.map(function (e) { return "." + e.replace(/^\./, ""); }).join(",");
+
+        } else {
+
+          fileInput.removeAttribute("accept");
+
+        }
+
+      }
+
+      if (window.bootstrap && bootstrap.Modal) {
+
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+      }
+
+    });
+
+
+
+    modalEl.addEventListener("hidden.bs.modal", function () {
+
+      if (fileInput) fileInput.value = "";
+
+    });
+
+  })();
+
+</script>
+

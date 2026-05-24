@@ -267,4 +267,7 @@
 {% if can_upload_document %}
   {% include "documents/includes/document_replace_modal.html" %}
 {% endif %}
+{% if perms.documents.change_clientdocument %}
+  {% include "documents/includes/document_rename_modal.html" %}
+{% endif %}
 

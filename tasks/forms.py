@@ -24,6 +24,7 @@ from .models import Task, TaskGroup, TaskMaster
 from .period_keys import (
     HALF_CHOICES,
     MONTH_CHOICES,
+    PERIOD_ONE_TIME,
     PERIOD_TYPE_CHOICES,
     QUARTER_CHOICES,
     build_period_key,
@@ -31,8 +32,10 @@ from .period_keys import (
     period_type_for_task_master,
     task_fy_choices,
 )
+from .one_time_period import allocate_one_time_period_key
 
 from .period_overlap import validate_no_overlapping_task
+from .recurrence import compute_create_due_dates
 from .recurrence_config import validate_recurrence_config
 
 from .user_labels import staff_users_queryset, user_display_label
@@ -482,7 +485,10 @@ class TaskCreateForm(forms.Form):
 
     )
 
-    due_date = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    due_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date", "id": "id_due_date"}),
+    )
 
     priority = forms.ChoiceField(
 
@@ -568,6 +574,18 @@ class TaskCreateForm(forms.Form):
         self._staff_qs = staff_qs
 
         self._apply_locked_period_type_from_master()
+        self._apply_due_date_field_for_master()
+
+    def _apply_due_date_field_for_master(self) -> None:
+        master = self._master_from_form_data()
+        if master and master.is_recurring:
+            self.fields["due_date"].required = False
+            self.fields["due_date"].help_text = (
+                "Calculated automatically from the task master schedule for recurring tasks."
+            )
+        else:
+            self.fields["due_date"].required = True
+            self.fields["due_date"].help_text = "Required for one-time tasks."
 
     def _master_from_form_data(self) -> TaskMaster | None:
         raw = None
@@ -674,23 +692,24 @@ class TaskCreateForm(forms.Form):
             else:
                 fy_for_period = None
 
-            cleaned["period_key"] = build_period_key(
+            if period_type != PERIOD_ONE_TIME:
+                cleaned["period_key"] = build_period_key(
 
-                period_type,
+                    period_type,
 
-                month=_int_or_none(cleaned.get("period_month")),
+                    month=_int_or_none(cleaned.get("period_month")),
 
-                quarter=cleaned.get("period_quarter") or None,
+                    quarter=cleaned.get("period_quarter") or None,
 
-                fy_start=fy_for_period,
+                    fy_start=fy_for_period,
 
-                half=cleaned.get("period_half") or None,
+                    half=cleaned.get("period_half") or None,
 
-                year_from=_int_or_none(cleaned.get("period_year_from")),
+                    year_from=_int_or_none(cleaned.get("period_year_from")),
 
-                year_to=_int_or_none(cleaned.get("period_year_to")),
+                    year_to=_int_or_none(cleaned.get("period_year_to")),
 
-            )
+                )
 
         except DjangoValidationError as exc:
 
@@ -705,6 +724,23 @@ class TaskCreateForm(forms.Form):
                 self.add_error("period_type", exc.messages)
 
 
+
+        master = cleaned.get("task_master")
+        period_key = cleaned.get("period_key")
+        if master and master.is_recurring:
+            if period_key:
+                started = timezone.localdate()
+                _, due_date = compute_create_due_dates(master, period_key, started)
+                cleaned["due_date"] = due_date
+        elif period_type == PERIOD_ONE_TIME:
+            if not cleaned.get("due_date"):
+                self.add_error("due_date", "Due date is required for one-time tasks.")
+            elif client and master:
+                cleaned["period_key"] = allocate_one_time_period_key(
+                    client, master, cleaned["due_date"]
+                )
+        elif not cleaned.get("due_date"):
+            self.add_error("due_date", "Due date is required for one-time tasks.")
 
         if client and master and cleaned.get("period_key") and period_type:
             enr_started = None
