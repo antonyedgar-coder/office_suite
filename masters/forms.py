@@ -82,9 +82,15 @@ class ExpenseCategoryForm(forms.ModelForm):
 class PortalNameForm(forms.ModelForm):
     class Meta:
         model = PortalName
-        fields = ["name", "is_active"]
+        fields = ["name", "portal_url", "is_active"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. GST portal"}),
+            "portal_url": forms.URLInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "https://www.gst.gov.in/",
+                }
+            ),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 

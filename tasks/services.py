@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .checklist import copy_checklist_to_task
+from .checklist import copy_checklist_to_task, validate_checklist_before_submit
 from .client_type_rules import validate_submit_for_client_type
 from .models import (
     Task,
@@ -100,14 +100,22 @@ def _set_assignees(task: Task, assignee_ids: list[int], *, actor=None):
         )
 
 
-def resolve_task_billing(*, master: TaskMaster, is_billable=None, fees_amount=None):
+def resolve_task_billing(*, is_billable=None, fees_amount=None):
     billable = False if is_billable is None else bool(is_billable)
-    fees = fees_amount
-    if fees is None and billable:
-        fees = master.default_fees_amount
-    if not billable:
-        fees = None
+    fees = fees_amount if billable else None
     return billable, fees
+
+
+def _normalize_verifiers(*, verifiers=None, verifier=None):
+    if verifiers is not None:
+        users = list(verifiers)
+    elif verifier is not None:
+        users = [verifier]
+    else:
+        users = []
+    if not users:
+        raise ValidationError("At least one verifier is required.")
+    return users
 
 
 @transaction.atomic
@@ -159,9 +167,10 @@ def create_task_from_master(
     master: TaskMaster,
     client,
     assignee_users,
-    verifier,
     document_checker,
     created_by,
+    verifiers=None,
+    verifier=None,
     period_key: str | None = None,
     period_type: str = "",
     enrollment: TaskRecurrenceEnrollment | None = None,
@@ -179,8 +188,8 @@ def create_task_from_master(
     if due_date is None:
         _, due_date = compute_create_due_dates(master, pk, started)
 
+    verifier_users = _normalize_verifiers(verifiers=verifiers, verifier=verifier)
     billable, fees = resolve_task_billing(
-        master=master,
         is_billable=is_billable,
         fees_amount=fees_amount,
     )
@@ -198,7 +207,6 @@ def create_task_from_master(
         status=initial_status,
         priority=master.default_priority,
         due_date=due_date,
-        verifier=verifier,
         document_checker=document_checker,
         created_by=created_by,
         period_key=pk,
@@ -208,6 +216,7 @@ def create_task_from_master(
         fees_amount=fees,
         currency=master.default_currency or TaskMaster.CURRENCY_INR,
     )
+    task.verifiers.set(verifier_users)
     copy_checklist_to_task(task, master)
     ids = [u.pk for u in assignee_users]
     _set_assignees(task, ids, actor=created_by)
@@ -225,7 +234,7 @@ def create_task_from_master(
         new_status=task.status,
         metadata={
             "assignee_ids": ids,
-            "verifier_id": verifier.pk,
+            "verifier_ids": [u.pk for u in verifier_users],
             "document_checker_id": document_checker.pk,
         },
     )
@@ -287,19 +296,20 @@ def start_enrollment_if_recurring(
     master: TaskMaster,
     client,
     assignee_users,
-    verifier,
     document_checker,
     created_by,
+    verifiers=None,
+    verifier=None,
     started_at=None,
 ) -> TaskRecurrenceEnrollment | None:
     if not master.is_recurring:
         return None
+    verifier_users = _normalize_verifiers(verifiers=verifiers, verifier=verifier)
     started = started_at or timezone.localdate()
     enrollment, created = TaskRecurrenceEnrollment.objects.get_or_create(
         client=client,
         task_master=master,
         defaults={
-            "verifier": verifier,
             "document_checker": document_checker,
             "started_at": started,
             "created_by": created_by,
@@ -312,9 +322,9 @@ def start_enrollment_if_recurring(
     TaskEnrollmentAssignee.objects.filter(enrollment=enrollment).delete()
     for u in assignee_users:
         TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=u)
-    enrollment.verifier = verifier
     enrollment.document_checker = document_checker
-    enrollment.save(update_fields=["verifier", "document_checker", "updated_at"])
+    enrollment.save(update_fields=["document_checker", "updated_at"])
+    enrollment.verifiers.set(verifier_users)
     return enrollment
 
 
@@ -329,13 +339,15 @@ def submit_task(task: Task, user) -> Task:
     if task.status == Task.STATUS_DOCUMENT_REWORK:
         return resubmit_for_document_check(task, user)
     validate_submit_for_client_type(task)
+    validate_checklist_before_submit(task)
     transition_task_status(task, Task.STATUS_SUBMITTED, user=user)
-    notify_user(
-        task.verifier,
-        f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
+    from .verifiers import notify_task_verifiers
+
+    notify_task_verifiers(
+        task,
+        message=f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
         kind=TaskNotification.KIND_VERIFY,
         link=f"/tasks/{task.pk}/",
-        task=task,
     )
     return task
 
@@ -389,8 +401,10 @@ def send_back_for_document_correction(task: Task, user, message: str = "") -> Ta
 
 @transaction.atomic
 def verify_task(task: Task, user, message: str = "") -> Task:
-    if task.verifier_id != user.pk and not user.is_superuser:
-        raise ValidationError("Only the designated verifier can verify this task.")
+    from .verifiers import user_is_task_verifier
+
+    if not user_is_task_verifier(user, task):
+        raise ValidationError("Only a designated verifier can verify this task.")
     if not hasattr(task, "client") or not hasattr(task, "task_master"):
         task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
     if (getattr(task.client, "client_type", None) or "").strip() == "New Client":
@@ -449,14 +463,15 @@ def complete_task(task: Task, user, message: str = "") -> Task:
             link=f"/tasks/{task.pk}/",
             task=task,
         )
-    if task.verifier_id and task.verifier_id != user.pk:
-        notify_user(
-            task.verifier,
-            f"Task complete: {task.display_title} — {format_task_client_suffix(task)}",
-            kind=TaskNotification.KIND_APPROVED,
-            link=f"/tasks/{task.pk}/",
-            task=task,
-        )
+    from .verifiers import notify_task_verifiers
+
+    notify_task_verifiers(
+        task,
+        message=f"Task complete: {task.display_title} — {format_task_client_suffix(task)}",
+        kind=TaskNotification.KIND_APPROVED,
+        link=f"/tasks/{task.pk}/",
+        exclude_user_ids={user.pk},
+    )
     return task
 
 
@@ -536,29 +551,33 @@ def update_task_team(
     task: Task,
     *,
     assignee_users,
-    verifier,
+    verifiers,
     document_checker,
     due_date,
     priority,
     actor,
+    verifier=None,
 ) -> Task:
     if not task_team_is_editable(task):
         raise ValidationError("This task cannot be edited in its current status.")
 
-    old_verifier_id = task.verifier_id
+    verifier_users = _normalize_verifiers(verifiers=verifiers, verifier=verifier)
+    old_verifier_ids = set(task.verifiers.values_list("pk", flat=True))
+    new_verifier_ids = {u.pk for u in verifier_users}
     old_doc_id = task.document_checker_id
     old_assignee_ids = set(task.assignments.values_list("user_id", flat=True))
     new_assignee_ids = {u.pk for u in assignee_users}
 
-    task.verifier = verifier
     task.document_checker = document_checker
     task.due_date = due_date
     task.priority = priority
-    task.save(update_fields=["verifier", "document_checker", "due_date", "priority", "updated_at"])
+    task.save(update_fields=["document_checker", "due_date", "priority", "updated_at"])
+    task.verifiers.set(verifier_users)
 
     changes: list[str] = []
-    if old_verifier_id != verifier.pk:
-        changes.append(f"Verifier set to {user_person_name(verifier)}.")
+    if old_verifier_ids != new_verifier_ids:
+        names = ", ".join(user_person_name(u) for u in verifier_users)
+        changes.append(f"Verifiers set to {names}.")
     if old_doc_id != document_checker.pk:
         changes.append(f"Document checker set to {user_person_name(document_checker)}.")
     if changes:
@@ -569,9 +588,9 @@ def update_task_team(
 
     if task.enrollment_id:
         enrollment = task.enrollment
-        enrollment.verifier = verifier
         enrollment.document_checker = document_checker
-        enrollment.save(update_fields=["verifier", "document_checker", "updated_at"])
+        enrollment.save(update_fields=["document_checker", "updated_at"])
+        enrollment.verifiers.set(verifier_users)
         TaskEnrollmentAssignee.objects.filter(enrollment=enrollment).delete()
         for u in assignee_users:
             TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=u)
@@ -598,10 +617,12 @@ def update_task_team(
                 task=task,
             )
 
-    if old_verifier_id != verifier.pk:
+    added_verifier_ids = new_verifier_ids - old_verifier_ids
+    for uid in added_verifier_ids:
+        u = User.objects.get(pk=uid)
         if task.status == Task.STATUS_PENDING_ASSIGNMENT:
             notify_user(
-                verifier,
+                u,
                 f"Approve task assignment: {task.display_title} — {format_task_client_suffix(task)}",
                 kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
                 link=f"/tasks/{task.pk}/",
@@ -609,7 +630,7 @@ def update_task_team(
             )
         elif task.status == Task.STATUS_SUBMITTED:
             notify_user(
-                verifier,
+                u,
                 f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
                 kind=TaskNotification.KIND_VERIFY,
                 link=f"/tasks/{task.pk}/",
@@ -691,7 +712,7 @@ def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, to
         master=master,
         client=enrollment.client,
         assignee_users=assignees,
-        verifier=enrollment.verifier,
+        verifiers=list(enrollment.verifiers.all()),
         document_checker=enrollment.document_checker,
         created_by=enrollment.created_by,
         period_key=period_key,

@@ -3,7 +3,6 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 from django.utils import timezone
 
 from core.created_by import created_by_field
@@ -63,13 +62,6 @@ class TaskMaster(models.Model):
     is_recurring = models.BooleanField(default=False)
     frequency = models.CharField(max_length=32, choices=FREQUENCY_CHOICES, blank=True)
     recurrence_config = models.JSONField(default=dict, blank=True)
-    default_fees_amount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Suggested fee when creating a billable task (each task stores its own copy).",
-    )
     default_currency = models.CharField(max_length=8, default=CURRENCY_INR)
     archived_at = models.DateTimeField(null=True, blank=True)
     created_by = created_by_field()
@@ -132,9 +124,8 @@ class TaskMasterChecklistItem(models.Model):
 class TaskRecurrenceEnrollment(models.Model):
     client = models.ForeignKey("masters.Client", on_delete=models.CASCADE, related_name="task_enrollments")
     task_master = models.ForeignKey(TaskMaster, on_delete=models.PROTECT, related_name="enrollments")
-    verifier = models.ForeignKey(
+    verifiers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
         related_name="task_enrollments_as_verifier",
     )
     document_checker = models.ForeignKey(
@@ -229,9 +220,8 @@ class Task(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ASSIGNED, db_index=True)
     priority = models.CharField(max_length=16, choices=TaskMaster.PRIORITY_CHOICES, default=TaskMaster.PRIORITY_NORMAL)
     due_date = models.DateField()
-    verifier = models.ForeignKey(
+    verifiers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
         related_name="tasks_to_verify",
     )
     document_checker = models.ForeignKey(
@@ -313,14 +303,10 @@ class Task(models.Model):
                 fields=["client", "task_master", "period_key"],
                 name="tasks_task_client_master_period_uniq",
             ),
-            models.CheckConstraint(
-                check=Q(is_billable=False) | Q(fees_amount__isnull=False),
-                name="tasks_task_billable_requires_fees",
-            ),
         ]
         indexes = [
             models.Index(fields=["client", "status"]),
-            models.Index(fields=["verifier", "status"]),
+            models.Index(fields=["status"]),
             models.Index(fields=["document_checker", "status"]),
             models.Index(fields=["due_date", "status"]),
         ]
@@ -341,11 +327,6 @@ class Task(models.Model):
         if code == "approved":
             return "Verified"
         return dict(cls.STATUS_CHOICES).get(code, code or "")
-
-    def clean(self):
-        if self.is_billable and self.fees_amount is None:
-            raise ValidationError({"fees_amount": "Fees amount is required for billable tasks."})
-
 
 class TaskAssignment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="assignments")
@@ -379,6 +360,10 @@ class TaskChecklistItem(models.Model):
     )
     label = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
+    is_not_applicable = models.BooleanField(
+        default=False,
+        help_text="Marked N/A when this step does not apply to this task.",
+    )
     is_done = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by = models.ForeignKey(

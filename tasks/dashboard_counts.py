@@ -154,7 +154,7 @@ def _document_check_queue_qs(base, user):
 
 
 def _verify_queue_qs(base, user):
-    return base.filter(verifier=user, status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
+    return base.filter(verifiers=user, status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
 
 
 def _task_detail_cards(

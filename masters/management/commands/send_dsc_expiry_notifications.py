@@ -6,7 +6,9 @@ from masters.dsc_expiry_notifications import send_dsc_expiry_notifications
 class Command(BaseCommand):
     help = (
         "Send DSC expiry in-app notifications (30 days before expiry, every 7 days) "
-        "for the latest DSC per client when expiry notification is enabled."
+        "for the latest DSC per client when expiry notification is enabled. "
+        "Schedule once per day on the server (cron or App Platform job), e.g. "
+        "python manage.py send_dsc_expiry_notifications"
     )
 
     def add_arguments(self, parser):

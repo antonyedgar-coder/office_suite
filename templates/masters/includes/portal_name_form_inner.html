@@ -17,6 +17,12 @@
           {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
           <div class="form-field-hint">Used in portal password records (e.g. GST, MCA).</div>
         </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.portal_url.id_for_label }}">Portal link (URL)</label>
+          {{ form.portal_url }}
+          {% if form.portal_url.errors %}<div class="text-danger small">{{ form.portal_url.errors }}</div>{% endif %}
+          <div class="form-field-hint">Optional. Opens from password management (e.g. https://www.gst.gov.in/).</div>
+        </div>
         <div class="col-12 col-md-6 d-flex align-items-end">
           <div class="form-check">
             {{ form.is_active }}

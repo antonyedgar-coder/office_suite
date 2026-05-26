@@ -19,7 +19,7 @@
         {% if show_master_requests_nav %}
           <a class="nav-link {% if url_name in 'master_request_list master_request_create master_request_detail master_request_notification_list master_request_notification_mark_read' %}active{% endif %}" href="{% url 'master_request_list' %}">
             <i class="bi bi-send nav-link-icon" aria-hidden="true"></i><span>Master requests</span>
-            {% if master_request_nav_pending_count %}<span class="badge rounded-pill text-bg-danger ms-auto">{{ master_request_nav_pending_count }}</span>{% endif %}
+            <span class="badge rounded-pill text-bg-danger ms-auto" data-nav-badge="master_requests"{% if not master_request_nav_pending_count %} hidden{% endif %}>{{ master_request_nav_pending_count }}</span>
           </a>
         {% endif %}
         {% if user.is_superuser or perms.masters.view_client %}
@@ -67,7 +67,7 @@
         {% if may_view_dsc_alerts %}
           <a class="nav-link {% if url_name in 'dsc_notification_list dsc_notification_mark_read' %}active{% endif %}" href="{% url 'dsc_notification_list' %}">
             <i class="bi bi-bell nav-link-icon" aria-hidden="true"></i><span>Expiry alerts</span>
-            {% if dsc_nav_notification_count %}<span class="badge rounded-pill text-bg-danger ms-auto">{{ dsc_nav_notification_count }}</span>{% endif %}
+            <span class="badge rounded-pill text-bg-danger ms-auto" data-nav-badge="dsc_notifications"{% if not dsc_nav_notification_count %} hidden{% endif %}>{{ dsc_nav_notification_count }}</span>
           </a>
         {% endif %}
       </div>

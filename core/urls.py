@@ -4,6 +4,7 @@ from . import employee_views, group_views, views as core_views
 
 urlpatterns = [
     path("", core_views.dashboard_view, name="dashboard"),
+    path("api/nav-counts/", core_views.nav_counts_api, name="nav_counts_api"),
     path("settings/", core_views.settings_hub, name="settings_hub"),
     path("settings/branding/", core_views.site_settings_edit, name="site_settings_edit"),
     path("branding/logo/", core_views.site_logo, name="site_logo"),

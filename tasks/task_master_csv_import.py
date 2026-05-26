@@ -100,7 +100,6 @@ def parse_task_masters_csv(csv_bytes: bytes) -> tuple[list[TaskMasterParsedRow],
         description = gv("DESCRIPTION")
         priority = (gv("DEFAULT_PRIORITY") or TaskMaster.PRIORITY_NORMAL).lower()
         frequency = (gv("FREQUENCY") or "").lower().replace(" ", "_")
-        fees_raw = gv("DEFAULT_FEES_AMOUNT")
         checklist_raw = gv("CHECKLIST_ITEMS")
         recurrence_json_raw = gv("RECURRENCE_CONFIG_JSON")
 
@@ -176,7 +175,6 @@ def parse_task_masters_csv(csv_bytes: bytes) -> tuple[list[TaskMasterParsedRow],
             "is_active": is_active,
             "is_recurring": is_recurring,
             "frequency": frequency,
-            "default_fees_amount": default_fees,
             "checklist_items": checklist_items,
             "recurrence_config": recurrence_config,
         }
@@ -191,7 +189,6 @@ def parse_task_masters_csv(csv_bytes: bytes) -> tuple[list[TaskMasterParsedRow],
                     is_active=is_active,
                     is_recurring=is_recurring,
                     frequency=frequency,
-                    default_fees_amount=default_fees,
                     recurrence_config=recurrence_config if is_recurring else {},
                 )
                 obj.full_clean()

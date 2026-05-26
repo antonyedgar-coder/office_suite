@@ -26,6 +26,13 @@
         {% if not none_client_can_submit and task.status != "document_rework" %}
           <p class="small text-warning-emphasis mb-0 mt-2">{{ none_client_submit_message }}</p>
         {% endif %}
+        {% if checklist_items and not checklist_complete %}
+          {% if task.status == "assigned" or task.status == "rework" %}
+            <p class="small text-warning-emphasis mb-0 mt-2">
+              Complete the checklist below (tick each applicable item or mark N/A) before submitting for verification.
+            </p>
+          {% endif %}
+        {% endif %}
         {% if task.status == "document_rework" %}
           <p class="small text-warning-emphasis mb-0 mt-2">Correct documents and resubmit; the task returns to the document checker only (verifier is not involved again).</p>
         {% endif %}
@@ -49,22 +56,58 @@
       {% endif %}
       {% if checklist_items %}
         <div class="card p-3 mt-3">
-          <h6 class="mb-3">Checklist</h6>
+          <h6 class="mb-2">Checklist</h6>
+          <p class="small text-secondary mb-3">
+            Mark each step <strong>Appl</strong> (then tick when done) or <strong>NA</strong> if it does not apply.
+          </p>
           <ul class="list-unstyled mb-0">
             {% for item in checklist_items %}
-              <li class="mb-2 d-flex align-items-start gap-2">
-                {% if can_toggle_checklist %}
-                  <form method="post" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="checklist_toggle" />
-                    <input type="hidden" name="item_id" value="{{ item.pk }}" />
-                    <input type="hidden" name="done" value="{% if item.is_done %}0{% else %}1{% endif %}" />
-                    <input type="checkbox" class="form-check-input mt-1" {% if item.is_done %}checked{% endif %} onchange="this.form.submit()" />
-                  </form>
-                {% else %}
-                  <input type="checkbox" class="form-check-input mt-1" disabled {% if item.is_done %}checked{% endif %} />
-                {% endif %}
-                <span class="{% if item.is_done %}text-decoration-line-through text-secondary{% endif %}">{{ item.label }}</span>
+              <li class="mb-3 pb-2 border-bottom">
+                <div class="d-flex align-items-start gap-2 flex-wrap">
+                  {% if can_toggle_checklist %}
+                    <div class="btn-group btn-group-sm flex-shrink-0" role="group" aria-label="Applicable or N/A">
+                      <form method="post" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="checklist_set" />
+                        <input type="hidden" name="item_id" value="{{ item.pk }}" />
+                        <input type="hidden" name="mode" value="appl" />
+                        <button
+                          type="submit"
+                          class="btn {% if not item.is_not_applicable %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                        >Appl</button>
+                      </form>
+                      <form method="post" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="checklist_set" />
+                        <input type="hidden" name="item_id" value="{{ item.pk }}" />
+                        <input type="hidden" name="mode" value="na" />
+                        <button
+                          type="submit"
+                          class="btn {% if item.is_not_applicable %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+                        >NA</button>
+                      </form>
+                    </div>
+                    {% if not item.is_not_applicable %}
+                      <form method="post" class="m-0 d-flex align-items-start gap-2 flex-grow-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="checklist_toggle" />
+                        <input type="hidden" name="item_id" value="{{ item.pk }}" />
+                        <input type="hidden" name="done" value="{% if item.is_done %}0{% else %}1{% endif %}" />
+                        <input type="checkbox" class="form-check-input mt-1" {% if item.is_done %}checked{% endif %} onchange="this.form.submit()" aria-label="Mark complete" />
+                        <span class="{% if item.is_done %}text-decoration-line-through text-secondary{% endif %}">{{ item.label }}</span>
+                      </form>
+                    {% else %}
+                      <span class="text-secondary"><span class="badge text-bg-secondary me-1">N/A</span>{{ item.label }}</span>
+                    {% endif %}
+                  {% else %}
+                    {% if item.is_not_applicable %}
+                      <span class="badge text-bg-secondary">N/A</span>
+                    {% else %}
+                      <input type="checkbox" class="form-check-input mt-1" disabled {% if item.is_done %}checked{% endif %} />
+                    {% endif %}
+                    <span class="{% if item.is_done %}text-decoration-line-through text-secondary{% elif item.is_not_applicable %}text-secondary{% endif %}">{{ item.label }}</span>
+                  {% endif %}
+                </div>
               </li>
             {% endfor %}
           </ul>

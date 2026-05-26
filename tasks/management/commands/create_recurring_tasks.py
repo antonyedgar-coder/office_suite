@@ -13,8 +13,8 @@ class Command(BaseCommand):
         created = 0
         skipped = 0
         for enrollment in TaskRecurrenceEnrollment.objects.filter(is_active=True).select_related(
-            "client", "task_master", "verifier"
-        ).prefetch_related("assignees"):
+            "client", "task_master"
+        ).prefetch_related("assignees", "verifiers"):
             task = try_create_recurring_for_enrollment(enrollment, today)
             if task:
                 created += 1

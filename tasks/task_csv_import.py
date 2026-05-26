@@ -139,7 +139,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         client_id = _upper(_cell(raw, header_map, "CLIENT_ID"))
         master_raw = _cell(raw, header_map, "TASK_MASTER")
         assignee_raw = _cell(raw, header_map, "ASSIGNEE_EMAILS")
-        verifier_email = _cell(raw, header_map, "VERIFIER_EMAIL").lower()
+        verifier_emails_raw = _cell(raw, header_map, "VERIFIER_EMAIL")
         document_checker_email = _cell(raw, header_map, "DOCUMENT_CHECKER_EMAIL").lower()
         period_type = _cell(raw, header_map, "PERIOD_TYPE").lower().replace(" ", "_")
         due_raw = _cell(raw, header_map, "DUE_DATE")
@@ -192,8 +192,8 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         if user.is_authenticated:
             if user.pk in {u.pk for u in assignees}:
                 errors.append("Creator cannot be an assignee.")
-            if verifier and verifier.pk in {u.pk for u in assignees}:
-                errors.append("Verifier cannot be an assignee.")
+            if verifiers and {u.pk for u in verifiers}.intersection({u.pk for u in assignees}):
+                errors.append("A verifier cannot also be an assignee.")
             if document_checker and document_checker.pk in {u.pk for u in assignees}:
                 errors.append("Document checker cannot be an assignee.")
 
@@ -263,9 +263,6 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
                 fees_amount = Decimal(fees_raw)
             except InvalidOperation:
                 errors.append("FEES_AMOUNT must be a number.")
-        if is_billable and fees_amount is None:
-            errors.append("FEES_AMOUNT is required when IS_BILLABLE is YES.")
-
         if client and master and period_key and period_type and not errors:
             dup_key = (client.pk, master.pk, period_key)
             if dup_key in seen_keys:
@@ -292,7 +289,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
             "client": client,
             "task_master": master,
             "assignees": assignees,
-            "verifier": verifier,
+            "verifiers": verifiers,
             "document_checker": document_checker,
             "period_key": period_key,
             "period_type": period_type_stored,

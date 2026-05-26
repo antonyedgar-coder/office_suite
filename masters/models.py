@@ -768,6 +768,11 @@ class PortalName(models.Model):
     """Master list of portal names (GST, MCA, etc.) for password management."""
 
     name = models.CharField(max_length=120, unique=True)
+    portal_url = models.URLField(
+        max_length=500,
+        blank=True,
+        help_text="Optional login URL for this portal (shown in password management).",
+    )
     is_active = models.BooleanField(default=True)
     created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)

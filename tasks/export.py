@@ -8,6 +8,7 @@ from django.http import HttpResponse
 
 from .listing import TaskListFilters, filters_query_string, get_filtered_tasks, prepare_task_list_rows
 from .user_labels import user_person_name
+from .verifiers import format_task_verifier_names
 
 
 def task_list_csv_response(
@@ -66,7 +67,7 @@ def task_list_csv_response(
                 t.get_status_display(),
                 t.due_date.strftime("%d-%b-%Y") if t.due_date else "",
                 row.assignee_names,
-                user_person_name(t.verifier),
+                format_task_verifier_names(t),
                 row.submitted_date,
                 row.submitted_by_name,
                 row.verified_date,

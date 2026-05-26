@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Count, OuterRef, Subquery, Sum
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 
 from dirkyc.fy import earliest_next_dirkyc_allowed_date, fy_label_for_date, fy_label_to_date_range
@@ -20,6 +20,7 @@ from .activity_log import log_activity_from_request
 from .feature_flags import task_module_enabled
 from .forms import SiteSettingsForm
 from .settings_hub import build_settings_sections, user_may_open_settings
+from .nav_counts import build_nav_badge_counts
 from .site_settings import get_site_settings
 
 
@@ -313,6 +314,12 @@ def site_settings_edit(request):
         "core/site_settings_form.html",
         {"form": form, "settings": settings},
     )
+
+
+@login_required
+def nav_counts_api(request):
+    """JSON badge counts for sidebar polling (notifications without full page reload)."""
+    return JsonResponse(build_nav_badge_counts(request))
 
 
 def permission_denied_view(request, exception):

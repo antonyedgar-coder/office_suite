@@ -9,6 +9,22 @@ from .permission_utils import manageable_permissions
 
 User = get_user_model()
 
+_DSC_EXPIRY_NOTIFICATION_HELP = (
+    "Receives in-app DSC expiry alerts for clients in this user's branch. Users with "
+    "DSC view permission and superusers also receive alerts. On each DSC record, set "
+    "Expiry notification to Yes. The server must run daily: "
+    "python manage.py send_dsc_expiry_notifications"
+)
+
+
+def configure_dsc_expiry_notification_field(form: forms.ModelForm) -> None:
+    field = form.fields.get("receive_dsc_expiry_notifications")
+    if not field:
+        return
+    field.label = "DSC expiry notifications"
+    field.help_text = _DSC_EXPIRY_NOTIFICATION_HELP
+    field.widget.attrs.setdefault("class", "form-check-input")
+
 
 class EmployeeCreateForm(forms.ModelForm):
     """Official email becomes username; password set by admin. Client users must match Client Master email."""
@@ -82,6 +98,7 @@ class EmployeeCreateForm(forms.ModelForm):
             "All branches: full access. Trivandrum or Nagercoil: user sees only that branch "
             "in Client Master, MIS, directors, and DIR-3 KYC."
         )
+        configure_dsc_expiry_notification_field(self)
 
         for name, field in self.fields.items():
             if name in (
@@ -212,10 +229,7 @@ class EmployeeEditForm(forms.ModelForm):
         self.fields["receive_dsc_expiry_notifications"].widget.attrs.setdefault(
             "class", "form-check-input"
         )
-        self.fields["receive_dsc_expiry_notifications"].label = "DSC expiry notifications"
-        self.fields["receive_dsc_expiry_notifications"].help_text = (
-            "If checked, this user receives DSC expiry reminders (along with users who can view DSC Management)."
-        )
+        configure_dsc_expiry_notification_field(self)
         user = getattr(self.instance, "user", None)
         if user:
             self.fields["is_active"].initial = user.is_active

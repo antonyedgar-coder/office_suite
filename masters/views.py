@@ -1840,6 +1840,7 @@ def portal_name_create_api(request):
     if request.method != "POST":
         return JsonResponse({"detail": "POST required."}, status=405)
     name = (request.POST.get("name") or "").strip()
+    portal_url = (request.POST.get("portal_url") or "").strip()
     if not name:
         return JsonResponse({"detail": "Portal name is required."}, status=400)
     existing = PortalName.objects.filter(name__iexact=name).first()
@@ -1847,9 +1848,20 @@ def portal_name_create_api(request):
         if not existing.is_active:
             existing.is_active = True
             existing.save(update_fields=["is_active"])
-        return JsonResponse({"id": existing.pk, "name": existing.name, "created": False})
-    portal = PortalName.objects.create(name=name, created_by=request.user)
-    return JsonResponse({"id": portal.pk, "name": portal.name, "created": True})
+        if portal_url and existing.portal_url != portal_url:
+            existing.portal_url = portal_url
+            existing.save(update_fields=["portal_url"])
+        return JsonResponse(
+            {"id": existing.pk, "name": existing.name, "portal_url": existing.portal_url, "created": False}
+        )
+    portal = PortalName.objects.create(
+        name=name,
+        portal_url=portal_url,
+        created_by=request.user,
+    )
+    return JsonResponse(
+        {"id": portal.pk, "name": portal.name, "portal_url": portal.portal_url, "created": True}
+    )
 
 
 @require_perm("masters.delete_clientportalcredential")

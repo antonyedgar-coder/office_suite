@@ -118,8 +118,6 @@ class TaskMasterForm(forms.ModelForm):
 
             "frequency",
 
-            "default_fees_amount",
-
         ]
 
         widgets = {
@@ -138,15 +136,6 @@ class TaskMasterForm(forms.ModelForm):
 
             "frequency": forms.Select(attrs={"class": "form-select", "id": "id_frequency"}),
 
-            "default_fees_amount": forms.NumberInput(
-                attrs={
-                    "class": "form-control",
-                    "id": "id_default_fees_amount",
-                    "step": "0.01",
-                    "min": "0",
-                }
-            ),
-
         }
 
 
@@ -160,8 +149,6 @@ class TaskMasterForm(forms.ModelForm):
             "sort_order", "name"
 
         )
-
-        self.fields["default_fees_amount"].required = False
 
         if self.instance and self.instance.pk and self.instance.recurrence_config:
 
@@ -369,14 +356,21 @@ class TaskCreateForm(forms.Form):
 
     )
 
-    verifier = StaffUserChoiceField(
-
-        queryset=User.objects.none(),
-
-        widget=forms.Select(attrs={"class": "form-select", "id": "id_verifier"}),
-
-        empty_label="Select verifier…",
-
+    verifier_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(attrs={"id": "taskVerifierIdsHidden"}),
+    )
+    verifier_picker = forms.CharField(
+        label="Verifiers",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "taskVerifierSearch",
+                "placeholder": "Type name or email to add verifiers…",
+                "autocomplete": "off",
+            }
+        ),
     )
 
     document_checker = StaffUserChoiceField(
@@ -567,8 +561,6 @@ class TaskCreateForm(forms.Form):
         self.fields["task_master"].queryset = TaskMaster.selectable_for_new_tasks()
         self.fields["task_master"].help_text = "Only active task masters are listed."
 
-        self.fields["verifier"].queryset = staff_qs
-
         self.fields["document_checker"].queryset = staff_qs
 
         self._staff_qs = staff_qs
@@ -643,7 +635,13 @@ class TaskCreateForm(forms.Form):
 
         cleaned["assignees"] = assignees
 
-        verifier = cleaned.get("verifier")
+        verifier_raw = (cleaned.get("verifier_ids") or "").strip()
+        verifier_id_list = [int(x) for x in verifier_raw.split(",") if x.strip().isdigit()]
+        verifiers = list(self._staff_qs.filter(pk__in=verifier_id_list))
+        if not verifiers or len(verifiers) != len(set(verifier_id_list)):
+            self.add_error("verifier_picker", "Add at least one verifier from the suggestions.")
+        cleaned["verifiers"] = verifiers
+
         document_checker = cleaned.get("document_checker")
         user = self._task_user
         if user and user.is_authenticated and assignees:
@@ -652,15 +650,16 @@ class TaskCreateForm(forms.Form):
                 self.add_error("assignee_picker", "Creator cannot be assigned to the task.")
             if len(assignee_ids) < len(assignees):
                 self.add_error("assignee_picker", "Each assigned user must be a different person.")
-        if user and user.is_authenticated and assignees and verifier:
+        if assignees and verifiers:
             assignee_ids = {u.pk for u in assignees}
-            if verifier.pk in assignee_ids:
-                self.add_error("verifier", "Verifier cannot be one of the assigned users.")
+            overlap = assignee_ids.intersection({u.pk for u in verifiers})
+            if overlap:
+                self.add_error("verifier_picker", "A verifier cannot also be an assigned user.")
         if user and user.is_authenticated and assignees and document_checker:
             assignee_ids = {u.pk for u in assignees}
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
-        if verifier and document_checker:
+        if verifiers and document_checker:
             assignee_ids = {u.pk for u in assignees} if assignees else set()
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
@@ -757,10 +756,6 @@ class TaskCreateForm(forms.Form):
             except DjangoValidationError as exc:
                 raise forms.ValidationError(exc.messages[0] if exc.messages else str(exc)) from exc
 
-        if cleaned.get("is_billable") and cleaned.get("fees_amount") is None:
-
-            self.add_error("fees_amount", "Enter the fees amount for billable tasks.")
-
         if not cleaned.get("is_billable"):
 
             cleaned["fees_amount"] = None
@@ -800,10 +795,21 @@ class TaskEditForm(forms.Form):
             }
         ),
     )
-    verifier = StaffUserChoiceField(
-        queryset=User.objects.none(),
-        widget=forms.Select(attrs={"class": "form-select", "id": "id_verifier"}),
-        empty_label="Select verifier…",
+    verifier_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(attrs={"id": "taskVerifierIdsHidden"}),
+    )
+    verifier_picker = forms.CharField(
+        label="Verifiers",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "taskVerifierSearch",
+                "placeholder": "Type name or email to add verifiers…",
+                "autocomplete": "off",
+            }
+        ),
     )
     document_checker = StaffUserChoiceField(
         queryset=User.objects.none(),
@@ -821,13 +827,13 @@ class TaskEditForm(forms.Form):
         self._task = task
         super().__init__(*args, **kwargs)
         staff_qs = staff_users_queryset()
-        self.fields["verifier"].queryset = staff_qs
         self.fields["document_checker"].queryset = staff_qs
         self._staff_qs = staff_qs
         if task is not None and not self.is_bound:
             assignee_ids = list(task.assignments.values_list("user_id", flat=True))
             self.fields["assignee_ids"].initial = ",".join(str(i) for i in assignee_ids)
-            self.fields["verifier"].initial = task.verifier_id
+            verifier_ids = list(task.verifiers.values_list("pk", flat=True))
+            self.fields["verifier_ids"].initial = ",".join(str(i) for i in verifier_ids)
             self.fields["document_checker"].initial = task.document_checker_id
             self.fields["due_date"].initial = task.due_date
             self.fields["priority"].initial = task.priority
@@ -841,12 +847,18 @@ class TaskEditForm(forms.Form):
             self.add_error("assignee_picker", "Add at least one valid user from the suggestions.")
         cleaned["assignees"] = assignees
 
-        verifier = cleaned.get("verifier")
+        verifier_raw = (cleaned.get("verifier_ids") or "").strip()
+        verifier_id_list = [int(x) for x in verifier_raw.split(",") if x.strip().isdigit()]
+        verifiers = list(self._staff_qs.filter(pk__in=verifier_id_list))
+        if not verifiers or len(verifiers) != len(set(verifier_id_list)):
+            self.add_error("verifier_picker", "Add at least one verifier from the suggestions.")
+        cleaned["verifiers"] = verifiers
+
         document_checker = cleaned.get("document_checker")
-        if assignees and verifier:
+        if assignees and verifiers:
             assignee_ids = {u.pk for u in assignees}
-            if verifier.pk in assignee_ids:
-                self.add_error("verifier", "Verifier cannot be one of the assigned users.")
+            if assignee_ids.intersection({u.pk for u in verifiers}):
+                self.add_error("verifier_picker", "A verifier cannot also be an assigned user.")
         if assignees and document_checker:
             assignee_ids = {u.pk for u in assignees}
             if document_checker.pk in assignee_ids:

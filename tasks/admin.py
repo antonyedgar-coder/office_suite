@@ -33,9 +33,25 @@ class TaskMasterAdmin(admin.ModelAdmin):
 
 @admin.register(TaskRecurrenceEnrollment)
 class TaskRecurrenceEnrollmentAdmin(admin.ModelAdmin):
-    list_display = ("client", "task_master", "verifier", "document_checker", "is_active", "is_paused", "started_at")
+    list_display = (
+        "client",
+        "task_master",
+        "verifier_names",
+        "document_checker",
+        "is_active",
+        "is_paused",
+        "started_at",
+    )
     list_filter = ("is_active", "is_paused")
+    filter_horizontal = ("verifiers",)
     inlines = [TaskEnrollmentAssigneeInline]
+
+    @admin.display(description="Verifiers")
+    def verifier_names(self, obj):
+        from .user_labels import user_person_name
+
+        names = [user_person_name(u) for u in obj.verifiers.all()]
+        return ", ".join(names) if names else "—"
 
 
 class TaskAssignmentInline(admin.TabularInline):

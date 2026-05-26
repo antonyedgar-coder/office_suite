@@ -47,14 +47,6 @@
         </div>
         <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label" for="id_is_recurring">Recurring</label></div>
       </div>
-      <div class="row mb-3">
-        <div class="col-md-6">
-          <label class="form-label" for="id_default_fees_amount">Suggested fees (optional)</label>
-          {{ form.default_fees_amount }}
-          {% if form.default_fees_amount.errors %}<div class="text-danger small">{{ form.default_fees_amount.errors }}</div>{% endif %}
-          <p class="form-text mb-0">Pre-fills fees when you create a billable task. Billable and verifier are chosen on each new task only.</p>
-        </div>
-      </div>
       <div class="border rounded p-3 mb-3">
         <h6 class="mb-2">Checklist template</h6>
         <p class="form-text small">Items are copied to each new task from this master. Users tick them off on the task page.</p>

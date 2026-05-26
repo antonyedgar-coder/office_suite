@@ -8,7 +8,12 @@ from django.test import TestCase, modify_settings
 
 from core.models import Employee
 from masters.models import Client, ClientActivityLog, ClientGroup
-from tasks.checklist import master_checklist_labels, save_master_checklist, toggle_task_checklist_item
+from tasks.checklist import (
+    master_checklist_labels,
+    save_master_checklist,
+    set_task_checklist_item_status,
+    toggle_task_checklist_item,
+)
 from tasks.forms import TaskCreateForm, TaskMasterForm
 from tasks.models import (
     Task,
@@ -113,7 +118,7 @@ class TaskWorkflowTests(TestCase):
             actor=self.user,
         )
         task.refresh_from_db()
-        self.assertEqual(task.verifier_id, new_verifier.pk)
+        self.assertTrue(task.verifiers.filter(pk=new_verifier.pk).exists())
         self.assertEqual(task.document_checker_id, new_doc.pk)
         self.assertEqual(task.due_date, date(2026, 6, 20))
         self.assertEqual(
@@ -272,8 +277,6 @@ class TaskWorkflowTests(TestCase):
         self.assertEqual(task.status, Task.STATUS_COMPLETE)
 
     def test_fees_snapshot_not_updated_on_master_change(self):
-        self.master.default_fees_amount = Decimal("100.00")
-        self.master.save()
         task_old = create_task_from_master(
             master=self.master,
             client=self.client,
@@ -287,8 +290,6 @@ class TaskWorkflowTests(TestCase):
             fees_amount=Decimal("100.00"),
             auto_created=True,
         )
-        self.master.default_fees_amount = Decimal("250.00")
-        self.master.save()
         task_new = create_task_from_master(
             master=self.master,
             client=self.client,
@@ -326,6 +327,14 @@ class TaskWorkflowTests(TestCase):
         toggle_task_checklist_item(task=task, item_id=items[0].pk, user=self.user, done=True)
         items[0].refresh_from_db()
         self.assertTrue(items[0].is_done)
+        with self.assertRaises(ValidationError):
+            submit_task(task, self.user)
+        set_task_checklist_item_status(
+            task=task, item_id=items[1].pk, user=self.user, mode="na"
+        )
+        submit_task(task, self.user)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_SUBMITTED)
         save_master_checklist(self.master, ["Only new template item"])
         self.assertEqual(master_checklist_labels(self.master), ["Only new template item"])
         self.assertEqual(TaskChecklistItem.objects.filter(task=task).count(), 2)
@@ -407,7 +416,7 @@ class TaskWorkflowTests(TestCase):
                 "task_master": self.master.pk,
                 "client": self.client.pk,
                 "assignee_ids": str(other.pk),
-                "verifier": creator.pk,
+                "verifier_ids": str(creator.pk),
                 "document_checker": creator.pk,
                 "due_date": "2026-09-15",
                 "period_type": "monthly",
@@ -425,7 +434,7 @@ class TaskWorkflowTests(TestCase):
                 "task_master": self.master.pk,
                 "client": self.client.pk,
                 "assignee_ids": str(creator.pk),
-                "verifier": self.verifier.pk,
+                "verifier_ids": str(self.verifier.pk),
                 "document_checker": self.document_checker.pk,
                 "due_date": "2026-09-15",
                 "period_type": "monthly",
@@ -448,7 +457,7 @@ class TaskWorkflowTests(TestCase):
                 "task_master": self.master.pk,
                 "client": self.client.pk,
                 "assignee_ids": str(other.pk),
-                "verifier": self.verifier.pk,
+                "verifier_ids": str(self.verifier.pk),
                 "document_checker": self.document_checker.pk,
                 "period_type": "monthly",
                 "period_month": "5",
@@ -466,7 +475,7 @@ class TaskWorkflowTests(TestCase):
                 "task_master": self.master.pk,
                 "client": self.client.pk,
                 "assignee_ids": str(other.pk),
-                "verifier": self.verifier.pk,
+                "verifier_ids": str(self.verifier.pk),
                 "document_checker": self.document_checker.pk,
                 "period_type": "monthly",
                 "period_month": "5",
@@ -890,7 +899,6 @@ class TaskMasterFormTests(TestCase):
                 "is_active": "on",
                 "is_recurring": "",
                 "frequency": "",
-                "default_fees_amount": "",
                 "recurrence_config_json": "{}",
                 "checklist_json": "[]",
             }

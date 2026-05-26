@@ -110,7 +110,7 @@ def task_nav_counts(request):
         .exclude(status=Task.STATUS_PENDING_ASSIGNMENT)
         .distinct()
         .count(),
-        "task_nav_verify_count": base.filter(verifier=request.user)
+        "task_nav_verify_count": base.filter(verifiers=request.user)
         .filter(
             Q(status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
             | Q(

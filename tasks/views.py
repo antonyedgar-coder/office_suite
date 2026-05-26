@@ -38,7 +38,13 @@ from .listing import (
     prepare_task_list_rows,
     tasks_queryset_for_user,
 )
-from .checklist import master_checklist_labels, toggle_task_checklist_item
+from .checklist import (
+    checklist_pending_labels,
+    checklist_ready_for_submit,
+    master_checklist_labels,
+    set_task_checklist_item_status,
+    toggle_task_checklist_item,
+)
 from .user_labels import user_person_name
 from masters.models import CLIENT_TYPE_NEW_CLIENT, CLIENT_TYPE_ONE_OFF
 
@@ -255,11 +261,6 @@ def task_master_create(request):
                     item_label=f"{master.task_group.name} — {master.name}",
                     extra={
                         "period_type": period_type_for_task_master(master) or "",
-                        "default_fees_amount": (
-                            str(master.default_fees_amount)
-                            if master.default_fees_amount is not None
-                            else ""
-                        ),
                     },
                 )
             if mr:
@@ -610,14 +611,14 @@ def task_create(request):
             master = form.cleaned_data["task_master"]
             client = form.cleaned_data["client"]
             assignees = list(form.cleaned_data["assignees"])
-            verifier = form.cleaned_data["verifier"]
+            verifiers = form.cleaned_data["verifiers"]
             document_checker = form.cleaned_data["document_checker"]
             due_date = form.cleaned_data["due_date"]
             enrollment = start_enrollment_if_recurring(
                 master=master,
                 client=client,
                 assignee_users=assignees,
-                verifier=verifier,
+                verifiers=verifiers,
                 document_checker=document_checker,
                 created_by=request.user,
             )
@@ -625,7 +626,7 @@ def task_create(request):
                 master=master,
                 client=client,
                 assignee_users=assignees,
-                verifier=verifier,
+                verifiers=verifiers,
                 document_checker=document_checker,
                 created_by=request.user,
                 period_key=form.cleaned_data["period_key"],
@@ -676,10 +677,9 @@ def task_create(request):
         str(m.pk): {
             "period_type": period_type_for_task_master(m) or "",
             "is_recurring": m.is_recurring,
-            "default_fees_amount": str(m.default_fees_amount) if m.default_fees_amount is not None else "",
         }
         for m in TaskMaster.objects.filter(is_active=True, archived_at__isnull=True).only(
-            "pk", "is_recurring", "frequency", "default_fees_amount"
+            "pk", "is_recurring", "frequency"
         )
     }
     task_groups = [
@@ -757,13 +757,13 @@ def task_bulk_import(request):
             master = d["task_master"]
             client = d["client"]
             assignees = d["assignees"]
-            verifier = d["verifier"]
+            verifiers = d["verifiers"]
             document_checker = d["document_checker"]
             enrollment = start_enrollment_if_recurring(
                 master=master,
                 client=client,
                 assignee_users=assignees,
-                verifier=verifier,
+                verifiers=verifiers,
                 document_checker=document_checker,
                 created_by=request.user,
             )
@@ -771,7 +771,7 @@ def task_bulk_import(request):
                 master=master,
                 client=client,
                 assignee_users=assignees,
-                verifier=verifier,
+                verifiers=verifiers,
                 document_checker=document_checker,
                 created_by=request.user,
                 period_key=d["period_key"],
@@ -887,7 +887,7 @@ def task_edit(request, pk: int):
                 update_task_team(
                     task,
                     assignee_users=form.cleaned_data["assignees"],
-                    verifier=form.cleaned_data["verifier"],
+                    verifiers=form.cleaned_data["verifiers"],
                     document_checker=form.cleaned_data["document_checker"],
                     due_date=form.cleaned_data["due_date"],
                     priority=form.cleaned_data["priority"],
@@ -910,6 +910,10 @@ def task_edit(request, pk: int):
     initial_assignees = [
         {"id": a.user_id, "label": user_display_label(a.user)}
         for a in task.assignments.select_related("user", "user__employee_profile")
+    ]
+    initial_verifiers = [
+        {"id": u.pk, "label": user_display_label(u)}
+        for u in task.verifiers.select_related("employee_profile")
     ]
     from .period_display import format_period_display
 
@@ -934,9 +938,11 @@ def task_edit(request, pk: int):
 
 @login_required
 def task_detail(request, pk: int):
+    from .verifiers import format_task_verifier_names, user_is_task_verifier
+
     task = get_object_or_404(task_detail_queryset(request.user), pk=pk)
     is_assignee = task.assignments.filter(user=request.user).exists()
-    is_verifier = task.verifier_id == request.user.pk
+    is_verifier = user_is_task_verifier(request.user, task)
     is_document_checker = task.document_checker_id == request.user.pk
     is_creator = task.created_by_id == request.user.pk
     can_view_task = (
@@ -953,10 +959,12 @@ def task_detail(request, pk: int):
     remark_form = TaskRemarkForm()
     assignee_active = is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT
     none_client_can_submit = may_submit_for_client_type(task)
+    checklist_complete = checklist_ready_for_submit(task)
     can_submit = assignee_active and (
         (
             task.status in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK)
             and none_client_can_submit
+            and checklist_complete
         )
         or task.status == Task.STATUS_DOCUMENT_REWORK
     )
@@ -1002,16 +1010,40 @@ def task_detail(request, pk: int):
 
     if request.method == "POST":
         action = request.POST.get("action")
+        if action == "checklist_set" and can_toggle_checklist:
+            item_id = request.POST.get("item_id")
+            mode = (request.POST.get("mode") or "").strip().lower()
+            if item_id and str(item_id).isdigit():
+                try:
+                    if mode == "toggle":
+                        toggle_task_checklist_item(
+                            task=task,
+                            item_id=int(item_id),
+                            user=request.user,
+                            done=request.POST.get("done") == "1",
+                        )
+                    else:
+                        set_task_checklist_item_status(
+                            task=task,
+                            item_id=int(item_id),
+                            user=request.user,
+                            mode=mode,
+                        )
+                except ValidationError as exc:
+                    messages.error(request, exc.messages[0] if exc.messages else str(exc))
+            return redirect("task_detail", pk=pk)
         if action == "checklist_toggle" and can_toggle_checklist:
             item_id = request.POST.get("item_id")
             if item_id and str(item_id).isdigit():
-                done = request.POST.get("done") == "1"
-                toggle_task_checklist_item(
-                    task=task,
-                    item_id=int(item_id),
-                    user=request.user,
-                    done=done,
-                )
+                try:
+                    toggle_task_checklist_item(
+                        task=task,
+                        item_id=int(item_id),
+                        user=request.user,
+                        done=request.POST.get("done") == "1",
+                    )
+                except ValidationError as exc:
+                    messages.error(request, exc.messages[0] if exc.messages else str(exc))
             return redirect("task_detail", pk=pk)
         if action == "cancel" and can_cancel:
             cancel_task(task, request.user)
@@ -1104,7 +1136,7 @@ def task_detail(request, pk: int):
             "period_label": period_cols.period,
             "activity_rows": activity_rows,
             "assignees": assignees,
-            "verifier_label": user_person_name(task.verifier),
+            "verifier_label": format_task_verifier_names(task),
             "document_checker_label": user_person_name(task.document_checker),
             "remark_form": remark_form,
             "can_submit": can_submit,
@@ -1117,6 +1149,8 @@ def task_detail(request, pk: int):
             "submit_button_label": submit_button_label,
             "can_approve_assignment": can_approve_assignment,
             "checklist_items": checklist_items,
+            "checklist_complete": checklist_complete,
+            "checklist_pending_labels": checklist_pending_labels(task),
             "can_toggle_checklist": can_toggle_checklist,
             "can_cancel": can_cancel,
             "can_delete": can_delete,
@@ -1167,7 +1201,7 @@ def task_verify_queue(request):
     assignment_base = tasks_for_user(user).none()
     submitted_base = tasks_for_user(user).filter(
         status=Task.STATUS_SUBMITTED,
-        verifier=user,
+        verifiers=user,
     )
     # New Client tasks are not allowed to submit/verify/complete; do not show any special "verify without submit" section.
     none_client_approve_base = tasks_for_user(user).none()
@@ -1211,7 +1245,7 @@ def task_assignment_approve(request, pk: int):
 @require_POST
 def task_verify_approve(request, pk: int):
     task = get_object_or_404(
-        tasks_for_user(request.user).filter(verifier=request.user),
+        tasks_for_user(request.user).filter(verifiers=request.user),
         pk=pk,
     )
     if task.status != Task.STATUS_SUBMITTED:
@@ -1291,7 +1325,7 @@ def task_document_check_send_back(request, pk: int):
 @require_POST
 def task_verify_rework(request, pk: int):
     task = get_object_or_404(
-        tasks_for_user(request.user).filter(status=Task.STATUS_SUBMITTED, verifier=request.user),
+        tasks_for_user(request.user).filter(status=Task.STATUS_SUBMITTED, verifiers=request.user),
         pk=pk,
     )
     form = TaskVerifyForm(request.POST)

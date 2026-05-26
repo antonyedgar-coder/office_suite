@@ -75,12 +75,10 @@ def parse_task_list_filters(request) -> TaskListFilters:
 def tasks_queryset_for_user(user):
     return Task.objects.filter(
         client_id__in=approved_clients_for_user(user).values_list("pk", flat=True)
-    ).select_related(
+    ).prefetch_related("verifiers", "verifiers__employee_profile").select_related(
         "client",
         "task_master",
         "task_master__task_group",
-        "verifier",
-        "verifier__employee_profile",
         "document_checker",
         "document_checker__employee_profile",
         "created_by",
@@ -96,7 +94,7 @@ def tasks_queryset_for_user(user):
 def tasks_queryset_personal_for_user(user):
     """Tasks the user is assigned to, verifies, or created (branch-scoped)."""
     return tasks_queryset_for_user(user).filter(
-        Q(assignments__user=user) | Q(verifier=user) | Q(created_by=user)
+        Q(assignments__user=user) | Q(verifiers=user) | Q(created_by=user)
     ).distinct()
 
 
@@ -110,7 +108,7 @@ def apply_task_list_filters(qs, filters: TaskListFilters):
     if filters.assignee_id:
         qs = qs.filter(assignments__user_id=filters.assignee_id)
     if filters.verifier_id:
-        qs = qs.filter(verifier_id=filters.verifier_id)
+        qs = qs.filter(verifiers__id=filters.verifier_id)
     if filters.document_checker_id:
         qs = qs.filter(document_checker_id=filters.document_checker_id)
 

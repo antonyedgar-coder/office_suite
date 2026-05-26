@@ -61,10 +61,13 @@
         {% if form.assignee_picker.errors %}<div class="text-danger small">{{ form.assignee_picker.errors }}</div>{% endif %}
       </div>
 
-      <div class="mb-3">
-        <label class="form-label" for="id_verifier">Verifier</label>
-        {{ form.verifier }}
-        {% if form.verifier.errors %}<div class="text-danger small">{{ form.verifier.errors }}</div>{% endif %}
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="taskVerifierSearch">Verifiers</label>
+        <input class="form-control" id="taskVerifierSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />
+        <div id="taskVerifierSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+        <div id="verifierChips" class="mt-2"></div>
+        {{ form.verifier_ids }}
+        {% if form.verifier_picker.errors %}<div class="text-danger small">{{ form.verifier_picker.errors }}</div>{% endif %}
       </div>
 
       <div class="mb-3">
@@ -98,8 +101,11 @@
 
   {{ staff_users_json|json_script:"task-staff-users" }}
   {{ initial_assignees_json|json_script:"task-initial-assignees" }}
+  {{ initial_verifiers_json|json_script:"task-initial-verifiers" }}
 {% endblock %}
 {% block extra_js %}
+{% load static %}
+<script src="{% static 'js/task_verifier_picker.js' %}"></script>
 <script>
 (function () {
   var MIN_CHARS = 2;
@@ -168,8 +174,15 @@
   });
   loadInitialAssignees();
 
+  var initialVerifiers = JSON.parse(document.getElementById("task-initial-verifiers").textContent || "[]");
+  var verifierPicker = window.initTaskVerifierPicker({
+    staffUsers: staffUsers,
+    initial: initialVerifiers,
+  });
+
   document.getElementById("taskEditForm").addEventListener("submit", function () {
     renderAssigneeChips();
+    if (verifierPicker) verifierPicker.renderChips();
   });
 })();
 </script>

@@ -92,11 +92,14 @@
         <div class="form-text">Type to filter staff; click a name to add. Multiple users allowed. The task creator cannot be listed here — assigned users approve the task before work begins.</div>
       </div>
 
-      <div class="mb-3">
-        <label class="form-label" for="id_verifier">Verifier</label>
-        {{ form.verifier }}
-        {% if form.verifier.errors %}<div class="text-danger small">{{ form.verifier.errors }}</div>{% endif %}
-        <div class="form-text">Verifies submitted work. May be the same person as the document checker or task creator.</div>
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="taskVerifierSearch">Verifiers</label>
+        <input class="form-control" id="taskVerifierSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />
+        <div id="taskVerifierSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+        <div id="verifierChips" class="mt-2"></div>
+        {{ form.verifier_ids }}
+        {% if form.verifier_picker.errors %}<div class="text-danger small">{{ form.verifier_picker.errors }}</div>{% endif %}
+        <div class="form-text">Add one or more verifiers. They cannot be assigned users on the same task.</div>
       </div>
 
       <div class="mb-3">
@@ -146,7 +149,7 @@
           <label class="form-check-label" for="id_is_billable">Billable task</label>
         </div>
         <div id="taskFeesWrap" style="display:none">
-          <label class="form-label" for="id_fees_amount">Fees amount</label>
+          <label class="form-label" for="id_fees_amount">Fees amount (optional)</label>
           {{ form.fees_amount }}
           {% if form.fees_amount.errors %}<div class="text-danger small">{{ form.fees_amount.errors }}</div>{% endif %}
         </div>
@@ -186,6 +189,7 @@
 {% endblock %}
 {% block extra_js %}
 {% load static %}
+<script src="{% static 'js/task_verifier_picker.js' %}"></script>
 {% if can_add_task_master %}
   <script src="{% static 'js/master_picker_popup.js' %}"></script>
 {% endif %}
@@ -375,7 +379,7 @@
   function syncBillableUi() {
     if (!billableCb || !feesWrap) return;
     feesWrap.style.display = billableCb.checked ? "block" : "none";
-    if (!billableCb.checked && feesInput) feesInput.value = "";
+    if (feesInput && !billableCb.checked) feesInput.value = "";
   }
 
   function applyMasterDefaults() {
@@ -399,20 +403,11 @@
         if (periodLockedHint) periodLockedHint.style.display = "none";
       }
     }
-    if (billableCb && billableCb.checked && feesInput && cfg.default_fees_amount && !feesInput.value) {
-      feesInput.value = cfg.default_fees_amount;
-    }
   }
 
   if (billableCb) {
     billableCb.addEventListener("change", function () {
       syncBillableUi();
-      if (billableCb.checked && taskMasterSelect) {
-        var cfg = mastersMeta[taskMasterSelect.value];
-        if (cfg && cfg.default_fees_amount && feesInput && !feesInput.value) {
-          feesInput.value = cfg.default_fees_amount;
-        }
-      }
     });
     syncBillableUi();
   }
@@ -421,9 +416,15 @@
     applyMasterDefaults();
   }
 
+  var verifierPicker = window.initTaskVerifierPicker({
+    staffUsers: staffUsers,
+    initial: [],
+  });
+
   document.getElementById("taskCreateForm").addEventListener("submit", function () {
     syncClientHidden();
     renderAssigneeChips();
+    if (verifierPicker) verifierPicker.renderChips();
     if (periodType && periodType.disabled) periodType.disabled = false;
   });
 
@@ -456,7 +457,6 @@
           mastersMeta[id] = {
             period_type: msg.extra.period_type || "",
             is_recurring: !!msg.extra.is_recurring,
-            default_fees_amount: msg.extra.default_fees_amount || "",
           };
         }
         applyMasterDefaults();
