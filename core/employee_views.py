@@ -97,9 +97,6 @@ def employee_create(request):
                 date_of_joining=form.cleaned_data["date_of_joining"],
                 contact_person=form.cleaned_data.get("contact_person") or "",
                 aadhar_no=(form.cleaned_data.get("aadhar_no") or "").replace(" ", ""),
-                receive_dsc_expiry_notifications=form.cleaned_data.get(
-                    "receive_dsc_expiry_notifications", False
-                ),
                 created_by=request.user,
             )
             messages.success(

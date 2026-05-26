@@ -254,3 +254,9 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
 
+# DSC expiry in-app alerts — run `send_dsc_expiry_notifications` daily at this time (IST; see TIME_ZONE).
+# DigitalOcean App Platform cron uses UTC: 08:00 IST = 02:30 UTC → `30 2 * * *`
+# Recipients: users with "view Client DSC" permission (User management / groups), branch-scoped.
+DSC_EXPIRY_NOTIFY_DAYS_BEFORE = int(os.getenv("DSC_EXPIRY_NOTIFY_DAYS_BEFORE", "30"))
+DSC_EXPIRY_NOTIFY_RUN_TIME = os.getenv("DSC_EXPIRY_NOTIFY_RUN_TIME", "08:00")
+

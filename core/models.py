@@ -104,7 +104,7 @@ class Employee(models.Model):
     )
     receive_dsc_expiry_notifications = models.BooleanField(
         default=False,
-        help_text="Receive DSC expiry reminders (in addition to users with DSC Management view access).",
+        help_text="Legacy flag; DSC expiry alerts use the view Client DSC permission instead.",
     )
     created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)

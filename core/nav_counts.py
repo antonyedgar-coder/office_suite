@@ -30,11 +30,7 @@ def build_nav_badge_counts(request) -> dict:
             out["master_requests"] = badge
 
     emp = getattr(user, "employee_profile", None)
-    may_see_dsc = (
-        user.is_superuser
-        or user.has_perm("masters.view_clientdsc")
-        or (emp and emp.receive_dsc_expiry_notifications)
-    )
+    may_see_dsc = user.is_superuser or user.has_perm("masters.view_clientdsc")
     if may_see_dsc:
         from masters.models import DSCNotification
 

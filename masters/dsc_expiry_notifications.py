@@ -1,24 +1,48 @@
-"""DSC expiry in-app notifications (30 days before expiry, every 7 days)."""
+"""DSC expiry in-app notifications (daily job, users with DSC view permission)."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
-from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
 from core.branch_access import client_allowed_for_user
-from core.models import Employee
 
 from .models import ClientDSC
 
 User = get_user_model()
 
-DSC_EXPIRY_NOTIFY_DAYS_BEFORE = 30
-DSC_EXPIRY_NOTIFY_INTERVAL_DAYS = 7
+
+def dsc_expiry_days_before() -> int:
+    return int(getattr(settings, "DSC_EXPIRY_NOTIFY_DAYS_BEFORE", 30))
+
+
+def dsc_expiry_users_with_view_permission() -> list[User]:
+    """Active users who can view DSC (direct permission, group, or superuser)."""
+    perm = Permission.objects.filter(
+        content_type__app_label="masters",
+        codename="view_clientdsc",
+    ).first()
+    user_ids: set[int] = set()
+    if perm:
+        user_ids.update(
+            User.objects.filter(is_active=True, user_permissions=perm).values_list("pk", flat=True)
+        )
+        user_ids.update(
+            User.objects.filter(is_active=True, groups__permissions=perm).values_list("pk", flat=True)
+        )
+    user_ids.update(User.objects.filter(is_active=True, is_superuser=True).values_list("pk", flat=True))
+    return list(User.objects.filter(pk__in=user_ids, is_active=True).order_by("email"))
+
+
+def user_receives_dsc_expiry_alerts(user) -> bool:
+    if not user or not getattr(user, "is_active", False):
+        return False
+    return user.is_superuser or user.has_perm("masters.view_clientdsc")
 
 
 def get_latest_dsc_for_client(client_id: int) -> ClientDSC | None:
@@ -31,7 +55,7 @@ def get_latest_dsc_for_client(client_id: int) -> ClientDSC | None:
 
 
 def dsc_expiry_window_start(dsc: ClientDSC):
-    return dsc.expiry_date - timedelta(days=DSC_EXPIRY_NOTIFY_DAYS_BEFORE)
+    return dsc.expiry_date - timedelta(days=dsc_expiry_days_before())
 
 
 def is_latest_dsc_for_client(dsc: ClientDSC) -> bool:
@@ -40,7 +64,10 @@ def is_latest_dsc_for_client(dsc: ClientDSC) -> bool:
 
 
 def should_send_dsc_expiry_notification(dsc: ClientDSC, today=None) -> bool:
-    """Whether this DSC (must be latest for client) should trigger reminders today."""
+    """
+    Whether this DSC (latest for client) should get reminders on ``today``.
+    When the daily job runs, each eligible DSC is notified at most once per calendar day.
+    """
     today = today or timezone.localdate()
     if not dsc.expiry_notification:
         return False
@@ -52,38 +79,16 @@ def should_send_dsc_expiry_notification(dsc: ClientDSC, today=None) -> bool:
         return False
     if dsc.last_expiry_notification_sent_at:
         last_day = timezone.localdate(dsc.last_expiry_notification_sent_at)
-        if (today - last_day).days < DSC_EXPIRY_NOTIFY_INTERVAL_DAYS:
+        if last_day >= today:
             return False
     return True
 
 
 def dsc_expiry_notification_recipients(dsc: ClientDSC) -> list[User]:
-    """Users opted in + users with DSC view permission (branch-scoped)."""
+    """Users with DSC view access whose branch includes this client."""
     client = dsc.client
-    user_ids: set[int] = set()
-
-    for uid in Employee.objects.filter(
-        receive_dsc_expiry_notifications=True,
-        user_type=Employee.USER_TYPE_EMPLOYEE,
-        user__is_active=True,
-    ).values_list("user_id", flat=True):
-        user_ids.add(uid)
-
-    perm = Permission.objects.filter(
-        content_type__app_label="masters",
-        codename="view_clientdsc",
-    ).first()
-    if perm:
-        via_direct = User.objects.filter(is_active=True, user_permissions=perm).values_list("pk", flat=True)
-        via_group = User.objects.filter(is_active=True, groups__permissions=perm).values_list("pk", flat=True)
-        user_ids.update(via_direct)
-        user_ids.update(via_group)
-
-    for u in User.objects.filter(is_active=True, is_superuser=True).values_list("pk", flat=True):
-        user_ids.add(u)
-
     recipients = []
-    for user in User.objects.filter(pk__in=user_ids, is_active=True):
+    for user in dsc_expiry_users_with_view_permission():
         if client_allowed_for_user(user, client):
             recipients.append(user)
     return recipients
@@ -103,8 +108,8 @@ def build_dsc_expiry_message(dsc: ClientDSC, today=None) -> str:
 
 def send_dsc_expiry_notifications(*, today=None, dry_run: bool = False) -> dict[str, int]:
     """
-    Send reminders for each client's latest DSC when eligible.
-    Returns counts: clients_checked, sent_batches, notifications_created.
+    Create in-app DSC expiry alerts for eligible clients (latest DSC per client).
+    Intended to run once per day via server cron at DSC_EXPIRY_NOTIFY_RUN_TIME.
     """
     from .models import DSCNotification
 

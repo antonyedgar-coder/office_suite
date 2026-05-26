@@ -2055,11 +2055,7 @@ def dsc_inout_edit(request, pk: int):
 def dsc_notification_list(request):
     from .models import DSCNotification
 
-    if not (
-        request.user.is_superuser
-        or request.user.has_perm("masters.view_clientdsc")
-        or getattr(getattr(request.user, "employee_profile", None), "receive_dsc_expiry_notifications", False)
-    ):
+    if not (request.user.is_superuser or request.user.has_perm("masters.view_clientdsc")):
         raise PermissionDenied
     qs = DSCNotification.objects.filter(user=request.user).select_related("dsc", "dsc__client")[:200]
     return render(request, "masters/dsc_notification_list.html", {"notifications": qs})

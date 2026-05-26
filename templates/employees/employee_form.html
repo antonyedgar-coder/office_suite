@@ -65,14 +65,6 @@
           {% if form.branch_access.help_text %}<div class="form-text">{{ form.branch_access.help_text }}</div>{% endif %}
           {% if form.branch_access.errors %}<div class="text-danger small">{{ form.branch_access.errors }}</div>{% endif %}
         </div>
-        <div class="col-12 data-employee-only">
-          <div class="form-check">
-            {{ form.receive_dsc_expiry_notifications }}
-            <label class="form-check-label" for="{{ form.receive_dsc_expiry_notifications.id_for_label }}">{{ form.receive_dsc_expiry_notifications.label }}</label>
-          </div>
-          {% if form.receive_dsc_expiry_notifications.help_text %}<div class="form-text">{{ form.receive_dsc_expiry_notifications.help_text }}</div>{% endif %}
-        </div>
-
         <div class="col-12 col-md-4">
           <label class="form-label">{{ form.password.label }}</label>
           {{ form.password }}
@@ -155,13 +147,6 @@
           {{ form.branch_access }}
           {% if form.branch_access.help_text %}<div class="form-text">{{ form.branch_access.help_text }}</div>{% endif %}
           {% if form.branch_access.errors %}<div class="text-danger small">{{ form.branch_access.errors }}</div>{% endif %}
-        </div>
-        <div class="col-12">
-          <div class="form-check">
-            {{ form.receive_dsc_expiry_notifications }}
-            <label class="form-check-label" for="{{ form.receive_dsc_expiry_notifications.id_for_label }}">{{ form.receive_dsc_expiry_notifications.label }}</label>
-          </div>
-          {% if form.receive_dsc_expiry_notifications.help_text %}<div class="form-text">{{ form.receive_dsc_expiry_notifications.help_text }}</div>{% endif %}
         </div>
         {% endif %}
 
