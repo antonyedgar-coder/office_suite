@@ -22,6 +22,7 @@ DSC_CSV_COLUMNS = [
     "EXPIRY_DATE",
     "EXPIRY_NOTIFICATION",
     "DSC_PASSWORD",
+    "REMARKS",
 ]
 
 
@@ -107,6 +108,7 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
             errors.append(str(e))
 
         password = gv("DSC_PASSWORD")
+        remarks = (gv("REMARKS") or "").strip()
 
         if not client_id:
             errors.append("CLIENT_ID is required.")
@@ -114,7 +116,7 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
             errors.append("CLIENT_NAME is required.")
         elif not client:
             errors.append(
-                f"CLIENT_ID not found, not Individual, or not in your branch: {client_id}"
+                f"CLIENT_ID not found, not Individual/Foreign Citizen, or not in your branch: {client_id}"
             )
         elif client and not client_allowed_for_user(user, client):
             errors.append(f"CLIENT_ID not allowed for your branch: {client_id}")
@@ -132,8 +134,8 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
             errors.append("EXPIRY_DATE is required.")
         if issue_date and expiry_date and expiry_date < issue_date:
             errors.append("EXPIRY_DATE must be on or after ISSUE_DATE.")
-        if not password:
-            errors.append("DSC_PASSWORD is required.")
+        if len(remarks) > 500:
+            errors.append("REMARKS must be at most 500 characters.")
 
         cleaned = {
             "client": client,
@@ -141,6 +143,7 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
             "expiry_date": expiry_date,
             "expiry_notification": expiry_notification,
             "dsc_password": password,
+            "remarks": remarks,
         }
 
         if not errors and client:
@@ -151,6 +154,7 @@ def parse_dsc_csv(csv_bytes: bytes, *, user) -> tuple[list[DscParsedRow], list[s
                     expiry_date=expiry_date,
                     expiry_notification=expiry_notification,
                     dsc_password=password,
+                    remarks=remarks,
                 )
                 obj.full_clean()
             except ValidationError as ve:

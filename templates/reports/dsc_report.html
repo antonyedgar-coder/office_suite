@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}DSC Management report — CA Office Suite{% endblock %}
+{% block page_title %}DSC Management report{% endblock %}
+
+{% block extra_head %}
+  {% include "reports/includes/report_filter_styles.html" %}
+  {% include "tasks/includes/task_date_range_assets.html" %}
+  {% include "tasks/includes/task_date_range_init.html" %}
+{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Filters</div>
+    <div class="text-secondary small mb-3">
+      Lists DSC records for Individual and Foreign Citizen clients in your branch.
+      Type in <strong>Client name</strong> to narrow choices, or leave it empty for all clients.
+      Other filters are optional and combined with <strong>AND</strong>.
+    </div>
+    <form method="get" class="report-filter-form" id="dscReportFilterForm">
+      <div class="report-filter-field report-filter-field--wide">
+        <label class="form-label small text-secondary mb-0" for="dscReportClientSearch">{{ form.client_search.label }}</label>
+        <div class="input-group input-group-sm">
+          {{ form.client_search }}
+          <button type="button" class="btn btn-outline-secondary" id="dscReportClientClear" title="Show all clients">Clear</button>
+        </div>
+        <datalist id="dscReportClientSuggestions"></datalist>
+        {{ form.client }}
+        {% if form.client_search.errors %}
+          <div class="text-danger small mt-1">{{ form.client_search.errors }}</div>
+        {% endif %}
+        {% if form.client.errors %}
+          <div class="text-danger small mt-1">{{ form.client.errors }}</div>
+        {% endif %}
+        <div class="form-text">Pick a name from the list after typing, or use Clear for all clients.</div>
+      </div>
+      <div class="report-filter-field">
+        <label class="form-label small text-secondary mb-0">{{ form.client_type.label }}</label>
+        {{ form.client_type }}
+        {% if form.client_type.errors %}<div class="text-danger small">{{ form.client_type.errors }}</div>{% endif %}
+      </div>
+      {% include "reports/includes/report_date_range_field.html" with label="Issue date" from_name="issue_from" to_name="issue_to" display_id="dscIssueDateRange" from_field=form.issue_from to_field=form.issue_to %}
+      {% include "reports/includes/report_date_range_field.html" with label="Expiry date" from_name="expiry_from" to_name="expiry_to" display_id="dscExpiryDateRange" from_field=form.expiry_from to_field=form.expiry_to %}
+      <div class="report-filter-field--actions">
+        <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="dscReportClearAll">Clear all filters</button>
+        {% if perms.reports.export_dsc_report and request.GET and form.is_valid %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'reports_dsc_csv' %}?{{ request.GET.urlencode }}">Download CSV</a>
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_index' %}">Back</a>
+      </div>
+    </form>
+  </div>
+
+  {% if request.GET %}
+    {% if form.errors %}
+      <div class="alert alert-warning">Please fix the errors above and submit again.</div>
+    {% else %}
+      <div class="card p-3 data-table-card">
+        <div class="fw-semibold mb-2">Results ({{ rows|length }}{% if rows|length >= 2000 %}+{% endif %})</div>
+        <div class="data-table-wrap">
+          <table class="table table-sm table-striped data-table mb-0">
+            <thead>
+              <tr>
+                <th>Client ID</th>
+                <th>Client name</th>
+                <th>Type</th>
+                <th>PAN</th>
+                <th>Issue</th>
+                <th>Expiry</th>
+                <th>Notify</th>
+                <th>Password</th>
+                <th>Remarks</th>
+                <th>Created by</th>
+                <th>Created on</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  <td class="mono small">{{ row.client_id }}</td>
+                  <td>{{ row.client_name }}</td>
+                  <td class="small">{{ row.client_type }}</td>
+                  <td class="mono small">{{ row.pan }}</td>
+                  <td class="small">{{ row.issue_date }}</td>
+                  <td class="small">
+                    {{ row.expiry_date }}
+                    {% if row.is_expired %}<span class="badge text-bg-secondary ms-1">Expired</span>{% endif %}
+                  </td>
+                  <td class="small">{{ row.expiry_notification }}</td>
+                  <td class="mono small">{{ row.dsc_password }}</td>
+                  <td class="small">{{ row.remarks }}</td>
+                  <td class="small">{{ row.created_by }}</td>
+                  <td class="small mono">{{ row.created_on }}</td>
+                </tr>
+              {% empty %}
+                <tr class="table-empty-row"><td colspan="11">No DSC records match these filters.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="text-secondary small">Choose filters and click Apply filters to load the report.</div>
+  {% endif %}
+
+  <script>
+    (function () {
+      var clearAllUrl = "{% url 'reports_dsc' %}";
+      var search = document.getElementById("dscReportClientSearch");
+      var hidden = document.querySelector("[data-dsc-report-client='1']");
+      var list = document.getElementById("dscReportClientSuggestions");
+      var clientClear = document.getElementById("dscReportClientClear");
+      var clearAllBtn = document.getElementById("dscReportClearAll");
+      var filterForm = document.getElementById("dscReportFilterForm");
+
+      var clients = [];
+      {% for opt in form.fields.client.queryset %}
+        clients.push({
+          id: "{{ opt.pk|escapejs }}",
+          label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}"
+        });
+      {% endfor %}
+
+      function renderSuggestions(q) {
+        if (!list) return;
+        list.innerHTML = "";
+        var qq = (q || "").toLowerCase().trim();
+        var shown = 0;
+        for (var i = 0; i < clients.length; i++) {
+          var c = clients[i];
+          var t = (c.label || "").toLowerCase();
+          if (!qq || t.indexOf(qq) !== -1) {
+            var o = document.createElement("option");
+            o.value = c.label;
+            list.appendChild(o);
+            shown++;
+            if (shown >= 50) break;
+          }
+        }
+      }
+
+      function syncHiddenFromLabel() {
+        if (!search || !hidden) return;
+        var v = (search.value || "").trim();
+        var match = null;
+        if (!v) {
+          hidden.value = "";
+          return;
+        }
+        for (var i = 0; i < clients.length; i++) {
+          if (clients[i].label === v) {
+            match = clients[i];
+            break;
+          }
+        }
+        hidden.value = match ? match.id : "";
+      }
+
+      function clearClientFilter() {
+        if (search) search.value = "";
+        if (hidden) hidden.value = "";
+        renderSuggestions("");
+      }
+
+      function clearDateRange(displayId, fromName, toName) {
+        var display = document.getElementById(displayId);
+        var wrap = display && display.closest("[data-task-date-range]");
+        if (!wrap) return;
+        var fromInput = wrap.querySelector('input[name="' + fromName + '"]');
+        var toInput = wrap.querySelector('input[name="' + toName + '"]');
+        if (fromInput) fromInput.value = "";
+        if (toInput) toInput.value = "";
+        var fp = wrap._flatpickr;
+        if (!fp && display && typeof flatpickr !== "undefined") {
+          fp = flatpickr.getInstance(display);
+        }
+        if (fp) {
+          fp.clear();
+        } else if (display) {
+          display.value = "";
+        }
+      }
+
+      function clearAllFilters() {
+        clearClientFilter();
+        var typeSelect = filterForm && filterForm.querySelector('[name="client_type"]');
+        if (typeSelect) typeSelect.value = "";
+        clearDateRange("dscIssueDateRange", "issue_from", "issue_to");
+        clearDateRange("dscExpiryDateRange", "expiry_from", "expiry_to");
+      }
+
+      if (search && hidden && list) {
+        if (hidden.value) {
+          for (var j = 0; j < clients.length; j++) {
+            if (String(clients[j].id) === String(hidden.value)) {
+              search.value = clients[j].label;
+              break;
+            }
+          }
+        }
+        renderSuggestions(search.value || "");
+        search.addEventListener("input", function () {
+          hidden.value = "";
+          renderSuggestions(search.value);
+        });
+        search.addEventListener("change", syncHiddenFromLabel);
+        search.addEventListener("blur", syncHiddenFromLabel);
+      }
+
+      if (clientClear) {
+        clientClear.addEventListener("click", clearClientFilter);
+      }
+
+      if (clearAllBtn) {
+        clearAllBtn.addEventListener("click", function () {
+          if (window.location.search) {
+            window.location.href = clearAllUrl;
+            return;
+          }
+          clearAllFilters();
+        });
+      }
+
+      function bindDateRangePickers() {
+        document.querySelectorAll("[data-task-date-range]").forEach(function (wrap) {
+          var display = wrap.querySelector("input[type='text']");
+          if (!display || typeof flatpickr === "undefined") return;
+          var fp = flatpickr.getInstance(display);
+          if (fp) wrap._flatpickr = fp;
+        });
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bindDateRangePickers);
+      } else {
+        bindDateRangePickers();
+      }
+    })();
+  </script>
+{% endblock %}

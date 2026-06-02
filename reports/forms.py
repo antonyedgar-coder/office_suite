@@ -4,9 +4,9 @@ from django import forms
 
 from core.branch_access import branch_access_for_user
 from dirkyc.fy import fy_start_year, mis_report_financial_year_choices
-from masters.forms import ClientNamePanChoiceField
+from masters.forms import ClientNamePanChoiceField, dsc_eligible_clients_for_user
 from masters.client_type_service import client_type_choices_for_reports
-from masters.models import BRANCH_CHOICES, Client, PortalName
+from masters.models import BRANCH_CHOICES, DSC_ELIGIBLE_CLIENT_TYPES, Client, PortalName
 
 
 class ClientMasterReportFilterForm(forms.Form):
@@ -474,4 +474,73 @@ class PortalPasswordReportFilterForm(forms.Form):
         t = data.get("created_to")
         if f and t and f > t:
             self.add_error("created_to", "End date must be on or after start date.")
+        return data
+
+
+def dsc_report_client_label(client: Client) -> str:
+    name = (client.client_name or "").strip()
+    pan = (client.pan or "").strip().upper()
+    return f"{name} — {pan}" if pan else name
+
+
+class DSCReportFilterForm(forms.Form):
+    client_search = forms.CharField(
+        label="Client name",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control form-control-sm",
+                "id": "dscReportClientSearch",
+                "list": "dscReportClientSuggestions",
+                "placeholder": "Type to search clients…",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    client = forms.ModelChoiceField(
+        label="Client",
+        queryset=Client.approved_objects().none(),
+        required=False,
+        widget=forms.HiddenInput(attrs={"data-dsc-report-client": "1"}),
+    )
+    client_type = forms.ChoiceField(
+        label="Type of client",
+        choices=[("", "— Any type —")]
+        + [(t, t) for t in sorted(DSC_ELIGIBLE_CLIENT_TYPES)],
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+    )
+    issue_from = forms.DateField(label="Issue date from", required=False, widget=forms.HiddenInput())
+    issue_to = forms.DateField(label="Issue date to", required=False, widget=forms.HiddenInput())
+    expiry_from = forms.DateField(label="Expiry date from", required=False, widget=forms.HiddenInput())
+    expiry_to = forms.DateField(label="Expiry date to", required=False, widget=forms.HiddenInput())
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = dsc_eligible_clients_for_user(user) if user is not None else Client.approved_objects().none()
+        self.fields["client"].queryset = qs
+        if self.is_bound:
+            raw = (self.data.get("client") or "").strip()
+            if raw.isdigit():
+                selected = qs.filter(pk=int(raw)).first()
+                if selected:
+                    self.initial.setdefault("client_search", dsc_report_client_label(selected))
+
+    def clean(self):
+        data = super().clean()
+        search = (data.get("client_search") or "").strip()
+        client = data.get("client")
+        if search and not client:
+            self.add_error(
+                "client_search",
+                "Select a client from the suggestions, or clear the field for all clients.",
+            )
+        issue_from = data.get("issue_from")
+        issue_to = data.get("issue_to")
+        if issue_from and issue_to and issue_from > issue_to:
+            self.add_error("issue_to", "Issue date to must be on or after Issue date from.")
+        expiry_from = data.get("expiry_from")
+        expiry_to = data.get("expiry_to")
+        if expiry_from and expiry_to and expiry_from > expiry_to:
+            self.add_error("expiry_to", "Expiry date to must be on or after Expiry date from.")
         return data

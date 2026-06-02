@@ -23,6 +23,7 @@ from .models import (
     PortalName,
     DIRECTOR_COMPANY_TYPES,
     DIRECTOR_ELIGIBLE_CLIENT_TYPES,
+    DSC_ELIGIBLE_CLIENT_TYPES,
     DirectorMapping,
 )
 
@@ -502,15 +503,20 @@ class ClientPortalCredentialForm(forms.ModelForm):
         return data
 
 
-def individual_clients_for_user(user):
+def dsc_eligible_clients_for_user(user):
     from core.branch_access import approved_clients_for_user
 
     return (
         approved_clients_for_user(user)
-        .filter(client_type="Individual")
+        .filter(client_type__in=sorted(DSC_ELIGIBLE_CLIENT_TYPES))
         .select_related("client_group")
         .order_by("client_name")
     )
+
+
+def individual_clients_for_user(user):
+    """Backward-compatible alias for DSC client picker."""
+    return dsc_eligible_clients_for_user(user)
 
 
 class ClientDSCForm(forms.ModelForm):
@@ -530,7 +536,14 @@ class ClientDSCForm(forms.ModelForm):
 
     class Meta:
         model = ClientDSC
-        fields = ["client", "issue_date", "expiry_date", "expiry_notification", "dsc_password"]
+        fields = [
+            "client",
+            "issue_date",
+            "expiry_date",
+            "expiry_notification",
+            "dsc_password",
+            "remarks",
+        ]
         widgets = {
             "issue_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "expiry_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -539,11 +552,16 @@ class ClientDSCForm(forms.ModelForm):
                 attrs={"class": "form-check-input"},
             ),
             "dsc_password": forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+            "remarks": REMARKS_WIDGET,
         }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        qs = individual_clients_for_user(user) if user else Client.approved_objects().filter(client_type="Individual")
+        qs = (
+            dsc_eligible_clients_for_user(user)
+            if user
+            else Client.approved_objects().filter(client_type__in=sorted(DSC_ELIGIBLE_CLIENT_TYPES))
+        )
         self.fields["client"] = ClientNamePanChoiceField(
             queryset=qs,
             label="Client",
@@ -558,24 +576,25 @@ class ClientDSCForm(forms.ModelForm):
             "If Yes, reminders are sent from 30 days before expiry every 7 days "
             "(for this client's latest DSC only). Stops when set to No or a newer DSC is added."
         )
+        self.fields["dsc_password"].required = False
         if self.instance and self.instance.pk:
-            self.fields["dsc_password"].required = False
             self.fields["dsc_password"].help_text = "Leave blank to keep the current password."
         else:
-            self.fields["dsc_password"].required = True
+            self.fields["dsc_password"].help_text = "Optional."
+        self.fields["remarks"].required = False
 
     def clean_client(self):
         client = self.cleaned_data.get("client")
-        if client and client.client_type != "Individual":
-            raise ValidationError("DSC can only be created for Individual clients.")
+        if client and client.client_type not in DSC_ELIGIBLE_CLIENT_TYPES:
+            raise ValidationError(
+                "DSC can only be created for Individual or Foreign Citizen clients."
+            )
         return client
 
     def clean_dsc_password(self):
         value = (self.cleaned_data.get("dsc_password") or "").strip()
         if self.instance and self.instance.pk and not value:
             return self.instance.dsc_password
-        if not value:
-            raise ValidationError("DSC password is required.")
         return value
 
     def clean(self):
@@ -583,7 +602,10 @@ class ClientDSCForm(forms.ModelForm):
         client = data.get("client")
         search = (data.get("client_search") or "").strip()
         if client is None and search:
-            self.add_error("client_search", "Select a client from the suggestions (Individual only).")
+            self.add_error(
+                "client_search",
+                "Select a client from the suggestions (Individual or Foreign Citizen only).",
+            )
         issue = data.get("issue_date")
         expiry = data.get("expiry_date")
         if issue and expiry and expiry < issue:

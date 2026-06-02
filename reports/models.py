@@ -26,6 +26,8 @@ class ReportPolicy(models.Model):
             ("export_dir3kyc_report", "Can export DIR-3 KYC report CSV"),
             ("view_portal_password_report", "Can view Portal password report"),
             ("export_portal_password_report", "Can export Portal password report CSV"),
+            ("view_dsc_report", "Can view DSC Management report"),
+            ("export_dsc_report", "Can export DSC Management report CSV"),
         ]
 
     def __str__(self) -> str:

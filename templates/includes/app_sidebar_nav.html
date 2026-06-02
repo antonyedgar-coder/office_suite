@@ -130,22 +130,22 @@
     </div>
   {% endif %}
 
-  {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report or perms.reports.view_portal_password_report or perms.reports.export_portal_password_report %}
+  {% if user.is_superuser or perms.reports.access_reports_menu or perms.reports.view_client_master_report or perms.reports.export_client_master_report or perms.reports.view_director_mapping_report or perms.reports.export_director_mapping_report or perms.reports.view_dir3kyc_report or perms.reports.export_dir3kyc_report or perms.reports.view_portal_password_report or perms.reports.export_portal_password_report or perms.reports.view_dsc_report or perms.reports.export_dsc_report %}
     <div
-      class="nav-accordion-item{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_index' %} is-open{% endif %}"
+      class="nav-accordion-item{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_dsc reports_dsc_csv reports_index' %} is-open{% endif %}"
       data-nav-section="reports"
     >
       <button
         type="button"
         class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_index' %}true{% else %}false{% endif %}"
+        aria-expanded="{% if url_name in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_dsc reports_dsc_csv reports_index' %}true{% else %}false{% endif %}"
         aria-controls="nav-panel-{{ nav_prefix }}-reports"
       >
         <i class="bi bi-bar-chart nav-link-icon" aria-hidden="true"></i>
         <span>Reports</span>
         <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
       </button>
-      <div id="nav-panel-{{ nav_prefix }}-reports" class="nav-accordion-panel"{% if url_name not in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_index' %} hidden{% endif %}>
+      <div id="nav-panel-{{ nav_prefix }}-reports" class="nav-accordion-panel"{% if url_name not in 'reports_client_master reports_mis reports_mis_period reports_mis_client_wise reports_mis_type_wise reports_director_mapping reports_director_mapping_csv reports_dir3kyc reports_dir3kyc_csv reports_portal_password reports_portal_password_csv reports_dsc reports_dsc_csv reports_index' %} hidden{% endif %}>
         {% if user.is_superuser or perms.reports.view_client_master_report or perms.reports.export_client_master_report %}
           <a class="nav-link {% if url_name == 'reports_client_master' %}active{% endif %}" href="{% url 'reports_client_master' %}"><i class="bi bi-file-earmark-text nav-link-icon" aria-hidden="true"></i><span>Client Master Report</span></a>
         {% endif %}
@@ -160,6 +160,9 @@
         {% endif %}
         {% if user.is_superuser or perms.reports.view_portal_password_report or perms.reports.export_portal_password_report %}
           <a class="nav-link {% if url_name in 'reports_portal_password reports_portal_password_csv' %}active{% endif %}" href="{% url 'reports_portal_password' %}"><i class="bi bi-key nav-link-icon" aria-hidden="true"></i><span>Portal password report</span></a>
+        {% endif %}
+        {% if user.is_superuser or perms.reports.view_dsc_report or perms.reports.export_dsc_report %}
+          <a class="nav-link {% if url_name in 'reports_dsc reports_dsc_csv' %}active{% endif %}" href="{% url 'reports_dsc' %}"><i class="bi bi-shield-lock nav-link-icon" aria-hidden="true"></i><span>DSC Management report</span></a>
         {% endif %}
       </div>
     </div>

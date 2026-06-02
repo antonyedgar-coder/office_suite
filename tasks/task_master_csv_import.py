@@ -6,8 +6,6 @@ import csv
 import io
 import json
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
-
 from django.core.exceptions import ValidationError
 
 from .models import TaskGroup, TaskMaster
@@ -21,7 +19,6 @@ TASK_MASTER_CSV_COLUMNS = [
     "IS_ACTIVE",
     "IS_RECURRING",
     "FREQUENCY",
-    "DEFAULT_FEES_AMOUNT",
     "CHECKLIST_ITEMS",
     "RECURRENCE_CONFIG_JSON",
 ]
@@ -114,15 +111,6 @@ def parse_task_masters_csv(csv_bytes: bytes) -> tuple[list[TaskMasterParsedRow],
 
         if priority not in valid_priorities:
             errors.append(f"DEFAULT_PRIORITY must be one of: {', '.join(sorted(valid_priorities))}.")
-
-        default_fees = None
-        if fees_raw:
-            try:
-                default_fees = Decimal(fees_raw.replace(",", ""))
-                if default_fees < 0:
-                    errors.append("DEFAULT_FEES_AMOUNT cannot be negative.")
-            except InvalidOperation:
-                errors.append("DEFAULT_FEES_AMOUNT must be a number.")
 
         checklist_items: list[str] = []
         if checklist_raw:

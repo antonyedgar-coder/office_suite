@@ -141,6 +141,7 @@ class ClientDSCAdmin(admin.ModelAdmin):
         "issue_date",
         "expiry_date",
         "expiry_notification",
+        "remarks",
         "last_expiry_notification_sent_at",
         "created_by",
         "created_at",

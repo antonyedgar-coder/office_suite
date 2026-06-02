@@ -588,6 +588,9 @@ DIRECTOR_COMPANY_TYPES = {
 # Client types allowed as the director side of Director Mapping / DIR-3 (must be marked director with DIN).
 DIRECTOR_ELIGIBLE_CLIENT_TYPES = frozenset({"Individual", "Foreign Citizen"})
 
+# Client types allowed for DSC Management (New DSC, bulk upload).
+DSC_ELIGIBLE_CLIENT_TYPES = frozenset({"Individual", "Foreign Citizen"})
+
 CESSATION_REASON_CHOICES = [
     ("Resigned", "Resigned"),
     ("Disqualified", "Disqualified"),
@@ -841,7 +844,7 @@ class ClientPortalCredential(models.Model):
 
 
 class ClientDSC(models.Model):
-    """Digital signature certificate for an Individual client (New DSC)."""
+    """Digital signature certificate for an Individual or Foreign Citizen client (New DSC)."""
 
     client = models.ForeignKey(
         Client,
@@ -859,7 +862,8 @@ class ClientDSC(models.Model):
         blank=True,
         help_text="Last time an expiry reminder was sent for this DSC record.",
     )
-    dsc_password = models.CharField(max_length=255)
+    dsc_password = models.CharField(max_length=255, blank=True, default="")
+    remarks = models.CharField(max_length=500, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -891,8 +895,10 @@ class ClientDSC(models.Model):
 
     def clean(self):
         super().clean()
-        if self.client_id and self.client.client_type != "Individual":
-            raise ValidationError({"client": "DSC can only be created for Individual clients."})
+        if self.client_id and self.client.client_type not in DSC_ELIGIBLE_CLIENT_TYPES:
+            raise ValidationError(
+                {"client": "DSC can only be created for Individual or Foreign Citizen clients."}
+            )
         if self.issue_date and self.expiry_date and self.expiry_date < self.issue_date:
             raise ValidationError({"expiry_date": "Expiry date must be on or after issue date."})
 

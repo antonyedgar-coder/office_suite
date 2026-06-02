@@ -66,6 +66,7 @@ from .client_activity import (
 from .models import (
     DIRECTOR_COMPANY_TYPES,
     DIRECTOR_ELIGIBLE_CLIENT_TYPES,
+    DSC_ELIGIBLE_CLIENT_TYPES,
     Client,
     ClientActivityLog,
     ClientDSC,
@@ -170,7 +171,7 @@ CLIENT_DETAIL_COMPANY_DIRECTOR_TYPES = frozenset(
 
 
 def _client_detail_show_dsc_tab(client: Client, user) -> bool:
-    return client.client_type == "Individual" and user.has_perm("masters.view_clientdsc")
+    return client.client_type in DSC_ELIGIBLE_CLIENT_TYPES and user.has_perm("masters.view_clientdsc")
 
 
 def _client_detail_show_mis_tab(user) -> bool:
@@ -2314,7 +2315,8 @@ def dsc_bulk_import(request):
                     issue_date=d["issue_date"],
                     expiry_date=d["expiry_date"],
                     expiry_notification=d["expiry_notification"],
-                    dsc_password=d["dsc_password"],
+                    dsc_password=d.get("dsc_password") or "",
+                    remarks=d.get("remarks") or "",
                     created_by=request.user,
                     updated_by=request.user,
                 )
@@ -2339,11 +2341,14 @@ def dsc_bulk_import(request):
             request.session[DSC_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
         ctx = _masters_bulk_csv_preview_context(
             rows=rows,
-            preview_columns=["Client", "Issue", "Expiry", "Notify"],
+            preview_columns=["Client", "Issue", "Expiry", "Notify", "Remarks"],
             upload_url_name="dsc_bulk_import",
             preview_title="DSC import",
             preview_page_title="DSC — Import preview",
-            success_hint="Individual clients only. In-out records are created on import. Click Confirm import to save.",
+            success_hint=(
+                "Individual and Foreign Citizen clients only. "
+                "In-out records are created on import. Click Confirm import to save."
+            ),
             cells_fn=lambda r: [
                 (
                     f"{r.data['client'].client_name}"
@@ -2354,6 +2359,7 @@ def dsc_bulk_import(request):
                 r.data.get("issue_date", ""),
                 r.data.get("expiry_date", ""),
                 "Yes" if r.data.get("expiry_notification") else "No",
+                (r.data.get("remarks") or "")[:80],
             ],
         )
         if ctx["can_import"]:
@@ -2369,8 +2375,10 @@ def dsc_bulk_import(request):
             "import_title": "DSC import",
             "import_page_title": "DSC — Bulk upload (CSV)",
             "import_description": (
-                "CLIENT_ID and CLIENT_NAME must match an approved Individual client in your branch. "
-                "Dates: YYYY-MM-DD or DD-MM-YYYY. EXPIRY_NOTIFICATION: YES or NO."
+                "CLIENT_ID and CLIENT_NAME must match an approved Individual or Foreign Citizen "
+                "client in your branch. "
+                "Dates: YYYY-MM-DD or DD-MM-YYYY. EXPIRY_NOTIFICATION: YES or NO. "
+                "DSC_PASSWORD and REMARKS are optional."
             ),
             "columns": DSC_CSV_COLUMNS,
             "template_url_name": "dsc_bulk_import_template",
@@ -2389,7 +2397,18 @@ def dsc_bulk_import_template(request):
 
     lines = [",".join(q(c) for c in DSC_CSV_COLUMNS)]
     lines.append(
-        ",".join(q(c) for c in ["A00001", "Sample Client Name", "2024-01-01", "2027-01-01", "YES", "dsc-secret"])
+        ",".join(
+            q(c)
+            for c in [
+                "A00001",
+                "Sample Client Name",
+                "2024-01-01",
+                "2027-01-01",
+                "YES",
+                "",
+                "Optional note",
+            ]
+        )
     )
     content = "\r\n".join(lines) + "\r\n"
     resp = HttpResponse(content, content_type="text/csv; charset=utf-8")

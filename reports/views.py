@@ -17,6 +17,7 @@ from masters.models import (
     DIRECTOR_COMPANY_TYPES,
     DIRECTOR_ELIGIBLE_CLIENT_TYPES,
     Client,
+    ClientDSC,
     ClientPortalCredential,
     DirectorMapping,
 )
@@ -31,6 +32,7 @@ from .forms import (
     MISFlexibleReportForm,
     MISPeriodFilterForm,
     MISTypeWiseFilterForm,
+    DSCReportFilterForm,
     PortalPasswordReportFilterForm,
 )
 
@@ -2683,4 +2685,116 @@ def portal_password_report_csv(request):
         w.writerow(_portal_password_report_row(r))
     resp = HttpResponse(buf.getvalue(), content_type="text/csv; charset=utf-8")
     resp["Content-Disposition"] = 'attachment; filename="portal-password-report.csv"'
+    return resp
+
+
+DSC_REPORT_COLUMNS = [
+    "CLIENT_ID",
+    "CLIENT_NAME",
+    "CLIENT_TYPE",
+    "PAN",
+    "ISSUE_DATE",
+    "EXPIRY_DATE",
+    "EXPIRY_NOTIFICATION",
+    "DSC_PASSWORD",
+    "REMARKS",
+    "CREATED_BY",
+    "CREATED_ON",
+]
+
+
+def _dsc_report_base_qs(user):
+    allowed = approved_clients_for_user(user)
+    return ClientDSC.objects.filter(client__in=allowed).select_related(
+        "client", "created_by", "updated_by"
+    )
+
+
+def _dsc_report_qs(user, form: DSCReportFilterForm):
+    if not form.is_valid():
+        return ClientDSC.objects.none()
+    qs = _dsc_report_base_qs(user).order_by("-expiry_date", "client__client_name")
+    cd = form.cleaned_data
+    client = cd.get("client")
+    if client:
+        qs = qs.filter(client=client)
+    client_type = cd.get("client_type")
+    if client_type:
+        qs = qs.filter(client__client_type=client_type)
+    issue_from = cd.get("issue_from")
+    issue_to = cd.get("issue_to")
+    if issue_from:
+        qs = qs.filter(issue_date__gte=issue_from)
+    if issue_to:
+        qs = qs.filter(issue_date__lte=issue_to)
+    expiry_from = cd.get("expiry_from")
+    expiry_to = cd.get("expiry_to")
+    if expiry_from:
+        qs = qs.filter(expiry_date__gte=expiry_from)
+    if expiry_to:
+        qs = qs.filter(expiry_date__lte=expiry_to)
+    return qs
+
+
+def _dsc_report_row_dict(r: ClientDSC) -> dict:
+    created_on = timezone.localtime(r.created_at).strftime("%d-%m-%Y %H:%M") if r.created_at else ""
+    return {
+        "client_id": r.client.client_id or "",
+        "client_name": r.client.client_name or "",
+        "client_type": r.client.client_type or "",
+        "pan": (r.client.pan or "").upper() or "—",
+        "issue_date": r.issue_date.strftime("%d-%m-%Y") if r.issue_date else "—",
+        "expiry_date": r.expiry_date.strftime("%d-%m-%Y") if r.expiry_date else "—",
+        "expiry_notification": "Yes" if r.expiry_notification else "No",
+        "dsc_password": r.dsc_password or "—",
+        "remarks": r.remarks or "—",
+        "created_by": user_display_name(r.created_by) or "—",
+        "created_on": created_on,
+        "is_expired": r.is_expired,
+    }
+
+
+def _dsc_report_csv_row(r: ClientDSC) -> list[str]:
+    d = _dsc_report_row_dict(r)
+    return [
+        d["client_id"],
+        d["client_name"],
+        d["client_type"],
+        d["pan"] if d["pan"] != "—" else "",
+        r.issue_date.isoformat() if r.issue_date else "",
+        r.expiry_date.isoformat() if r.expiry_date else "",
+        d["expiry_notification"],
+        r.dsc_password or "",
+        r.remarks or "",
+        d["created_by"] if d["created_by"] != "—" else "",
+        d["created_on"],
+    ]
+
+
+@require_perm("reports.view_dsc_report")
+def dsc_report(request):
+    form = DSCReportFilterForm(request.GET or None, user=request.user)
+    rows = []
+    if request.GET and form.is_valid():
+        for r in _dsc_report_qs(request.user, form)[:2000]:
+            rows.append(_dsc_report_row_dict(r))
+    return render(
+        request,
+        "reports/dsc_report.html",
+        {"form": form, "rows": rows},
+    )
+
+
+@require_perm("reports.export_dsc_report")
+def dsc_report_csv(request):
+    form = DSCReportFilterForm(request.GET, user=request.user)
+    if not form.is_valid():
+        return redirect("reports_dsc")
+    buf = StringIO()
+    w = csv.writer(buf)
+    w.writerow(DSC_REPORT_COLUMNS)
+    for r in _dsc_report_qs(request.user, form).iterator(chunk_size=500):
+        w.writerow(_dsc_report_csv_row(r))
+    resp = HttpResponse(buf.getvalue(), content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="dsc-management-report.csv"'
     return resp

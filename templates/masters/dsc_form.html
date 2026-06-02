@@ -4,7 +4,7 @@
 
 {% block content %}
   {% if mode == "create" %}
-    {% include "includes/page_header.html" with title="New DSC" subtitle="Individual clients only. An in-out record is created automatically." %}
+    {% include "includes/page_header.html" with title="New DSC" subtitle="Individual and Foreign Citizen clients only. An in-out record is created automatically." %}
   {% else %}
     {% include "includes/page_header.html" with title="Edit DSC" subtitle="Update issue, expiry, or password for this certificate." %}
   {% endif %}
@@ -20,7 +20,7 @@
           {{ form.client }}
           {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
           {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
-          <div class="form-field-hint">Approved Individual clients only (search by name or PAN).</div>
+          <div class="form-field-hint">Approved Individual and Foreign Citizen clients only (search by name or PAN).</div>
         </div>
         <div class="col-12 col-md-3">
           <label class="form-label" for="dscPanDisplay">PAN</label>
@@ -55,10 +55,16 @@
           {% if form.expiry_notification.errors %}<div class="text-danger small">{{ form.expiry_notification.errors }}</div>{% endif %}
         </div>
         <div class="col-12 col-md-4">
-          <label class="form-label{% if mode == 'create' %} required-field{% endif %}" for="{{ form.dsc_password.id_for_label }}">DSC password</label>
+          <label class="form-label" for="{{ form.dsc_password.id_for_label }}">DSC password</label>
           {{ form.dsc_password }}
           {% if form.dsc_password.help_text %}<div class="form-field-hint">{{ form.dsc_password.help_text }}</div>{% endif %}
           {% if form.dsc_password.errors %}<div class="text-danger small">{{ form.dsc_password.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="{{ form.remarks.id_for_label }}">Remarks</label>
+          {{ form.remarks }}
+          {% if form.remarks.errors %}<div class="text-danger small">{{ form.remarks.errors }}</div>{% endif %}
+          <div class="form-field-hint">Optional.</div>
         </div>
 
         {% if form.non_field_errors %}

@@ -59,6 +59,17 @@
           <span class="text-secondary small">No access</span>
         {% endif %}
       </li>
+      <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-3">
+        <div>
+          <div class="fw-medium">DSC Management report</div>
+          <div class="text-secondary small">DSC records with client name, type, issue date, and expiry date filters.</div>
+        </div>
+        {% if perms.reports.view_dsc_report %}
+          <a class="btn btn-sm btn-primary" href="{% url 'reports_dsc' %}">Open</a>
+        {% else %}
+          <span class="text-secondary small">No access</span>
+        {% endif %}
+      </li>
     </ul>
   </div>
 {% endblock %}

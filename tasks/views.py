@@ -538,7 +538,7 @@ def task_master_bulk_import_template(request):
     response["Content-Disposition"] = 'attachment; filename="task-masters-template.csv"'
     writer = csv.writer(response)
     writer.writerow(TASK_MASTER_CSV_COLUMNS)
-    writer.writerow(["GST", "GSTR-1", "", "normal", "YES", "NO", "", "", "", ""])
+    writer.writerow(["GST", "GSTR-1", "", "normal", "YES", "NO", "", "", ""])
     return response
 
 

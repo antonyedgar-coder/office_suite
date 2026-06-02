@@ -28,6 +28,8 @@ urlpatterns = [
         views.portal_password_report_csv,
         name="reports_portal_password_csv",
     ),
+    path("dsc/", views.dsc_report, name="reports_dsc"),
+    path("dsc/download.csv", views.dsc_report_csv, name="reports_dsc_csv"),
 
     # Backward-compatible links (old MIS report URLs)
     path("mis/period/", views.mis_report, name="reports_mis_period"),
