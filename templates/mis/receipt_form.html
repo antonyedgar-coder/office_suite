@@ -15,16 +15,21 @@
       <div class="row g-3">
         {% include "mis/includes/client_autocomplete_fields.html" %}
 
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-md-4">
           <label class="form-label" for="{{ form.fees_received.id_for_label }}">Fees received</label>
           {{ form.fees_received }}
           {% if form.fees_received.errors %}<div class="text-danger small">{{ form.fees_received.errors }}</div>{% endif %}
         </div>
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-md-4">
           <label class="form-label" for="{{ form.expenses_received.id_for_label }}">Expenses received</label>
           {{ form.expenses_received }}
           {% if form.expenses_received.errors %}<div class="text-danger small">{{ form.expenses_received.errors }}</div>{% endif %}
           <div class="form-field-hint">At least one amount must be greater than zero.</div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Total</label>
+          <input class="form-control mono" id="receiptTotalDisplay" value="{% if obj %}{{ obj.total_amount }}{% else %}0.00{% endif %}" disabled readonly />
+          <div class="form-field-hint">Fees received + Expenses received (saved automatically).</div>
         </div>
 
         {% include "includes/activity_remarks_field.html" with field=form.remarks %}
@@ -37,4 +42,28 @@
 
     {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
   </form>
+
+  <script>
+    (function () {
+      var feesEl = document.getElementById("id_fees_received");
+      var expEl = document.getElementById("id_expenses_received");
+      var totalEl = document.getElementById("receiptTotalDisplay");
+      if (!feesEl || !expEl || !totalEl) return;
+
+      function num(v) {
+        var n = parseFloat(String(v || "").replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      }
+
+      function refreshTotal() {
+        totalEl.value = (num(feesEl.value) + num(expEl.value)).toFixed(2);
+      }
+
+      [feesEl, expEl].forEach(function (el) {
+        el.addEventListener("input", refreshTotal);
+        el.addEventListener("change", refreshTotal);
+      });
+      refreshTotal();
+    })();
+  </script>
 {% endblock %}

@@ -27,6 +27,7 @@
             <th>Branch</th>
             <th class="text-end">Tender fees</th>
             <th class="text-end">Tender deposit</th>
+            <th class="text-end">Total</th>
             <th></th>
           </tr>
         </thead>
@@ -38,6 +39,7 @@
               <td>{{ r.client.branch }}</td>
               <td class="text-end mono">{{ r.tender_fees }}</td>
               <td class="text-end mono">{{ r.tender_deposit }}</td>
+              <td class="text-end mono fw-semibold">{{ r.total_amount }}</td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
                   {% if perms.mis.change_tenderdetail %}
@@ -50,7 +52,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="text-secondary">No tender entries.</td></tr>
+            <tr><td colspan="7" class="text-secondary">No tender entries.</td></tr>
           {% endfor %}
         </tbody>
       </table>

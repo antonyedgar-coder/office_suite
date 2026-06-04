@@ -14,15 +14,20 @@
     <div class="card p-3 mb-3">
       <div class="row g-3">
         {% include "mis/includes/client_autocomplete_fields.html" %}
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-md-4">
           <label class="form-label" for="{{ form.tender_fees.id_for_label }}">Tender fees</label>
           {{ form.tender_fees }}
           {% if form.tender_fees.errors %}<div class="text-danger small">{{ form.tender_fees.errors }}</div>{% endif %}
         </div>
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-md-4">
           <label class="form-label" for="{{ form.tender_deposit.id_for_label }}">Tender deposit</label>
           {{ form.tender_deposit }}
           {% if form.tender_deposit.errors %}<div class="text-danger small">{{ form.tender_deposit.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Total</label>
+          <input class="form-control mono" id="tenderTotalDisplay" value="{% if obj %}{{ obj.total_amount }}{% else %}0.00{% endif %}" disabled readonly />
+          <div class="form-field-hint">Tender fees + Tender deposit (saved automatically).</div>
         </div>
 
         {% include "includes/activity_remarks_field.html" with field=form.remarks %}
@@ -35,4 +40,28 @@
 
     {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
   </form>
+
+  <script>
+    (function () {
+      var feesEl = document.getElementById("id_tender_fees");
+      var depEl = document.getElementById("id_tender_deposit");
+      var totalEl = document.getElementById("tenderTotalDisplay");
+      if (!feesEl || !depEl || !totalEl) return;
+
+      function num(v) {
+        var n = parseFloat(String(v || "").replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      }
+
+      function refreshTotal() {
+        totalEl.value = (num(feesEl.value) + num(depEl.value)).toFixed(2);
+      }
+
+      [feesEl, depEl].forEach(function (el) {
+        el.addEventListener("input", refreshTotal);
+        el.addEventListener("change", refreshTotal);
+      });
+      refreshTotal();
+    })();
+  </script>
 {% endblock %}

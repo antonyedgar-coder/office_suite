@@ -209,6 +209,8 @@ class ReceiptForm(_ClientAutocompleteMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["fees_received"].label = "Fees received"
         self.fields["expenses_received"].label = "Expenses received"
+        self.fields["fees_received"].widget.attrs.setdefault("id", "id_fees_received")
+        self.fields["expenses_received"].widget.attrs.setdefault("id", "id_expenses_received")
 
     def clean(self):
         data = super().clean()
@@ -271,6 +273,11 @@ class TenderDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["tender_fees"].widget.attrs.setdefault("id", "id_tender_fees")
+        self.fields["tender_deposit"].widget.attrs.setdefault("id", "id_tender_deposit")
 
     def clean(self):
         data = super().clean()

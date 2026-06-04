@@ -77,6 +77,7 @@
             <th style="width: 110px">Date</th>
             <th class="text-end">Fees received</th>
             <th class="text-end">Expenses received</th>
+            <th class="text-end">Total</th>
             <th>Remarks</th>
           </tr>
         </thead>
@@ -86,10 +87,11 @@
               <td class="small">{{ row.date|date:"d-m-Y" }}</td>
               <td class="text-end small">{{ row.fees_received }}</td>
               <td class="text-end small">{{ row.expenses_received }}</td>
+              <td class="text-end small">{{ row.total_amount }}</td>
               <td class="small">{{ row.remarks|default:"—" }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="4" class="text-secondary">No receipts.</td></tr>
+            <tr><td colspan="5" class="text-secondary">No receipts.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -139,6 +141,7 @@
             <th style="width: 110px">Date</th>
             <th class="text-end">Tender fees</th>
             <th class="text-end">Deposit</th>
+            <th class="text-end">Total</th>
             <th>Remarks</th>
           </tr>
         </thead>
@@ -148,10 +151,11 @@
               <td class="small">{{ row.date|date:"d-m-Y" }}</td>
               <td class="text-end small">{{ row.tender_fees }}</td>
               <td class="text-end small">{{ row.tender_deposit }}</td>
+              <td class="text-end small">{{ row.total_amount }}</td>
               <td class="small">{{ row.remarks|default:"—" }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="4" class="text-secondary">No tender entries.</td></tr>
+            <tr><td colspan="5" class="text-secondary">No tender entries.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -78,6 +78,13 @@ class Receipt(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        editable=False,
+        default=Decimal("0.00"),
+    )
     remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -89,10 +96,13 @@ class Receipt(models.Model):
     def save(self, *args, **kwargs):
         if self.client_id:
             self.pan_no = (self.client.pan or "").strip().upper()
+        fees = self.fees_received or Decimal("0.00")
+        expenses = self.expenses_received or Decimal("0.00")
+        self.total_amount = fees + expenses
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"Receipt {self.client_id} {self.date} (fees {self.fees_received} / exp recv {self.expenses_received})"
+        return f"Receipt {self.client_id} {self.date} (total {self.total_amount})"
 
 
 class ExpenseDetail(models.Model):
@@ -165,6 +175,13 @@ class TenderDetail(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        editable=False,
+        default=Decimal("0.00"),
+    )
     remarks = models.CharField(max_length=500, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -176,8 +193,11 @@ class TenderDetail(models.Model):
     def save(self, *args, **kwargs):
         if self.client_id:
             self.pan_no = (self.client.pan or "").strip().upper()
+        fees = self.tender_fees or Decimal("0.00")
+        deposit = self.tender_deposit or Decimal("0.00")
+        self.total_amount = fees + deposit
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"Tender {self.client_id} {self.date} ({self.tender_fees}/{self.tender_deposit})"
+        return f"Tender {self.client_id} {self.date} (total {self.total_amount})"
 
