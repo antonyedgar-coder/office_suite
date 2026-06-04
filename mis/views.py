@@ -444,12 +444,10 @@ def fees_import_template(request):
         "CLIENT_ID",
         "CLIENT_NAME",
         "FEES_AMOUNT",
+        "EXPENSES_INVOICE_AMOUNT",
         "GST_AMOUNT",
-        "FEES_RECEIVED_AMOUNT",
-        "EXPENSES_RECEIVED_AMOUNT",
-        "EXPENSES_AMOUNT",
     ]
-    sample = [["2026-05-10", "A00001", "ABC PRIVATE LIMITED", "10000", "1800", "", "500"]]
+    sample = [["2026-05-10", "A00001", "ABC PRIVATE LIMITED", "10000", "500", "1800"]]
     return _xlsx_template_response("mis-fees-template.csv", header, sample)
 
 
@@ -476,14 +474,15 @@ def mis_bulk_import_template(request):
         "CLIENT_ID",
         "CLIENT_NAME",
         "FEES_AMOUNT",
+        "EXPENSES_INVOICE_AMOUNT",
         "GST_AMOUNT",
         "FEES_RECEIVED_AMOUNT",
         "EXPENSES_RECEIVED_AMOUNT",
         "EXPENSES_AMOUNT",
     ]
     sample = [
-        ["2026-05-10", "A00001", "ABC PRIVATE LIMITED", "10000", "1800", "11800", "500"],
-        ["2026-05-11", "B00002", "XYZ LLP", "5000", "900", "", ""],
+        ["2026-05-10", "A00001", "ABC PRIVATE LIMITED", "10000", "500", "1800", "11800", "500"],
+        ["2026-05-11", "B00002", "XYZ LLP", "5000", "0", "900", "", ""],
     ]
     return _xlsx_template_response("mis-bulk-template.csv", header, sample)
 
@@ -519,17 +518,19 @@ def mis_bulk_import(request):
                     raise ValueError(f"Client name mismatch for {r.data['client_id']}")
 
                 fees = r.data.get("fees_amount")
+                expenses_invoice = r.data.get("expenses_invoice_amount")
                 gst = r.data.get("gst_amount")
                 fees_received = r.data.get("fees_received_amount")
                 expenses_received = r.data.get("expenses_received_amount")
                 expenses = r.data.get("expenses_amount")
 
                 if request.user.is_superuser or request.user.has_perm("mis.add_feesdetail"):
-                    if fees is not None or gst is not None:
+                    if fees is not None or expenses_invoice is not None or gst is not None:
                         FeesDetail.objects.create(
                             date=r.data["date"],
                             client=c,
                             fees_amount=fees or Decimal("0.00"),
+                            expenses_invoice_amount=expenses_invoice or Decimal("0.00"),
                             gst_amount=gst or Decimal("0.00"),
                         )
 
@@ -612,6 +613,7 @@ def fees_import(request):
                     date=r.data["date"],
                     client=c,
                     fees_amount=r.data["fees_amount"],
+                    expenses_invoice_amount=r.data.get("expenses_invoice_amount") or Decimal("0.00"),
                     gst_amount=r.data["gst_amount"],
                 )
         request.session.pop("mis_fees_import_xlsx", None)

@@ -39,6 +39,7 @@
             <th>Portal link</th>
             <th>Active</th>
             <th>Created by</th>
+            <th style="width: 90px"></th>
           </tr>
         </thead>
         <tbody>
@@ -54,9 +55,14 @@
               </td>
               <td>{% if row.is_active %}Yes{% else %}No{% endif %}</td>
               <td class="small text-secondary">{{ row.created_by|creator_name }}</td>
+              <td class="text-end">
+                {% if perms.masters.change_portalname %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'portal_name_edit' row.pk %}">Edit</a>
+                {% endif %}
+              </td>
             </tr>
           {% empty %}
-            <tr><td colspan="4" class="text-secondary">No portal names yet.</td></tr>
+            <tr><td colspan="5" class="text-secondary">No portal names yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

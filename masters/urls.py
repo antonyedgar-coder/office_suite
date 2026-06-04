@@ -47,6 +47,7 @@ urlpatterns = [
     path("clients/<str:client_id>/reject/", views.client_reject, name="client_reject"),
     path("portal-names/", views.portal_name_list, name="portal_name_list"),
     path("portal-names/new/", views.portal_name_create, name="portal_name_create"),
+    path("portal-names/<int:pk>/", views.portal_name_edit, name="portal_name_edit"),
     path("portal-names/create/", views.portal_name_create_api, name="portal_name_create_api"),
     path("client-types/quick-create/", views.client_type_create_api, name="client_type_create_api"),
     path("client-groups/quick-create/", views.client_group_create_api, name="client_group_create_api"),

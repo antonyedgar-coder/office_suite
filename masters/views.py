@@ -1836,6 +1836,29 @@ def portal_name_create(request):
     return render(request, template, ctx)
 
 
+@require_perm("masters.change_portalname")
+def portal_name_edit(request, pk: int):
+    obj = get_object_or_404(PortalName, pk=pk)
+    if request.method == "POST":
+        form = PortalNameForm(request.POST, instance=obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Portal name updated.")
+            return redirect("portal_name_list")
+    else:
+        form = PortalNameForm(instance=obj)
+    return render(
+        request,
+        "masters/portal_name_form.html",
+        {
+            "form": form,
+            "mode": "edit",
+            "obj": obj,
+            "cancel_url": reverse("portal_name_list"),
+        },
+    )
+
+
 @require_perm("masters.add_portalname")
 def portal_name_create_api(request):
     if request.method != "POST":

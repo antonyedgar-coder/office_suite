@@ -5,12 +5,12 @@
 
 {% block content %}
   {% if mode == "create" %}
-    {% include "includes/page_header.html" with title="New fees entry" subtitle="Record fees and GST for a client." actions_template="mis/includes/fees_list_header_actions.html" %}
+    {% include "includes/page_header.html" with title="New fees entry" subtitle="Record fees, expenses invoice, and GST for a client." actions_template="mis/includes/fees_list_header_actions.html" %}
   {% else %}
-    {% include "includes/page_header.html" with title="Edit fees entry" subtitle="Update fees and GST for this client." %}
+    {% include "includes/page_header.html" with title="Edit fees entry" subtitle="Update fees, expenses invoice, and GST for this client." %}
   {% endif %}
 
-  <form method="post" class="app-form-with-sticky-bar">
+  <form method="post" class="app-form-with-sticky-bar" id="feesDetailForm">
     {% csrf_token %}
     <div class="card p-3 mb-3">
       <div class="row g-3">
@@ -22,14 +22,19 @@
           {% if form.fees_amount.errors %}<div class="text-danger small">{{ form.fees_amount.errors }}</div>{% endif %}
         </div>
         <div class="col-12 col-md-4">
+          <label class="form-label" for="{{ form.expenses_invoice_amount.id_for_label }}">Expenses invoice</label>
+          {{ form.expenses_invoice_amount }}
+          {% if form.expenses_invoice_amount.errors %}<div class="text-danger small">{{ form.expenses_invoice_amount.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12 col-md-4">
           <label class="form-label" for="{{ form.gst_amount.id_for_label }}">GST amount</label>
           {{ form.gst_amount }}
           {% if form.gst_amount.errors %}<div class="text-danger small">{{ form.gst_amount.errors }}</div>{% endif %}
         </div>
         <div class="col-12 col-md-4">
           <label class="form-label">Total</label>
-          <input class="form-control" value="{% if obj %}{{ obj.total_amount }}{% else %}Auto{% endif %}" disabled readonly />
-          <div class="form-field-hint">Fees + GST</div>
+          <input class="form-control mono" id="feesTotalDisplay" value="{% if obj %}{{ obj.total_amount }}{% else %}0.00{% endif %}" disabled readonly />
+          <div class="form-field-hint">Fees + Expenses invoice + GST (saved automatically).</div>
         </div>
 
         {% include "includes/activity_remarks_field.html" with field=form.remarks %}
@@ -42,4 +47,30 @@
 
     {% include "includes/sticky_save_bar.html" with cancel_url=cancel_url %}
   </form>
+
+  <script>
+    (function () {
+      var feesEl = document.getElementById("id_fees_amount");
+      var expEl = document.getElementById("id_expenses_invoice_amount");
+      var gstEl = document.getElementById("id_gst_amount");
+      var totalEl = document.getElementById("feesTotalDisplay");
+      if (!feesEl || !expEl || !gstEl || !totalEl) return;
+
+      function num(v) {
+        var n = parseFloat(String(v || "").replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      }
+
+      function refreshTotal() {
+        var t = num(feesEl.value) + num(expEl.value) + num(gstEl.value);
+        totalEl.value = t.toFixed(2);
+      }
+
+      [feesEl, expEl, gstEl].forEach(function (el) {
+        el.addEventListener("input", refreshTotal);
+        el.addEventListener("change", refreshTotal);
+      });
+      refreshTotal();
+    })();
+  </script>
 {% endblock %}

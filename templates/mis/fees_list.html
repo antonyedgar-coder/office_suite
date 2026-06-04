@@ -3,7 +3,7 @@
 {% block page_title %}Fees Details{% endblock %}
 
 {% block content %}
-  {% include "includes/page_header.html" with title="Fees Details" subtitle="Invoice fees and GST recorded per client for MIS reporting." actions_template="mis/includes/fees_list_header_actions.html" %}
+  {% include "includes/page_header.html" with title="Fees Details" subtitle="Invoice fees, expenses invoice, and GST per client. Total is calculated automatically." actions_template="mis/includes/fees_list_header_actions.html" %}
 
   {% include "includes/filter_panel_open.html" with form_id="feesListFilterForm" %}
     <div class="col-12 col-md">
@@ -27,6 +27,7 @@
             <th>Client</th>
             <th>PAN</th>
             <th class="text-end">Fees</th>
+            <th class="text-end">Expenses invoice</th>
             <th class="text-end">GST</th>
             <th class="text-end">Total</th>
             <th></th>
@@ -39,6 +40,7 @@
               <td>{{ r.client.client_name }}</td>
               <td class="mono">{{ r.pan_no }}</td>
               <td class="text-end mono">{{ r.fees_amount }}</td>
+              <td class="text-end mono">{{ r.expenses_invoice_amount }}</td>
               <td class="text-end mono">{{ r.gst_amount }}</td>
               <td class="text-end mono fw-semibold">{{ r.total_amount }}</td>
               <td class="text-end">
@@ -54,7 +56,7 @@
             </tr>
           {% empty %}
             <tr class="table-empty-row">
-              <td colspan="7">No fees entries found.</td>
+              <td colspan="8">No fees entries found.</td>
             </tr>
           {% endfor %}
         </tbody>

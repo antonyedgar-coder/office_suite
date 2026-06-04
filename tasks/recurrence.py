@@ -37,6 +37,23 @@ def _clamp_day(year: int, month: int, day: int) -> date:
     return date(year, month, min(day, last))
 
 
+def _annual_calendar_year(anchor_fy: int, month: int) -> int:
+    """Calendar year for a month within an Indian FY anchored at anchor_fy (April start)."""
+    return anchor_fy if month >= 4 else anchor_fy + 1
+
+
+def _annual_create_due_months(cfg: dict) -> tuple[int, int]:
+    create_month = cfg.get("create_month")
+    due_month = cfg.get("due_month")
+    if create_month is None:
+        create_month = cfg.get("month")
+    if due_month is None:
+        due_month = cfg.get("month")
+    if create_month is None or due_month is None:
+        raise ValueError("Annual recurrence config missing create_month and due_month.")
+    return int(create_month), int(due_month)
+
+
 def quarter_for_date(d: date) -> tuple[int, int]:
     """Return (fy_start_year, quarter 1-4) for Indian FY."""
     if d.month >= 4:
@@ -197,15 +214,19 @@ def compute_create_due_dates(
         return create_d, due_d
 
     if freq == master.FREQ_ANNUALLY:
-        month = cfg["month"]
+        create_month, due_month = _annual_create_due_months(cfg)
         fy = fy_start_year(ref)
-        if cfg["fy_anchor"] == "next_fy":
-            anchor_fy = fy + 1
-        else:
-            anchor_fy = fy
-        y = anchor_fy if month >= 4 else anchor_fy + 1
-        create_d = _clamp_day(y, month, cfg["create_day"])
-        due_d = _clamp_day(y, month, cfg["due_day"])
+        anchor_fy = fy + 1 if cfg["fy_anchor"] == "next_fy" else fy
+        create_d = _clamp_day(
+            _annual_calendar_year(anchor_fy, create_month),
+            create_month,
+            cfg["create_day"],
+        )
+        due_d = _clamp_day(
+            _annual_calendar_year(anchor_fy, due_month),
+            due_month,
+            cfg["due_day"],
+        )
         return create_d, due_d
 
     m = re.match(r"^(\d{4})-(\d{4})$", period_key)

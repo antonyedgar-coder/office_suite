@@ -18,6 +18,13 @@ class FeesDetail(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
     )
+    expenses_invoice_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+        help_text="Expenses billed on the client invoice (included in total).",
+    )
     gst_amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -42,8 +49,9 @@ class FeesDetail(models.Model):
         if self.client_id:
             self.pan_no = (self.client.pan or "").strip().upper()
         fees = self.fees_amount or Decimal("0.00")
+        expenses_invoice = self.expenses_invoice_amount or Decimal("0.00")
         gst = self.gst_amount or Decimal("0.00")
-        self.total_amount = fees + gst
+        self.total_amount = fees + expenses_invoice + gst
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

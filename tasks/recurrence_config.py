@@ -55,10 +55,26 @@ def validate_recurrence_config(frequency: str, data: dict) -> None:
         _day_field(data["due_day"], "due_day")
 
     elif frequency == "annually":
-        _require_keys(data, ("fy_anchor", "month", "create_day", "due_day"), "recurrence_config")
+        _require_keys(data, ("fy_anchor", "create_day", "due_day"), "recurrence_config")
         if data["fy_anchor"] not in ("same_fy", "next_fy"):
             raise ValidationError({"fy_anchor": "Must be same_fy or next_fy."})
-        _month_field(data["month"], "month")
+        create_month = data.get("create_month")
+        due_month = data.get("due_month")
+        if create_month is None:
+            create_month = data.get("month")
+        if due_month is None:
+            due_month = data.get("month")
+        if create_month is None or due_month is None:
+            raise ValidationError(
+                {
+                    "recurrence_config": (
+                        "Annual recurrence requires create_month and due_month "
+                        "(or legacy month for both)."
+                    )
+                }
+            )
+        _month_field(create_month, "create_month")
+        _month_field(due_month, "due_month")
         _day_field(data["create_day"], "create_day")
         _day_field(data["due_day"], "due_day")
 

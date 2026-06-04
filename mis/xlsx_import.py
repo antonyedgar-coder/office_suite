@@ -113,7 +113,7 @@ def _read_csv_bytes(csv_bytes: bytes, *, expected_headers: list[str]) -> tuple[l
 
 
 def parse_fees_xlsx(xlsx_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
-    expected = ["DATE", "CLIENT_ID", "CLIENT_NAME", "FEES_AMOUNT", "GST_AMOUNT"]
+    expected = ["DATE", "CLIENT_ID", "CLIENT_NAME", "FEES_AMOUNT", "EXPENSES_INVOICE_AMOUNT", "GST_AMOUNT"]
     raw_rows, file_errors = _read_sheet_bytes(xlsx_bytes, expected_headers=expected)
     out: list[ImportRow] = []
     if file_errors:
@@ -133,15 +133,31 @@ def parse_fees_xlsx(xlsx_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
             errors.append("CLIENT_NAME is required.")
 
         fees = _as_decimal(r["FEES_AMOUNT"])
+        expenses_invoice = (
+            _as_decimal(r.get("EXPENSES_INVOICE_AMOUNT"))
+            if r.get("EXPENSES_INVOICE_AMOUNT") is not None
+            else Decimal("0")
+        )
         gst = _as_decimal(r["GST_AMOUNT"]) if r.get("GST_AMOUNT") is not None else Decimal("0")
         if fees is None:
             errors.append("FEES_AMOUNT must be a number.")
         elif fees < 0:
             errors.append("FEES_AMOUNT cannot be negative.")
+        if expenses_invoice is None:
+            errors.append("EXPENSES_INVOICE_AMOUNT must be a number (or blank for 0).")
+        elif expenses_invoice < 0:
+            errors.append("EXPENSES_INVOICE_AMOUNT cannot be negative.")
         if gst is None:
             errors.append("GST_AMOUNT must be a number (or blank for 0).")
         elif gst < 0:
             errors.append("GST_AMOUNT cannot be negative.")
+        if (
+            gst
+            and gst > Decimal("0")
+            and (fees or Decimal("0")) == Decimal("0")
+            and (expenses_invoice or Decimal("0")) == Decimal("0")
+        ):
+            errors.append("GST_AMOUNT cannot be entered when Fees and Expenses invoice are both zero.")
 
         out.append(
             ImportRow(
@@ -151,6 +167,7 @@ def parse_fees_xlsx(xlsx_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
                     "client_id": client_id,
                     "client_name": client_name,
                     "fees_amount": fees,
+                    "expenses_invoice_amount": expenses_invoice or Decimal("0.00"),
                     "gst_amount": gst or Decimal("0.00"),
                 },
                 errors=errors,
@@ -160,7 +177,7 @@ def parse_fees_xlsx(xlsx_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
 
 
 def parse_fees_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
-    expected = ["DATE", "CLIENT_ID", "CLIENT_NAME", "FEES_AMOUNT", "GST_AMOUNT"]
+    expected = ["DATE", "CLIENT_ID", "CLIENT_NAME", "FEES_AMOUNT", "EXPENSES_INVOICE_AMOUNT", "GST_AMOUNT"]
     raw_rows, file_errors = _read_csv_bytes(csv_bytes, expected_headers=expected)
     out: list[ImportRow] = []
     if file_errors:
@@ -180,15 +197,30 @@ def parse_fees_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
             errors.append("CLIENT_NAME is required.")
 
         fees = _as_decimal(r.get("FEES_AMOUNT"))
+        expenses_invoice = (
+            _as_decimal(r.get("EXPENSES_INVOICE_AMOUNT"))
+            if (r.get("EXPENSES_INVOICE_AMOUNT") not in (None, ""))
+            else Decimal("0.00")
+        )
         gst = _as_decimal(r.get("GST_AMOUNT")) if (r.get("GST_AMOUNT") not in (None, "")) else Decimal("0.00")
         if fees is None:
             errors.append("FEES_AMOUNT must be a number.")
         elif fees < 0:
             errors.append("FEES_AMOUNT cannot be negative.")
+        if expenses_invoice is None:
+            errors.append("EXPENSES_INVOICE_AMOUNT must be a number (or blank for 0).")
+        elif expenses_invoice < 0:
+            errors.append("EXPENSES_INVOICE_AMOUNT cannot be negative.")
         if gst is None:
             errors.append("GST_AMOUNT must be a number (or blank for 0).")
         elif gst < 0:
             errors.append("GST_AMOUNT cannot be negative.")
+        if (
+            gst > Decimal("0")
+            and (fees or Decimal("0")) == Decimal("0")
+            and (expenses_invoice or Decimal("0")) == Decimal("0")
+        ):
+            errors.append("GST_AMOUNT cannot be entered when Fees and Expenses invoice are both zero.")
 
         out.append(
             ImportRow(
@@ -198,6 +230,7 @@ def parse_fees_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]]:
                     "client_id": client_id,
                     "client_name": client_name,
                     "fees_amount": fees,
+                    "expenses_invoice_amount": expenses_invoice,
                     "gst_amount": gst,
                 },
                 errors=errors,
@@ -403,6 +436,7 @@ def parse_mis_combined_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]
         "CLIENT_ID",
         "CLIENT_NAME",
         "FEES_AMOUNT",
+        "EXPENSES_INVOICE_AMOUNT",
         "GST_AMOUNT",
         "FEES_RECEIVED_AMOUNT",
         "EXPENSES_RECEIVED_AMOUNT",
@@ -427,6 +461,11 @@ def parse_mis_combined_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]
             errors.append("CLIENT_NAME is required.")
 
         fees = _as_decimal(r.get("FEES_AMOUNT")) if (r.get("FEES_AMOUNT") not in (None, "")) else None
+        expenses_invoice = (
+            _as_decimal(r.get("EXPENSES_INVOICE_AMOUNT"))
+            if (r.get("EXPENSES_INVOICE_AMOUNT") not in (None, ""))
+            else None
+        )
         gst = _as_decimal(r.get("GST_AMOUNT")) if (r.get("GST_AMOUNT") not in (None, "")) else None
         fees_received = (
             _as_decimal(r.get("FEES_RECEIVED_AMOUNT"))
@@ -446,6 +485,7 @@ def parse_mis_combined_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]
 
         for label, raw_val, val in (
             ("FEES_AMOUNT", r.get("FEES_AMOUNT"), fees),
+            ("EXPENSES_INVOICE_AMOUNT", r.get("EXPENSES_INVOICE_AMOUNT"), expenses_invoice),
             ("GST_AMOUNT", r.get("GST_AMOUNT"), gst),
             ("FEES_RECEIVED_AMOUNT", r.get("FEES_RECEIVED_AMOUNT"), fees_received),
             ("EXPENSES_RECEIVED_AMOUNT", r.get("EXPENSES_RECEIVED_AMOUNT"), expenses_received),
@@ -457,18 +497,24 @@ def parse_mis_combined_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]
             if val is not None and val < 0:
                 errors.append(f"{label} cannot be negative.")
 
-        # GST rule: GST cannot be entered when Fees is 0/blank.
-        if gst is not None and gst > Decimal("0") and (fees is None or fees == Decimal("0")):
-            errors.append("GST_AMOUNT cannot be entered when FEES_AMOUNT is 0/blank.")
+        # GST rule: GST cannot be entered when Fees and Expenses invoice are both 0/blank.
+        if gst is not None and gst > Decimal("0"):
+            fees_zero = fees is None or fees == Decimal("0")
+            exp_inv_zero = expenses_invoice is None or expenses_invoice == Decimal("0")
+            if fees_zero and exp_inv_zero:
+                errors.append(
+                    "GST_AMOUNT cannot be entered when FEES_AMOUNT and EXPENSES_INVOICE_AMOUNT are 0/blank."
+                )
 
         # Only create records where amount exists and is > 0 (blank => ignore).
         has_any = any(
             v is not None and v != Decimal("0")
-            for v in (fees, gst, fees_received, expenses_received, expenses)
+            for v in (fees, expenses_invoice, gst, fees_received, expenses_received, expenses)
         )
         if not has_any:
             errors.append(
-                "Provide at least one amount (fees/gst/fees received/expenses received/expenses paid) or remove the row."
+                "Provide at least one amount (fees/expenses invoice/gst/fees received/"
+                "expenses received/expenses paid) or remove the row."
             )
 
         out.append(
@@ -479,6 +525,7 @@ def parse_mis_combined_csv(csv_bytes: bytes) -> tuple[list[ImportRow], list[str]
                     "client_id": client_id,
                     "client_name": client_name,
                     "fees_amount": fees,
+                    "expenses_invoice_amount": expenses_invoice,
                     "gst_amount": gst,
                     "fees_received_amount": fees_received,
                     "expenses_received_amount": expenses_received,

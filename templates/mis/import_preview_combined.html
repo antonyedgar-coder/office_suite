@@ -24,6 +24,7 @@
             <th>Client name</th>
             <th>Date</th>
             <th class="text-end">Fees</th>
+            <th class="text-end">Expenses invoice</th>
             <th class="text-end">GST</th>
             <th class="text-end">Fees received</th>
             <th class="text-end">Expenses received</th>
@@ -39,6 +40,7 @@
               <td>{{ r.data.client_name }}</td>
               <td>{{ r.data.date }}</td>
               <td class="text-end mono">{{ r.data.fees_amount }}</td>
+              <td class="text-end mono">{{ r.data.expenses_invoice_amount }}</td>
               <td class="text-end mono">{{ r.data.gst_amount }}</td>
               <td class="text-end mono">{{ r.data.fees_received_amount }}</td>
               <td class="text-end mono">{{ r.data.expenses_received_amount }}</td>
@@ -46,7 +48,7 @@
               <td class="text-danger small">{% if r.errors %}{{ r.errors|join:", " }}{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="9" class="text-secondary">No rows found in file.</td></tr>
+            <tr><td colspan="10" class="text-secondary">No rows found in file.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -137,7 +137,7 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
         model = FeesDetail
 
-        fields = ["date", "client", "fees_amount", "gst_amount", "remarks"]
+        fields = ["date", "client", "fees_amount", "expenses_invoice_amount", "gst_amount", "remarks"]
 
         widgets = {
 
@@ -145,7 +145,11 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
             "fees_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
 
-            "gst_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "expenses_invoice_amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01", "id": "id_expenses_invoice_amount"}
+            ),
+
+            "gst_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "id": "id_gst_amount"}),
 
             "remarks": forms.Textarea(
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Optional remarks"}
@@ -153,7 +157,10 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
         }
 
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["expenses_invoice_amount"].label = "Expenses invoice"
+        self.fields["fees_amount"].widget.attrs.setdefault("id", "id_fees_amount")
 
     def clean(self):
 
@@ -161,15 +168,20 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
         fees = data.get("fees_amount") or Decimal("0.00")
 
+        expenses_invoice = data.get("expenses_invoice_amount") or Decimal("0.00")
+
         gst = data.get("gst_amount") or Decimal("0.00")
 
-        if gst < 0 or fees < 0:
+        if gst < 0 or fees < 0 or expenses_invoice < 0:
 
             raise forms.ValidationError("Amounts cannot be negative.")
 
-        if fees == Decimal("0.00") and gst > Decimal("0.00"):
+        if fees == Decimal("0.00") and expenses_invoice == Decimal("0.00") and gst > Decimal("0.00"):
 
-            self.add_error("gst_amount", "GST amount cannot be entered when Fees amount is 0.")
+            self.add_error(
+                "gst_amount",
+                "GST amount cannot be entered when Fees and Expenses invoice are both zero.",
+            )
 
         return data
 

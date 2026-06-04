@@ -18,11 +18,29 @@
     var d = document.createElement("div");
     d.className = "mb-2";
     var html = '<label class="form-label">' + label + '</label><select class="form-select" data-rc="' + name + '">';
-    opts.forEach(function (o) { html += '<option value="' + o + '"' + (val === o ? " selected" : "") + ">" + o + "</option>"; });
+    opts.forEach(function (o) {
+      var v = typeof o === "object" ? o.value : o;
+      var t = typeof o === "object" ? o.label : o;
+      html += '<option value="' + v + '"' + (String(val) === String(v) ? " selected" : "") + ">" + t + "</option>";
+    });
     html += "</select>";
     d.innerHTML = html;
     return d;
   }
+  var MONTH_OPTS = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" },
+  ];
   function render() {
     fields.innerHTML = "";
     if (!recurring.checked) { panel.style.display = "none"; hidden.value = "{}"; return; }
@@ -43,9 +61,24 @@
       fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
     } else if (f === "annually") {
       fields.appendChild(selectRow("FY anchor", "fy_anchor", ["same_fy", "next_fy"], c.fy_anchor));
-      fields.appendChild(fieldRow("Month (1-12)", "month", "number", c.month));
-      fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
-      fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
+      fields.appendChild(
+        selectRow(
+          "Create task — month",
+          "create_month",
+          MONTH_OPTS,
+          c.create_month != null ? c.create_month : c.month
+        )
+      );
+      fields.appendChild(fieldRow("Create task — day", "create_day", "number", c.create_day));
+      fields.appendChild(
+        selectRow(
+          "Due date — month",
+          "due_month",
+          MONTH_OPTS,
+          c.due_month != null ? c.due_month : c.month
+        )
+      );
+      fields.appendChild(fieldRow("Due date — day", "due_day", "number", c.due_day));
     } else if (f === "every_3_years" || f === "every_5_years") {
       fields.appendChild(fieldRow("Create month", "create_month", "number", c.create_month));
       fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
@@ -81,7 +114,10 @@
     var out = {};
     fields.querySelectorAll("[data-rc]").forEach(function (el) {
       var k = el.getAttribute("data-rc");
-      if (el.type === "number") {
+      var isNumeric =
+        el.type === "number" ||
+        (el.tagName === "SELECT" && /_(day|month)$/.test(k));
+      if (isNumeric) {
         var n = parseInt(el.value, 10);
         if (!Number.isNaN(n)) out[k] = n;
       } else if (el.value) {

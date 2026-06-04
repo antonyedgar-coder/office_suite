@@ -31,6 +31,7 @@
             <th>Date</th>
             {% if mode == "fees" %}
               <th class="text-end">Fees</th>
+              <th class="text-end">Expenses invoice</th>
               <th class="text-end">GST</th>
             {% elif mode == "receipts" %}
               <th class="text-end">Fees received</th>
@@ -51,6 +52,7 @@
               <td>{{ r.data.date }}</td>
               {% if mode == "fees" %}
                 <td class="text-end mono">{{ r.data.fees_amount }}</td>
+                <td class="text-end mono">{{ r.data.expenses_invoice_amount }}</td>
                 <td class="text-end mono">{{ r.data.gst_amount }}</td>
               {% elif mode == "receipts" %}
                 <td class="text-end mono">{{ r.data.fees_received }}</td>

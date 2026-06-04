@@ -5,7 +5,15 @@ from .models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
 
 @admin.register(FeesDetail)
 class FeesDetailAdmin(admin.ModelAdmin):
-    list_display = ("date", "client", "pan_no", "fees_amount", "gst_amount", "total_amount")
+    list_display = (
+        "date",
+        "client",
+        "pan_no",
+        "fees_amount",
+        "expenses_invoice_amount",
+        "gst_amount",
+        "total_amount",
+    )
     list_select_related = ("client",)
     search_fields = ("client__client_name", "client__client_id", "pan_no")
     list_filter = ("date",)

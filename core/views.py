@@ -102,11 +102,8 @@ def dashboard_view(request):
     fees_sum = mis_fy_fees_received = mis_fy_expenses_received = mis_fy_expenses = Decimal("0")
     if show_mis_dashboard:
         mis_filter = {"date__gte": fy_start, "date__lte": fy_end}
-        mis_fy_fees = FeesDetail.objects.filter(**mis_filter).aggregate(
-            total=Sum("fees_amount"),
-            gst=Sum("gst_amount"),
-        )
-        fees_sum = (mis_fy_fees["total"] or Decimal("0")) + (mis_fy_fees["gst"] or Decimal("0"))
+        mis_fy_fees = FeesDetail.objects.filter(**mis_filter).aggregate(total=Sum("total_amount"))
+        fees_sum = mis_fy_fees["total"] or Decimal("0")
         rec_totals = Receipt.objects.filter(**mis_filter).aggregate(
             fees_received=Sum("fees_received"),
             expenses_received=Sum("expenses_received"),

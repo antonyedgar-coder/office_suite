@@ -739,6 +739,43 @@ class RecurrenceDateTests(TestCase):
         self.assertEqual(create_d, date(2026, 5, 5))
         self.assertEqual(due_d, date(2026, 6, 20))
 
+    def test_annual_create_and_due_in_different_months(self):
+        tg = TaskGroup.objects.create(name="ROC Annual")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Annual recurring filing",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_ANNUALLY,
+            recurrence_config={
+                "fy_anchor": "same_fy",
+                "create_month": 4,
+                "create_day": 1,
+                "due_month": 7,
+                "due_day": 15,
+            },
+        )
+        create_d, due_d = compute_create_due_dates(master, "FY2025-26", date(2025, 4, 1))
+        self.assertEqual(create_d, date(2025, 4, 1))
+        self.assertEqual(due_d, date(2025, 7, 15))
+
+    def test_annual_legacy_single_month_still_works(self):
+        tg = TaskGroup.objects.create(name="Legacy Annual")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Legacy annual",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_ANNUALLY,
+            recurrence_config={
+                "fy_anchor": "same_fy",
+                "month": 6,
+                "create_day": 10,
+                "due_day": 20,
+            },
+        )
+        create_d, due_d = compute_create_due_dates(master, "FY2025-26", date(2025, 4, 1))
+        self.assertEqual(create_d, date(2025, 6, 10))
+        self.assertEqual(due_d, date(2025, 6, 20))
+
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class RecurringCreateTests(TestCase):
