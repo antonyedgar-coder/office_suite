@@ -735,6 +735,51 @@ def task_master_quick_create_api(request):
 TASK_IMPORT_SESSION_KEY = "task_import_csv"
 
 
+def _task_bulk_import_preview_context(request, *, rows):
+    def cells_fn(r):
+        d = r.data
+        client_label = d.get("client_id_display") or (
+            d["client"].client_id if d.get("client") else ""
+        )
+        master_label = d.get("task_master_display") or (
+            d["task_master"].name if d.get("task_master") else ""
+        )
+        due_label = d.get("due_date") or d.get("due_date_display") or ""
+        return [
+            client_label,
+            master_label,
+            d.get("assignees_display") or "",
+            d.get("verifiers_display") or "",
+            str(due_label),
+            d.get("period_key") or "",
+        ]
+
+    return _bulk_csv_preview_context(
+        request,
+        rows=rows,
+        columns=["Client ID", "Task master", "Assignees", "Verifiers", "Due date", "Period"],
+        upload_url_name="task_bulk_import",
+        preview_title="Task import",
+        preview_page_title="Task import preview",
+        success_hint="Click Confirm import to create tasks. Assignees must approve before work begins.",
+        cells_fn=cells_fn,
+    )
+
+
+def _render_task_bulk_import_preview(request, rows, *, flash_success: bool = False, flash_error: str = ""):
+    ctx = _task_bulk_import_preview_context(request, rows=rows)
+    if flash_success and ctx["can_import"]:
+        messages.success(request, f"File uploaded. {ctx['total_rows']} row(s) ready to import.")
+    elif flash_error:
+        messages.error(request, flash_error)
+    elif ctx["error_count"]:
+        messages.error(
+            request,
+            f"{ctx['error_count']} row(s) have errors. Fix the CSV and upload again, or review the rows below.",
+        )
+    return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+
 @require_perm("tasks.add_task")
 def task_bulk_import(request):
     if request.method == "POST" and request.POST.get("confirm") == "1":
@@ -749,8 +794,11 @@ def task_bulk_import(request):
             messages.error(request, file_errors[0])
             return redirect("task_bulk_import")
         if any(r.errors for r in rows):
-            messages.error(request, "Cannot import: fix validation errors and upload again.")
-            return redirect("task_bulk_import")
+            return _render_task_bulk_import_preview(
+                request,
+                rows,
+                flash_error="Cannot import: fix the errors below and upload again.",
+            )
         created = 0
         for row in rows:
             d = row.data
@@ -808,24 +856,7 @@ def task_bulk_import(request):
             request.session[TASK_IMPORT_SESSION_KEY] = raw_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
             request.session[TASK_IMPORT_SESSION_KEY] = raw_bytes.decode("cp1252", errors="replace")
-        can_import = all(not r.errors for r in rows) and len(rows) > 0
-        if can_import:
-            messages.success(request, f"File uploaded. {len(rows)} row(s) ready to import.")
-        else:
-            bad = sum(1 for r in rows if r.errors)
-            messages.error(request, f"{bad} row(s) have errors. Fix the CSV and upload again.")
-        return render(
-            request,
-            "tasks/task_bulk_import_preview.html",
-            {
-                "rows": rows,
-                "error_rows": [r for r in rows if r.errors],
-                "total_rows": len(rows),
-                "error_count": sum(1 for r in rows if r.errors),
-                "can_import": can_import,
-                "columns": TASK_CSV_COLUMNS,
-            },
-        )
+        return _render_task_bulk_import_preview(request, rows, flash_success=True)
 
     from .task_csv_import import TASK_CSV_COLUMNS
 

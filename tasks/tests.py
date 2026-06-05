@@ -1042,3 +1042,21 @@ class TaskCsvImportTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].errors, [])
         self.assertEqual(rows[0].data["period_key"], "2026-05")
+
+    def test_parse_invalid_row_shows_row_errors(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "BAD001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,monthly,"
+            "5,2026,,,,,18-05-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].errors)
+        self.assertIn("CLIENT_ID not found", rows[0].errors[0])
+        self.assertEqual(rows[0].data.get("client_id_display"), "BAD001")
+        self.assertEqual(rows[0].data.get("task_master_display"), "CSV TG|CSV Master")

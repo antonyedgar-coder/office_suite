@@ -175,11 +175,23 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
             if len({u.pk for u in assignees}) != len(assignees):
                 errors.append("ASSIGNEE_EMAILS must be different people.")
 
-        verifier = staff_by_email.get(verifier_email) if verifier_email else None
-        if not verifier_email:
-            errors.append("VERIFIER_EMAIL is required.")
-        elif not verifier:
-            errors.append(f"Unknown verifier email: {verifier_email}")
+        verifier_emails = [
+            e.strip().lower()
+            for e in verifier_emails_raw.replace(";", ",").split(",")
+            if e.strip()
+        ]
+        verifiers = []
+        if not verifier_emails:
+            errors.append("VERIFIER_EMAIL is required (comma or semicolon separated).")
+        else:
+            for em in verifier_emails:
+                u = staff_by_email.get(em)
+                if not u:
+                    errors.append(f"Unknown verifier email: {em}")
+                else:
+                    verifiers.append(u)
+            if len({u.pk for u in verifiers}) != len(verifiers):
+                errors.append("VERIFIER_EMAIL must be different people.")
 
         document_checker = (
             staff_by_email.get(document_checker_email) if document_checker_email else None
@@ -297,7 +309,13 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
             "priority": priority,
             "is_billable": is_billable,
             "fees_amount": fees_amount,
+            # Preview labels (kept even when row has errors)
+            "client_id_display": client_id,
+            "task_master_display": master_raw,
+            "assignees_display": assignee_raw,
+            "verifiers_display": verifier_emails_raw,
+            "due_date_display": due_raw,
         }
-        rows.append(TaskParsedRow(row_num=i, data=cleaned if not errors else {}, errors=errors))
+        rows.append(TaskParsedRow(row_num=i, data=cleaned, errors=errors))
 
     return rows, file_errors
