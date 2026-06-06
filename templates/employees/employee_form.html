@@ -110,9 +110,10 @@
           </div>
         </div>
         <div class="col-12 col-md-6">
-          <label class="form-label small text-secondary">Email ID (login)</label>
-          <input class="form-control" type="email" value="{{ official_email }}" disabled readonly />
-          <div class="form-text">For client users this must stay aligned with Client Master (synced on save).</div>
+          <label class="form-label" for="{{ form.official_email.id_for_label }}">{{ form.official_email.label }}</label>
+          {{ form.official_email }}
+          {% if form.official_email.help_text %}<div class="form-text">{{ form.official_email.help_text }}</div>{% endif %}
+          {% if form.official_email.errors %}<div class="text-danger small">{{ form.official_email.errors }}</div>{% endif %}
         </div>
 
         <div class="col-12">

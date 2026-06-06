@@ -163,6 +163,13 @@ class EmployeeCreateForm(forms.ModelForm):
 
 
 class EmployeeEditForm(forms.ModelForm):
+    official_email = forms.EmailField(
+        label="Email ID (login)",
+        help_text=(
+            "Changing login email keeps the same user account — tasks, MIS entries, and "
+            "other history stay linked. The user signs in with the new email."
+        ),
+    )
     is_active = forms.BooleanField(
         required=False,
         label="Active (can sign in)",
@@ -217,6 +224,7 @@ class EmployeeEditForm(forms.ModelForm):
         )
         user = getattr(self.instance, "user", None)
         if user:
+            self.fields["official_email"].initial = user.email
             self.fields["is_active"].initial = user.is_active
             self.fields["force_password_change"].initial = user.force_password_change
             self.fields["groups"].initial = user.groups.all()
@@ -228,6 +236,10 @@ class EmployeeEditForm(forms.ModelForm):
 
         if self.instance.pk and self.instance.user_type == Employee.USER_TYPE_CLIENT:
             self.fields["full_name"].label = "Client name (from Client Master)"
+            self.fields["official_email"].help_text = (
+                "Updates login email and the linked Client Master email. "
+                "Tasks and other records remain on this user account."
+            )
             for name in (
                 "full_name",
                 "contact_no",
@@ -250,9 +262,12 @@ class EmployeeEditForm(forms.ModelForm):
                 "user_permissions",
                 "new_password",
                 "new_password_confirm",
+                "official_email",
             ):
                 if name in ("is_active", "force_password_change"):
                     field.widget.attrs.setdefault("class", "form-check-input")
+                elif name == "official_email":
+                    field.widget.attrs.setdefault("class", "form-control")
                 continue
             if isinstance(field.widget, forms.DateInput):
                 field.widget.attrs.setdefault("class", "form-control")
@@ -260,8 +275,31 @@ class EmployeeEditForm(forms.ModelForm):
             else:
                 field.widget.attrs.setdefault("class", "form-control")
 
+    def clean_official_email(self):
+        email = (self.cleaned_data.get("official_email") or "").strip().lower()
+        if not email:
+            raise forms.ValidationError("Email ID is required.")
+        user = getattr(self.instance, "user", None)
+        qs = User.objects.filter(email__iexact=email)
+        if user:
+            qs = qs.exclude(pk=user.pk)
+        if qs.exists():
+            raise forms.ValidationError("Another user already uses this email.")
+        return email
+
     def clean(self):
         data = super().clean()
+        email = (data.get("official_email") or "").strip().lower()
+        if self.instance.pk and self.instance.user_type == Employee.USER_TYPE_CLIENT and email:
+            linked = self.instance.linked_client_id
+            if linked:
+                others = Client.objects.filter(email__iexact=email).exclude(pk=linked)
+                if others.exists():
+                    self.add_error(
+                        "official_email",
+                        "Another client in Client Master already uses this email. "
+                        "Use a unique email or update Client Master first.",
+                    )
         n1 = (data.get("new_password") or "").strip()
         n2 = (data.get("new_password_confirm") or "").strip()
         if n1 or n2:

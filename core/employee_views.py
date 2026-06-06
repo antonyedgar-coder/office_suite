@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 from .decorators import require_perm
 from .employee_forms import EmployeeCreateForm, EmployeeEditForm, FirstPasswordChangeForm
 from .models import Employee
+from .user_login_email import apply_user_login_email_change
 
 User = get_user_model()
 
@@ -149,6 +150,11 @@ def employee_edit(request, pk: int):
                         _employee_edit_context(request, form=form, employee=employee, user=user),
                     )
             form.save()
+            email_changed = apply_user_login_email_change(
+                user,
+                form.cleaned_data["official_email"],
+                employee=employee,
+            )
             user.is_active = is_active
             user.force_password_change = form.cleaned_data.get("force_password_change", False)
             user.groups.set(form.cleaned_data["groups"])
@@ -158,7 +164,14 @@ def employee_edit(request, pk: int):
                 user.set_password(np)
             user.save()
             sync_employee_from_client_master(employee)
-            messages.success(request, "User updated.")
+            if email_changed:
+                messages.success(
+                    request,
+                    f"User updated. Login email is now {user.email}. "
+                    "Existing tasks and records remain linked to this account.",
+                )
+            else:
+                messages.success(request, "User updated.")
             return redirect("user_list")
     else:
         form = EmployeeEditForm(instance=employee)
