@@ -29,6 +29,7 @@ from tasks.period_keys import (
     current_fy_start,
     next_multi_year_span_after_last,
 )
+from tasks.one_time_period import allocate_one_time_period_key
 from tasks.period_overlap import find_overlapping_task, period_interval, validate_no_overlapping_task
 from tasks.user_labels import build_short_codes_for_users, short_code_for_user, user_person_name
 from tasks.dashboard_counts import build_task_dashboard_context, task_due_bucket_counts
@@ -597,6 +598,34 @@ class PeriodOverlapTests(TestCase):
                 period_key="2026-05",
             )
 
+    def test_one_time_allows_repeat_same_month(self):
+        one_time_master = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="OT TG"),
+            name="GST Notice",
+            is_recurring=False,
+        )
+        due = date(2026, 5, 15)
+        first_key = allocate_one_time_period_key(self.client, one_time_master, due)
+        Task.objects.create(
+            client=self.client,
+            task_master=one_time_master,
+            title="First notice",
+            status=Task.STATUS_ASSIGNED,
+            due_date=due,
+            verifier=User.objects.create_user(email="v-ot1@ex.com", password="pass12345"),
+            document_checker=User.objects.create_user(email="d-ot1@ex.com", password="pass12345"),
+            period_key=first_key,
+            period_type="one_time",
+        )
+        second_key = allocate_one_time_period_key(self.client, one_time_master, due)
+        self.assertNotEqual(first_key, second_key)
+        validate_no_overlapping_task(
+            client=self.client,
+            master=one_time_master,
+            period_type="one_time",
+            period_key=second_key,
+        )
+
     def test_three_year_blocks_until_next_period(self):
         master = TaskMaster.objects.create(
             task_group=TaskGroup.objects.create(name="3Y"),
@@ -1060,3 +1089,37 @@ class TaskCsvImportTests(TestCase):
         self.assertIn("CLIENT_ID not found", rows[0].errors[0])
         self.assertEqual(rows[0].data.get("client_id_display"), "BAD001")
         self.assertEqual(rows[0].data.get("task_master_display"), "CSV TG|CSV Master")
+
+    def test_parse_fy_range_format_2025_26(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,monthly,"
+            "5,2025-26,,,,,05-06-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].data["period_key"], "2026-05")
+
+    def test_parse_one_time_duplicate_rows_allowed(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            ",,,,,,11-05-2026,normal,NO,\n"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            ",,,,,,11-05-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[1].errors, [])
+        self.assertNotEqual(rows[0].data["period_key"], rows[1].data["period_key"])

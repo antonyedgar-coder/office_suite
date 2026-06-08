@@ -50,7 +50,13 @@ def parse_one_time_period_key(period_key: str) -> dict[str, str | int] | None:
     }
 
 
-def allocate_one_time_period_key(client, master, due_date: date) -> str:
+def allocate_one_time_period_key(
+    client,
+    master,
+    due_date: date,
+    *,
+    pending_period_keys: set[str] | None = None,
+) -> str:
     """
     Next unique one-time period_key for client + task master + due-date month.
     First task in a month has no suffix; further tasks use -2, -3, …
@@ -65,6 +71,8 @@ def allocate_one_time_period_key(client, master, due_date: date) -> str:
         .exclude(status=Task.STATUS_CANCELLED)
         .values_list("period_key", flat=True)
     )
+    if pending_period_keys:
+        existing.extend(sorted(pending_period_keys))
     in_month = [pk for pk in existing if pk == prefix or pk.startswith(f"{prefix}-")]
     if not in_month:
         return prefix

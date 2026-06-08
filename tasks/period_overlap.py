@@ -134,6 +134,10 @@ def find_overlapping_task(
     enrollment_started: date | None = None,
     exclude_task_id: int | None = None,
 ) -> Task | None:
+    pt = (period_type or "").strip()
+    if pt == PERIOD_ONE_TIME or is_one_time_period_key(period_key):
+        return None
+
     new_iv = period_interval(
         period_type,
         period_key,

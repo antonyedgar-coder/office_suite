@@ -54,6 +54,37 @@ def _cell(raw: dict, header_map: dict[str, str], key: str) -> str:
     return (raw.get(orig, "") or "").strip() if orig else ""
 
 
+PERIOD_TYPE_ALIASES = {
+    "qtrly": "quarterly",
+    "halfyearly": "half_yearly",
+    "half-yearly": "half_yearly",
+}
+
+
+def _normalize_period_type(raw: str) -> str:
+    period_type = (raw or "").strip().lower().replace(" ", "_")
+    return PERIOD_TYPE_ALIASES.get(period_type, period_type)
+
+
+def _parse_fy_start(raw: str) -> int | None:
+    """Accept FY start as 2025, 2025-26, FY2025, etc."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    s = s.upper().replace("FY", "").strip()
+    if "-" in s:
+        s = s.split("-", 1)[0].strip()
+    elif "/" in s:
+        s = s.split("/", 1)[0].strip()
+    return int(s)
+
+
+def _period_error_message(exc: Exception) -> str:
+    if hasattr(exc, "messages") and exc.messages:
+        return str(exc.messages[0])
+    return str(exc)
+
+
 def _parse_due_date(raw: str) -> date | None:
     s = (raw or "").strip()
     if not s:
@@ -133,6 +164,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
     clients_by_id = {c.client_id.upper(): c for c in client_qs}
     rows: list[TaskParsedRow] = []
     seen_keys: set[tuple] = set()
+    pending_one_time_keys: set[str] = set()
 
     for i, raw in enumerate(reader, start=2):
         errors: list[str] = []
@@ -141,7 +173,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         assignee_raw = _cell(raw, header_map, "ASSIGNEE_EMAILS")
         verifier_emails_raw = _cell(raw, header_map, "VERIFIER_EMAIL")
         document_checker_email = _cell(raw, header_map, "DOCUMENT_CHECKER_EMAIL").lower()
-        period_type = _cell(raw, header_map, "PERIOD_TYPE").lower().replace(" ", "_")
+        period_type = _normalize_period_type(_cell(raw, header_map, "PERIOD_TYPE"))
         due_raw = _cell(raw, header_map, "DUE_DATE")
 
         client = clients_by_id.get(client_id)
@@ -224,7 +256,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
         try:
             month = int(_cell(raw, header_map, "PERIOD_MONTH") or "0") or None
             fy_raw = _cell(raw, header_map, "PERIOD_FY")
-            fy_start = int(fy_raw) if fy_raw else None
+            fy_start = _parse_fy_start(fy_raw) if fy_raw else None
             quarter = _upper(_cell(raw, header_map, "PERIOD_QUARTER")) or None
             half = _upper(_cell(raw, header_map, "PERIOD_HALF")) or None
             y_from = int(_cell(raw, header_map, "PERIOD_YEAR_FROM") or "0") or None
@@ -239,11 +271,13 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
                 year_to=y_to,
             )
         except (ValueError, DjangoValidationError) as exc:
-            msg = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
-            errors.append(f"Period: {msg}")
+            errors.append(f"Period: {_period_error_message(exc)}")
 
         if master and master.is_recurring and period_key and not errors:
-            _, due_date = compute_create_due_dates(master, period_key, timezone.localdate())
+            try:
+                _, due_date = compute_create_due_dates(master, period_key, timezone.localdate())
+            except (ValueError, KeyError, TypeError, DjangoValidationError) as exc:
+                errors.append(f"Period: {_period_error_message(exc)}")
         elif not due_raw:
             errors.append("DUE_DATE is required for one-time tasks (YYYY-MM-DD or DD-MM-YYYY).")
         elif not due_date:
@@ -256,7 +290,13 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
             and due_date
             and not errors
         ):
-            period_key = allocate_one_time_period_key(client, master, due_date)
+            period_key = allocate_one_time_period_key(
+                client,
+                master,
+                due_date,
+                pending_period_keys=pending_one_time_keys,
+            )
+            pending_one_time_keys.add(period_key)
 
         priority = _cell(raw, header_map, "PRIORITY").lower() or TaskMaster.PRIORITY_NORMAL
         if priority not in dict(TaskMaster.PRIORITY_CHOICES):
@@ -275,7 +315,14 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
                 fees_amount = Decimal(fees_raw)
             except InvalidOperation:
                 errors.append("FEES_AMOUNT must be a number.")
-        if client and master and period_key and period_type and not errors:
+        if (
+            client
+            and master
+            and period_key
+            and period_type
+            and not errors
+            and period_type != PERIOD_ONE_TIME
+        ):
             dup_key = (client.pk, master.pk, period_key)
             if dup_key in seen_keys:
                 errors.append("Duplicate row for same client, task master, and period in this file.")

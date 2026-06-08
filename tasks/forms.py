@@ -741,7 +741,13 @@ class TaskCreateForm(forms.Form):
         elif not cleaned.get("due_date"):
             self.add_error("due_date", "Due date is required for one-time tasks.")
 
-        if client and master and cleaned.get("period_key") and period_type:
+        if (
+            client
+            and master
+            and cleaned.get("period_key")
+            and period_type
+            and period_type != PERIOD_ONE_TIME
+        ):
             enr_started = None
             if master.is_recurring:
                 enr_started = timezone.localdate()
