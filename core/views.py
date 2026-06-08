@@ -224,13 +224,20 @@ def reset_test_data(request):
             )
         else:
             delete_clients = request.POST.get("delete_clients") == "1"
+            delete_tasks_full = request.POST.get("delete_tasks") == "1" or delete_clients
             options = WipeOptions(
                 mis=request.POST.get("delete_mis") == "1" or delete_clients,
                 director_mapping=request.POST.get("delete_director_mapping") == "1" or delete_clients,
                 dir3kyc=request.POST.get("delete_dir3kyc") == "1" or delete_clients,
                 clients=delete_clients,
                 client_groups=request.POST.get("delete_client_groups") == "1",
-                tasks=request.POST.get("delete_tasks") == "1" or delete_clients,
+                tasks=delete_tasks_full,
+                task_instances=(
+                    request.POST.get("delete_task_instances") == "1" and not delete_tasks_full
+                ),
+                task_configuration=(
+                    request.POST.get("delete_task_configuration") == "1" and not delete_tasks_full
+                ),
                 documents=request.POST.get("delete_documents") == "1" or delete_clients,
                 activity_log=request.POST.get("delete_activity_log") == "1",
                 delete_users=request.POST.get("delete_users") == "1",
@@ -245,6 +252,8 @@ def reset_test_data(request):
                 options.clients,
                 options.client_groups,
                 options.tasks,
+                options.task_instances,
+                options.task_configuration,
                 options.documents,
                 options.activity_log,
                 options.delete_users,

@@ -102,8 +102,10 @@
         <div class="form-text">Add one or more verifiers. They cannot be assigned users on the same task.</div>
       </div>
 
-      <div class="mb-3">
-        <label class="form-label" for="id_document_checker">Document checker</label>
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="taskDocCheckerSearch">Document checker</label>
+        <input class="form-control" id="taskDocCheckerSearch" placeholder="Type name or email (min. 1 character)…" autocomplete="off" />
+        <div id="taskDocCheckerSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
         {{ form.document_checker }}
         {% if form.document_checker.errors %}<div class="text-danger small">{{ form.document_checker.errors }}</div>{% endif %}
         <div class="form-text">Checks documents after verification; only they can mark the task complete. May be the same person as the verifier or task creator.</div>
@@ -190,6 +192,7 @@
 {% block extra_js %}
 {% load static %}
 <script src="{% static 'js/task_verifier_picker.js' %}"></script>
+<script src="{% static 'js/task_user_single_picker.js' %}"></script>
 {% if can_add_task_master %}
   <script src="{% static 'js/master_picker_popup.js' %}"></script>
 {% endif %}
@@ -286,7 +289,8 @@
     var shown = 0;
     staffUsers.forEach(function (u) {
       if (selectedAssignees[String(u.id)]) return;
-      if (u.label.toLowerCase().indexOf(qq) === -1) return;
+      var hay = (u.search || u.label || "").toLowerCase();
+      if (hay.indexOf(qq) === -1) return;
       var item = document.createElement("div");
       item.className = "task-suggest-item";
       item.textContent = u.label;
@@ -420,6 +424,16 @@
     staffUsers: staffUsers,
     initial: [],
   });
+
+  if (window.initTaskUserSinglePicker) {
+    window.initTaskUserSinglePicker({
+      searchId: "taskDocCheckerSearch",
+      suggestId: "taskDocCheckerSuggestions",
+      hiddenId: "taskDocCheckerHidden",
+      options: staffUsers,
+      minChars: 1,
+    });
+  }
 
   document.getElementById("taskCreateForm").addEventListener("submit", function () {
     syncClientHidden();

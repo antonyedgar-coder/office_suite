@@ -165,7 +165,7 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
     clients_by_id = {c.client_id.upper(): c for c in client_qs}
     rows: list[TaskParsedRow] = []
     seen_keys: set[tuple] = set()
-    pending_one_time_keys: dict[int, set[str]] = defaultdict(set)
+    pending_one_time_keys: dict[tuple[int, int], set[str]] = defaultdict(set)
 
     for i, raw in enumerate(reader, start=2):
         errors: list[str] = []
@@ -291,14 +291,15 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
             and due_date
             and not errors
         ):
-            client_pending = pending_one_time_keys[client.pk]
+            slot_key = (client.pk, master.pk)
+            client_pending = pending_one_time_keys[slot_key]
             period_key = allocate_one_time_period_key(
                 client,
                 master,
                 due_date,
                 pending_period_keys=client_pending,
             )
-            pending_one_time_keys[client.pk].add(period_key)
+            pending_one_time_keys[slot_key].add(period_key)
 
         priority = _cell(raw, header_map, "PRIORITY").lower() or TaskMaster.PRIORITY_NORMAL
         if priority not in dict(TaskMaster.PRIORITY_CHOICES):

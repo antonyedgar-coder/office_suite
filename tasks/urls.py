@@ -34,6 +34,7 @@ urlpatterns = [
     path("my/export.csv", views.task_my_list_csv, name="task_my_list_csv"),
     path("my/", views.task_my_list, name="task_my_list"),
     path("new/", views.task_create, name="task_create"),
+    path("data/manage/", views.task_data_manage, name="task_data_manage"),
     path("new/bulk-upload/", views.task_bulk_import, name="task_bulk_import"),
     path(
         "new/bulk-upload/template/",

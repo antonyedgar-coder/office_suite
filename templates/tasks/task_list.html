@@ -5,6 +5,24 @@
   {% include "tasks/includes/task_date_range_assets.html" %}
   <style>
     .task-list-filters .form-label { font-size: 0.75rem; }
+    .task-list-filters .field-wrap { position: relative; }
+    .task-list-filters .task-suggest-list {
+      position: absolute;
+      z-index: 30;
+      max-height: 220px;
+      overflow-y: auto;
+      width: 100%;
+      display: none;
+      background: #fff;
+    }
+    .task-list-filters .task-suggest-list.show { display: block; }
+    .task-list-filters .task-suggest-item {
+      cursor: pointer;
+      padding: 0.45rem 0.65rem;
+      border-bottom: 1px solid #e8eaf1;
+      font-size: 0.875rem;
+    }
+    .task-list-filters .task-suggest-item:hover { background: #eef2ff; }
   </style>
 {% endblock %}
 {% block extra_js %}

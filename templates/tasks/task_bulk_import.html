@@ -13,6 +13,9 @@
     <div class="mb-3 d-flex flex-wrap gap-2">
       <a class="btn btn-outline-primary" href="{% url 'task_bulk_import_template' %}">Download CSV template</a>
       <a class="btn btn-outline-secondary" href="{% url 'task_create' %}">Single task</a>
+      {% if user.is_superuser %}
+        <a class="btn btn-outline-danger" href="{% url 'task_data_manage' %}">Manage task data (delete &amp; reload)</a>
+      {% endif %}
     </div>
     <form method="post" enctype="multipart/form-data" class="vstack gap-2">
       {% csrf_token %}

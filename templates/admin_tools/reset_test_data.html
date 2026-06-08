@@ -71,7 +71,15 @@
         {% if enable_task_module %}
           <div class="form-check">
             <input class="form-check-input reset-opt" type="checkbox" id="delTasks" name="delete_tasks" value="1" />
-            <label class="form-check-label" for="delTasks">Task module (tasks, masters, groups, enrollments)</label>
+            <label class="form-check-label" for="delTasks">Full task module (instances + masters + groups)</label>
+          </div>
+          <div class="form-check ms-3">
+            <input class="form-check-input reset-opt" type="checkbox" id="delTaskInstances" name="delete_task_instances" value="1" />
+            <label class="form-check-label" for="delTaskInstances">Task instances only (assigned tasks &amp; enrollments — keeps masters/groups)</label>
+          </div>
+          <div class="form-check ms-3">
+            <input class="form-check-input reset-opt" type="checkbox" id="delTaskConfig" name="delete_task_configuration" value="1" />
+            <label class="form-check-label" for="delTaskConfig">Task masters &amp; groups only (delete instances first)</label>
           </div>
         {% endif %}
         {% if enable_documents_module %}

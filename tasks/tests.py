@@ -710,7 +710,7 @@ class TaskListDisplayTests(TestCase):
         cols = format_period_display("FY2025-26-2026-04", period_type="one_time")
         self.assertEqual(cols.period, "April 2026")
         cols2 = format_period_display("FY2025-26-2026-04-2", period_type="one_time")
-        self.assertEqual(cols2.period, "April 2026 2")
+        self.assertEqual(cols2.period, "April 2026 (2)")
 
     def test_period_columns_monthly(self):
         cols = format_period_display("2026-05", period_type="monthly")

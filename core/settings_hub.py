@@ -110,6 +110,16 @@ def _tasks_setup_cards(user) -> tuple[SettingsCard, ...]:
                 icon_bg="settings-icon-amber",
             )
         )
+    if user.is_superuser:
+        cards.append(
+            SettingsCard(
+                title="Manage task data",
+                description="Delete assigned tasks only (keep masters) or remove task masters and groups.",
+                url_name="task_data_manage",
+                icon="bi-trash3-fill",
+                icon_bg="settings-icon-pink",
+            )
+        )
     return tuple(cards)
 
 

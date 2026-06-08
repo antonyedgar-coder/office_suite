@@ -43,7 +43,8 @@
       var shown = 0;
       staffUsers.forEach(function (u) {
         if (selected[String(u.id)]) return;
-        if (u.label.toLowerCase().indexOf(qq) === -1) return;
+        var hay = (u.search || u.label || "").toLowerCase();
+        if (hay.indexOf(qq) === -1) return;
         var item = document.createElement("div");
         item.className = "task-suggest-item";
         item.textContent = u.label;

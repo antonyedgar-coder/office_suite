@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Manage task data — CA Office Suite{% endblock %}
+{% block page_title %}Manage task data{% endblock %}
+{% block content %}
+  <div class="card p-3 mb-3 border-danger">
+    <div class="fw-semibold text-danger mb-1">Danger zone</div>
+    <p class="text-secondary small mb-0">
+      Use these tools to clear task data and reload from CSV. <strong>Task masters and task groups are your setup templates</strong>
+      (GST Notice, Digital Signature, etc.). Assigned tasks are the actual work rows.
+    </p>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-2">Current counts</div>
+    <div class="row g-2 small">
+      <div class="col-6 col-md-4"><span class="text-secondary">Assigned tasks</span><div class="mono fw-semibold">{{ counts.tasks }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Recurring enrollments</span><div class="mono fw-semibold">{{ counts.task_enrollments }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Task masters</span><div class="mono fw-semibold">{{ counts.task_masters }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Task groups</span><div class="mono fw-semibold">{{ counts.task_groups }}</div></div>
+      <div class="col-6 col-md-4"><span class="text-secondary">Notifications</span><div class="mono fw-semibold">{{ counts.task_notifications }}</div></div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card p-3 h-100 border-warning">
+        <h2 class="h6 fw-semibold">1. Delete task instances only</h2>
+        <p class="small text-secondary">
+          Removes <strong>all assigned tasks</strong> (any status), assignments, checklists, activity, notifications,
+          and recurring enrollments. Keeps <strong>task masters</strong> and <strong>task groups</strong> so you can
+          <a href="{{ bulk_import_url }}">bulk-upload tasks</a> again with the same setup.
+        </p>
+        <ul class="small text-secondary">
+          <li>Uploaded client documents stay; links to deleted tasks are cleared automatically.</li>
+          <li>Clients are not affected.</li>
+        </ul>
+        <form method="post" class="mt-auto" onsubmit="return confirm('Permanently delete ALL task instances? Task masters and groups will be kept.');">
+          {% csrf_token %}
+          <input type="hidden" name="confirm" value="1" />
+          <input type="hidden" name="action" value="instances" />
+          <label class="form-label small" for="confirmInstances">Type <strong>DELETE</strong> to confirm</label>
+          <input class="form-control form-control-sm mb-2" id="confirmInstances" name="confirm_text" autocomplete="off" required />
+          <button class="btn btn-warning btn-sm" type="submit" {% if counts.tasks == 0 and counts.task_enrollments == 0 %}disabled{% endif %}>
+            Delete all task instances
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card p-3 h-100 border-danger">
+        <h2 class="h6 fw-semibold text-danger">2. Delete task masters &amp; groups</h2>
+        <p class="small text-secondary">
+          Removes <strong>task setup templates</strong> — task groups, task masters, and master checklists.
+          Run <strong>option 1 first</strong> if any tasks still exist.
+        </p>
+        <ul class="small text-secondary">
+          <li>Task→document folder links for those masters are removed.</li>
+          <li>Re-upload task groups and masters before bulk-assigning tasks again.</li>
+        </ul>
+        <form method="post" class="mt-auto" onsubmit="return confirm('Permanently delete ALL task masters and groups?');">
+          {% csrf_token %}
+          <input type="hidden" name="confirm" value="1" />
+          <input type="hidden" name="action" value="configuration" />
+          <label class="form-label small" for="confirmConfiguration">Type <strong>DELETE</strong> to confirm</label>
+          <input class="form-control form-control-sm mb-2" id="confirmConfiguration" name="confirm_text" autocomplete="off" required />
+          <button class="btn btn-danger btn-sm" type="submit" {% if counts.task_masters == 0 and counts.task_groups == 0 %}disabled{% endif %}>
+            Delete task masters &amp; groups
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-primary btn-sm" href="{{ bulk_import_url }}">Bulk upload tasks (CSV)</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'task_group_list' %}">Task groups</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'task_master_list' %}">Task masters</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'task_list' %}">Task list</a>
+  </div>
+{% endblock %}

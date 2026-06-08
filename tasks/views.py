@@ -151,6 +151,62 @@ def task_group_edit(request, pk: int):
     return render(request, "tasks/task_group_form.html", {"form": form, "mode": "edit", "group": group})
 
 
+@login_required
+def task_data_manage(request):
+    """Superuser: delete all task instances or task masters/groups separately."""
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    if not task_module_enabled():
+        raise Http404
+
+    from tasks.task_data_wipe import (
+        count_task_module_data,
+        delete_task_configuration_only,
+        delete_task_instances_only,
+    )
+
+    counts = count_task_module_data()
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        action = (request.POST.get("action") or "").strip()
+        typed = (request.POST.get("confirm_text") or "").strip().upper()
+        if typed != "DELETE":
+            messages.error(request, 'Type DELETE in the confirmation box to proceed.')
+            return redirect("task_data_manage")
+
+        try:
+            if action == "instances":
+                deleted = delete_task_instances_only()
+                n = deleted.get("tasks", 0)
+                messages.success(
+                    request,
+                    f"Deleted {n} task(s) and related rows. Task masters and groups are unchanged — "
+                    f"you can bulk-upload tasks again.",
+                )
+            elif action == "configuration":
+                deleted = delete_task_configuration_only()
+                messages.success(
+                    request,
+                    "Deleted task masters and groups. "
+                    f"Removed {deleted.get('task_masters', 0)} master(s) and "
+                    f"{deleted.get('task_groups', 0)} group(s).",
+                )
+            else:
+                messages.error(request, "Unknown action.")
+        except ValidationError as exc:
+            messages.error(request, exc.messages[0] if exc.messages else str(exc))
+        return redirect("task_data_manage")
+
+    return render(
+        request,
+        "tasks/task_data_manage.html",
+        {
+            "counts": counts,
+            "bulk_import_url": reverse("task_bulk_import"),
+        },
+    )
+
+
 @require_perm("tasks.delete_taskgroup")
 def task_group_delete(request, pk: int):
     group = get_object_or_404(TaskGroup, pk=pk)
@@ -663,7 +719,11 @@ def task_create(request):
     from .user_labels import staff_users_queryset, user_display_label
 
     staff_users = [
-        {"id": u.pk, "label": user_display_label(u)}
+        {
+            "id": u.pk,
+            "label": user_display_label(u),
+            "search": f"{user_display_label(u)} {u.email}".lower(),
+        }
         for u in staff_users_queryset()
     ]
     clients = []
@@ -961,6 +1021,7 @@ def task_edit(request, pk: int):
             "task": task,
             "staff_users_json": staff_users,
             "initial_assignees_json": initial_assignees,
+            "initial_verifiers_json": initial_verifiers,
             "period_frequency": period_cols.frequency,
             "period_label": period_cols.period,
         },

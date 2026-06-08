@@ -562,6 +562,7 @@ class TaskCreateForm(forms.Form):
         self.fields["task_master"].help_text = "Only active task masters are listed."
 
         self.fields["document_checker"].queryset = staff_qs
+        self.fields["document_checker"].widget = forms.HiddenInput(attrs={"id": "taskDocCheckerHidden"})
 
         self._staff_qs = staff_qs
 
@@ -680,6 +681,8 @@ class TaskCreateForm(forms.Form):
                     "Filing period type is fixed by the task master recurrence frequency.",
                 )
             cleaned["period_type"] = locked_period
+        elif master and not master.is_recurring:
+            cleaned["period_type"] = PERIOD_ONE_TIME
         period_type = cleaned.get("period_type")
 
         try:
@@ -834,6 +837,7 @@ class TaskEditForm(forms.Form):
         super().__init__(*args, **kwargs)
         staff_qs = staff_users_queryset()
         self.fields["document_checker"].queryset = staff_qs
+        self.fields["document_checker"].widget = forms.HiddenInput(attrs={"id": "taskDocCheckerHidden"})
         self._staff_qs = staff_qs
         if task is not None and not self.is_bound:
             assignee_ids = list(task.assignments.values_list("user_id", flat=True))

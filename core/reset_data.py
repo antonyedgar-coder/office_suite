@@ -20,6 +20,8 @@ class WipeOptions:
     clients: bool = False
     client_groups: bool = False
     tasks: bool = False
+    task_instances: bool = False
+    task_configuration: bool = False
     documents: bool = False
     activity_log: bool = False
     delete_users: bool = False
@@ -116,34 +118,22 @@ def count_local_data() -> dict[str, int]:
     return counts
 
 
-def _delete_tasks() -> dict[str, int]:
-    if not task_module_enabled():
-        return {}
-    from tasks.models import (
-        Task,
-        TaskActivity,
-        TaskAssignment,
-        TaskChecklistItem,
-        TaskEnrollmentAssignee,
-        TaskGroup,
-        TaskMaster,
-        TaskMasterChecklistItem,
-        TaskNotification,
-        TaskRecurrenceEnrollment,
-    )
+def _delete_task_instances() -> dict[str, int]:
+    from tasks.task_data_wipe import delete_task_instances_only
 
-    out: dict[str, int] = {}
-    out["task_notifications"] = TaskNotification.objects.all().delete()[0]
-    out["task_activities"] = TaskActivity.objects.all().delete()[0]
-    out["task_checklist_items"] = TaskChecklistItem.objects.all().delete()[0]
-    out["task_assignments"] = TaskAssignment.objects.all().delete()[0]
-    out["tasks"] = Task.objects.all().delete()[0]
-    out["task_enrollment_assignees"] = TaskEnrollmentAssignee.objects.all().delete()[0]
-    out["task_enrollments"] = TaskRecurrenceEnrollment.objects.all().delete()[0]
-    out["task_master_checklist"] = TaskMasterChecklistItem.objects.all().delete()[0]
-    out["task_masters"] = TaskMaster.objects.all().delete()[0]
-    out["task_groups"] = TaskGroup.objects.all().delete()[0]
-    return out
+    return delete_task_instances_only()
+
+
+def _delete_task_configuration() -> dict[str, int]:
+    from tasks.task_data_wipe import delete_task_configuration_only
+
+    return delete_task_configuration_only()
+
+
+def _delete_tasks() -> dict[str, int]:
+    from tasks.task_data_wipe import delete_all_task_module_data
+
+    return delete_all_task_module_data()
 
 
 def _delete_documents_module() -> dict[str, int]:
@@ -204,6 +194,11 @@ def wipe_local_data(options: WipeOptions) -> dict[str, int]:
 
     if options.tasks:
         deleted.update(_delete_tasks())
+    else:
+        if options.task_instances:
+            deleted.update(_delete_task_instances())
+        if options.task_configuration:
+            deleted.update(_delete_task_configuration())
 
     if options.mis:
         from mis.models import ExpenseDetail, FeesDetail, Receipt

@@ -64,7 +64,7 @@
 
   </div>
 
-  <div class="col-12 col-md-6 col-lg-3">
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
 
     <label class="form-label small text-secondary mb-0" for="taskFilterAssigneeSearch">Users</label>
 
@@ -72,13 +72,9 @@
 
       type="text"
 
-      class="form-control form-control-sm task-filter-user-search"
+      class="form-control form-control-sm"
 
       id="taskFilterAssigneeSearch"
-
-      data-hidden-id="taskFilterAssigneeValue"
-
-      data-datalist-id="taskFilterAssigneeList"
 
       placeholder="Type to search…"
 
@@ -86,13 +82,13 @@
 
     />
 
-    <input type="hidden" name="assignee" id="taskFilterAssigneeValue" value="{{ filters.assignee_id }}" />
+    <div id="taskFilterAssigneeSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
 
-    <datalist id="taskFilterAssigneeList"></datalist>
+    <input type="hidden" name="assignee" id="taskFilterAssigneeValue" value="{{ filters.assignee_id }}" />
 
   </div>
 
-  <div class="col-12 col-md-6 col-lg-3">
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
 
     <label class="form-label small text-secondary mb-0" for="taskFilterVerifierSearch">Verifier</label>
 
@@ -100,13 +96,9 @@
 
       type="text"
 
-      class="form-control form-control-sm task-filter-user-search"
+      class="form-control form-control-sm"
 
       id="taskFilterVerifierSearch"
-
-      data-hidden-id="taskFilterVerifierValue"
-
-      data-datalist-id="taskFilterVerifierList"
 
       placeholder="Type to search…"
 
@@ -114,13 +106,13 @@
 
     />
 
-    <input type="hidden" name="verifier" id="taskFilterVerifierValue" value="{{ filters.verifier_id }}" />
+    <div id="taskFilterVerifierSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
 
-    <datalist id="taskFilterVerifierList"></datalist>
+    <input type="hidden" name="verifier" id="taskFilterVerifierValue" value="{{ filters.verifier_id }}" />
 
   </div>
 
-  <div class="col-12 col-md-6 col-lg-3">
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
 
     <label class="form-label small text-secondary mb-0" for="taskFilterDocCheckerSearch">Document checker</label>
 
@@ -128,13 +120,9 @@
 
       type="text"
 
-      class="form-control form-control-sm task-filter-user-search"
+      class="form-control form-control-sm"
 
       id="taskFilterDocCheckerSearch"
-
-      data-hidden-id="taskFilterDocCheckerValue"
-
-      data-datalist-id="taskFilterDocCheckerList"
 
       placeholder="Type to search…"
 
@@ -142,9 +130,9 @@
 
     />
 
-    <input type="hidden" name="document_checker" id="taskFilterDocCheckerValue" value="{{ filters.document_checker_id }}" />
+    <div id="taskFilterDocCheckerSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
 
-    <datalist id="taskFilterDocCheckerList"></datalist>
+    <input type="hidden" name="document_checker" id="taskFilterDocCheckerValue" value="{{ filters.document_checker_id }}" />
 
   </div>
 
@@ -182,6 +170,12 @@
 
 
 
+{{ staff_user_options|json_script:"task-filter-staff-users" }}
+
+{% load static %}
+
+<script src="{% static 'js/task_user_single_picker.js' %}"></script>
+
 <script>
 
   (function () {
@@ -202,21 +196,7 @@
 
     ];
 
-    var userOptions = [
-
-      {% for u in staff_users %}
-
-      {
-
-        id: "{{ u.pk }}",
-
-        label: "{{ u.employee_profile.full_name|default:u.email|escapejs }}"
-
-      }{% if not forloop.last %},{% endif %}
-
-      {% endfor %}
-
-    ];
+    var staffUserOptions = JSON.parse(document.getElementById("task-filter-staff-users").textContent || "[]");
 
 
 
@@ -338,27 +318,56 @@
 
 
 
-    function bindUserFilter(input) {
-
-      if (!input) return;
-
-      var hiddenId = input.getAttribute("data-hidden-id");
-
-      var listId = input.getAttribute("data-datalist-id");
-
-      if (!hiddenId || !listId) return;
-
-      bindSearchableFilter(input.id, hiddenId, listId, userOptions);
-
-    }
-
-
-
     bindSearchableFilter("taskFilterClientSearch", "taskFilterClientValue", "taskFilterClientList", clientOptions);
 
-    document.querySelectorAll(".task-filter-user-search").forEach(bindUserFilter);
+
+
+    if (window.initTaskUserSinglePicker) {
+
+      window.initTaskUserSinglePicker({
+
+        searchId: "taskFilterAssigneeSearch",
+
+        suggestId: "taskFilterAssigneeSuggestions",
+
+        hiddenId: "taskFilterAssigneeValue",
+
+        options: staffUserOptions,
+
+        minChars: 1,
+
+      });
+
+      window.initTaskUserSinglePicker({
+
+        searchId: "taskFilterVerifierSearch",
+
+        suggestId: "taskFilterVerifierSuggestions",
+
+        hiddenId: "taskFilterVerifierValue",
+
+        options: staffUserOptions,
+
+        minChars: 1,
+
+      });
+
+      window.initTaskUserSinglePicker({
+
+        searchId: "taskFilterDocCheckerSearch",
+
+        suggestId: "taskFilterDocCheckerSuggestions",
+
+        hiddenId: "taskFilterDocCheckerValue",
+
+        options: staffUserOptions,
+
+        minChars: 1,
+
+      });
+
+    }
 
   })();
 
 </script>
-

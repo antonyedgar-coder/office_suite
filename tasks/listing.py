@@ -15,7 +15,7 @@ from core.branch_access import approved_clients_for_user
 from .date_presets import DATE_PRESET_CHOICES, PRESET_ALL_TIME, PRESET_CUSTOM, resolve_date_preset
 from .models import Task, TaskMaster
 from .period_display import PeriodColumns, format_next_period, format_period_display
-from .user_labels import build_short_codes_for_users, staff_users_queryset, user_person_name
+from .user_labels import build_short_codes_for_users, staff_users_queryset, user_display_label, user_person_name
 
 User = get_user_model()
 
@@ -60,6 +60,7 @@ def parse_task_list_filters(request) -> TaskListFilters:
         master_id=(g.get("master") or "").strip(),
         assignee_id=(g.get("assignee") or "").strip(),
         verifier_id=(g.get("verifier") or "").strip(),
+        document_checker_id=(g.get("document_checker") or "").strip(),
         created_preset=c_preset,
         created_from=c_from,
         created_to=c_to,
@@ -217,6 +218,14 @@ def filter_context(user, filters: TaskListFilters) -> dict:
         "clients": approved_clients_for_user(user).order_by("client_name"),
         "masters": TaskMaster.selectable_for_new_tasks(),
         "staff_users": staff_users_queryset(),
+        "staff_user_options": [
+            {
+                "id": u.pk,
+                "label": user_display_label(u),
+                "search": f"{user_display_label(u)} {u.email}".lower(),
+            }
+            for u in staff_users_queryset()
+        ],
     }
 
 
