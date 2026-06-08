@@ -55,23 +55,55 @@ class OneTimePeriodKeyTests(TestCase):
         due = date(2025, 3, 20)
         self.assertEqual(build_one_time_period_key(due, sequence=2), "FY2024-25-2025-03-2")
 
+    def _create_one_time_task(self, *, master, period_key, due):
+        task = Task.objects.create(
+            client=self.client,
+            task_master=master,
+            period_key=period_key,
+            period_type="one_time",
+            due_date=due,
+            title="One-time",
+            status=Task.STATUS_ASSIGNED,
+            document_checker=self.document_checker,
+        )
+        task.verifiers.set([self.verifier])
+        return task
+
     def test_allocate_increments_for_same_month(self):
         due = date(2025, 3, 10)
         first = allocate_one_time_period_key(self.client, self.master, due)
-        Task.objects.create(
-            client=self.client,
-            task_master=self.master,
-            period_key=first,
-            period_type="one_time",
-            due_date=due,
-            title="First",
-            status=Task.STATUS_ASSIGNED,
-            verifier=self.verifier,
-            document_checker=self.document_checker,
-        )
+        self._create_one_time_task(master=self.master, period_key=first, due=due)
         second = allocate_one_time_period_key(self.client, self.master, due)
         self.assertEqual(first, "FY2024-25-2025-03")
         self.assertEqual(second, "FY2024-25-2025-03-2")
+
+    def test_allocate_increments_across_task_masters_same_client_month(self):
+        due = date(2026, 4, 15)
+        other_master = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="ROC", sort_order=2),
+            name="GST Notice",
+            is_recurring=False,
+        )
+        first = allocate_one_time_period_key(self.client, self.master, due)
+        self._create_one_time_task(master=self.master, period_key=first, due=due)
+        second = allocate_one_time_period_key(self.client, other_master, due)
+        self.assertEqual(second, "FY2025-26-2026-04-2")
+
+    def test_allocate_restarts_for_each_client(self):
+        due = date(2026, 4, 15)
+        other_client = Client.objects.create(
+            client_name="BETA CORP",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=ClientGroup.objects.create(name="OT GROUP B"),
+            approval_status=Client.APPROVED,
+            pan="BCDEF1234G",
+        )
+        first_a = allocate_one_time_period_key(self.client, self.master, due)
+        self._create_one_time_task(master=self.master, period_key=first_a, due=due)
+        first_b = allocate_one_time_period_key(other_client, self.master, due)
+        self.assertEqual(first_a, "FY2025-26-2026-04")
+        self.assertEqual(first_b, "FY2025-26-2026-04")
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})

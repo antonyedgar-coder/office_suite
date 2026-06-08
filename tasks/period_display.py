@@ -62,9 +62,9 @@ def _period_text_from_period_key(period_key: str) -> str:
     pk = (period_key or "").strip()
     parsed = parse_one_time_period_key(pk)
     if parsed:
-        label = f"{parsed['month_abbr']} {parsed['ym'][:4]}"
+        label = f"{parsed['month_label']} {parsed['ym'][:4]}"
         if parsed["sequence"] >= 2:
-            return f"{label} ({parsed['sequence']})"
+            return f"{label} {parsed['sequence']}"
         return label
     if not pk or pk == "one-time":
         return "—"

@@ -58,8 +58,11 @@ def allocate_one_time_period_key(
     pending_period_keys: set[str] | None = None,
 ) -> str:
     """
-    Next unique one-time period_key for client + task master + due-date month.
-    First task in a month has no suffix; further tasks use -2, -3, …
+    Next unique one-time period_key for this client and due-date month.
+
+    Numbering is per client (not shared across clients) and per calendar month.
+    The first one-time task for a client in a month has no suffix; further tasks
+    in that month use -2, -3, … regardless of task master.
     """
     from tasks.models import Task
 
@@ -67,7 +70,7 @@ def allocate_one_time_period_key(
     ym = due_date.strftime("%Y-%m")
     prefix = f"FY{fy}-{ym}"
     existing = list(
-        Task.objects.filter(client=client, task_master=master)
+        Task.objects.filter(client=client, period_type=PERIOD_ONE_TIME)
         .exclude(status=Task.STATUS_CANCELLED)
         .values_list("period_key", flat=True)
     )

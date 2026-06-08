@@ -606,17 +606,19 @@ class PeriodOverlapTests(TestCase):
         )
         due = date(2026, 5, 15)
         first_key = allocate_one_time_period_key(self.client, one_time_master, due)
-        Task.objects.create(
+        verifier = User.objects.create_user(email="v-ot1@ex.com", password="pass12345")
+        document_checker = User.objects.create_user(email="d-ot1@ex.com", password="pass12345")
+        task = Task.objects.create(
             client=self.client,
             task_master=one_time_master,
             title="First notice",
             status=Task.STATUS_ASSIGNED,
             due_date=due,
-            verifier=User.objects.create_user(email="v-ot1@ex.com", password="pass12345"),
-            document_checker=User.objects.create_user(email="d-ot1@ex.com", password="pass12345"),
+            document_checker=document_checker,
             period_key=first_key,
             period_type="one_time",
         )
+        task.verifiers.set([verifier])
         second_key = allocate_one_time_period_key(self.client, one_time_master, due)
         self.assertNotEqual(first_key, second_key)
         validate_no_overlapping_task(
@@ -704,6 +706,12 @@ class PeriodOverlapTests(TestCase):
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class TaskListDisplayTests(TestCase):
+    def test_period_columns_one_time(self):
+        cols = format_period_display("FY2025-26-2026-04", period_type="one_time")
+        self.assertEqual(cols.period, "April 2026")
+        cols2 = format_period_display("FY2025-26-2026-04-2", period_type="one_time")
+        self.assertEqual(cols2.period, "April 2026 2")
+
     def test_period_columns_monthly(self):
         cols = format_period_display("2026-05", period_type="monthly")
         self.assertEqual(cols.frequency, "Monthly")
@@ -1123,3 +1131,32 @@ class TaskCsvImportTests(TestCase):
         self.assertEqual(rows[0].errors, [])
         self.assertEqual(rows[1].errors, [])
         self.assertNotEqual(rows[0].data["period_key"], rows[1].data["period_key"])
+
+    def test_parse_one_time_numbering_is_per_client(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        grp2 = ClientGroup.objects.create(name="CSV GRP 2")
+        client_b = Client.objects.create(
+            client_name="CSV CLIENT B",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp2,
+            client_id="CSV002",
+            approval_status=Client.APPROVED,
+            pan="BCDEF1234G",
+        )
+        self.assertIsNotNone(client_b)
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            ",,,,,,11-04-2026,normal,NO,\n"
+            "CSV002,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            ",,,,,,11-04-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[1].errors, [])
+        self.assertEqual(rows[0].data["period_key"], rows[1].data["period_key"])
