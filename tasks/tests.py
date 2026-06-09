@@ -1062,7 +1062,22 @@ class TaskCsvImportTests(TestCase):
             pan="ABCDE1234E",
         )
         tg = TaskGroup.objects.create(name="CSV TG")
-        self.master = TaskMaster.objects.create(task_group=tg, name="CSV Master")
+        self.master = TaskMaster.objects.create(
+            task_group=tg,
+            name="CSV Master",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_MONTHLY,
+            recurrence_config={
+                "create_day": 1,
+                "due_day": 18,
+                "month_anchor": "same_month",
+            },
+        )
+        self.one_time_master = TaskMaster.objects.create(
+            task_group=tg,
+            name="CSV One Time",
+            is_recurring=False,
+        )
 
     def test_parse_valid_row(self):
         from tasks.task_csv_import import parse_tasks_csv
@@ -1120,9 +1135,9 @@ class TaskCsvImportTests(TestCase):
             "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
             "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
             "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
-            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            "CSV001,CSV TG|CSV One Time,assign@example.com,verify@example.com,docs@example.com,one_time,"
             ",,,,,,11-05-2026,normal,NO,\n"
-            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            "CSV001,CSV TG|CSV One Time,assign@example.com,verify@example.com,docs@example.com,one_time,"
             ",,,,,,11-05-2026,normal,NO,\n"
         )
         rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
@@ -1131,6 +1146,38 @@ class TaskCsvImportTests(TestCase):
         self.assertEqual(rows[0].errors, [])
         self.assertEqual(rows[1].errors, [])
         self.assertNotEqual(rows[0].data["period_key"], rows[1].data["period_key"])
+
+    def test_parse_one_time_blank_period_type_for_non_recurring_master(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "CSV001,CSV TG|CSV One Time,assign@example.com,verify@example.com,docs@example.com,,"
+            ",,,,,,11-04-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[0].data["period_type"], "one_time")
+        self.assertTrue(rows[0].data["period_key"].startswith("FY"))
+
+    def test_parse_month_name_in_period_month(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,monthly,"
+            "May,2025-26,,,,,18-05-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[0].data["period_key"], "2026-05")
 
     def test_parse_one_time_numbering_is_per_client(self):
         from tasks.task_csv_import import parse_tasks_csv
@@ -1150,9 +1197,9 @@ class TaskCsvImportTests(TestCase):
             "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
             "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
             "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
-            "CSV001,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            "CSV001,CSV TG|CSV One Time,assign@example.com,verify@example.com,docs@example.com,one_time,"
             ",,,,,,11-04-2026,normal,NO,\n"
-            "CSV002,CSV TG|CSV Master,assign@example.com,verify@example.com,docs@example.com,one_time,"
+            "CSV002,CSV TG|CSV One Time,assign@example.com,verify@example.com,docs@example.com,one_time,"
             ",,,,,,11-04-2026,normal,NO,\n"
         )
         rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)

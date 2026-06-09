@@ -859,40 +859,60 @@ def task_bulk_import(request):
                 rows,
                 flash_error="Cannot import: fix the errors below and upload again.",
             )
+        from django.db import IntegrityError
+
         created = 0
-        for row in rows:
-            d = row.data
-            master = d["task_master"]
-            client = d["client"]
-            assignees = d["assignees"]
-            verifiers = d["verifiers"]
-            document_checker = d["document_checker"]
-            enrollment = start_enrollment_if_recurring(
-                master=master,
-                client=client,
-                assignee_users=assignees,
-                verifiers=verifiers,
-                document_checker=document_checker,
-                created_by=request.user,
+        try:
+            with transaction.atomic():
+                for row in rows:
+                    d = row.data
+                    master = d["task_master"]
+                    client = d["client"]
+                    assignees = d["assignees"]
+                    verifiers = d["verifiers"]
+                    document_checker = d["document_checker"]
+                    enrollment = start_enrollment_if_recurring(
+                        master=master,
+                        client=client,
+                        assignee_users=assignees,
+                        verifiers=verifiers,
+                        document_checker=document_checker,
+                        created_by=request.user,
+                    )
+                    task = create_task_from_master(
+                        master=master,
+                        client=client,
+                        assignee_users=assignees,
+                        verifiers=verifiers,
+                        document_checker=document_checker,
+                        created_by=request.user,
+                        period_key=d["period_key"],
+                        period_type=d.get("period_type") or "",
+                        enrollment=enrollment,
+                        due_date=d["due_date"],
+                        is_billable=d.get("is_billable"),
+                        fees_amount=d.get("fees_amount"),
+                    )
+                    if d.get("priority"):
+                        task.priority = d["priority"]
+                        task.save(update_fields=["priority"])
+                    created += 1
+        except ValidationError as exc:
+            msg = exc.messages[0] if exc.messages else str(exc)
+            return _render_task_bulk_import_preview(
+                request,
+                rows,
+                flash_error=f"Import stopped at row {created + 1}: {msg}",
             )
-            task = create_task_from_master(
-                master=master,
-                client=client,
-                assignee_users=assignees,
-                verifiers=verifiers,
-                document_checker=document_checker,
-                created_by=request.user,
-                period_key=d["period_key"],
-                period_type=d.get("period_type") or "",
-                enrollment=enrollment,
-                due_date=d["due_date"],
-                is_billable=d.get("is_billable"),
-                fees_amount=d.get("fees_amount"),
+        except IntegrityError:
+            return _render_task_bulk_import_preview(
+                request,
+                rows,
+                flash_error=(
+                    f"Import stopped: a task already exists for the same client, task type, and period "
+                    f"(row {created + 1} or later). Delete the existing task or change the period."
+                ),
             )
-            if d.get("priority"):
-                task.priority = d["priority"]
-                task.save(update_fields=["priority"])
-            created += 1
         request.session.pop(TASK_IMPORT_SESSION_KEY, None)
         messages.success(
             request,
@@ -908,7 +928,11 @@ def task_bulk_import(request):
             messages.error(request, "Please choose a CSV file.")
             return redirect("task_bulk_import")
         raw_bytes = f.read()
-        rows, file_errors = parse_tasks_csv(raw_bytes, user=request.user)
+        try:
+            rows, file_errors = parse_tasks_csv(raw_bytes, user=request.user)
+        except Exception as exc:
+            messages.error(request, f"Could not read CSV file: {exc}")
+            return redirect("task_bulk_import")
         if file_errors:
             messages.error(request, file_errors[0])
             return redirect("task_bulk_import")

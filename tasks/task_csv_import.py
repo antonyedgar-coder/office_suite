@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import csv
 import io
 from collections import defaultdict
@@ -65,6 +66,23 @@ PERIOD_TYPE_ALIASES = {
 def _normalize_period_type(raw: str) -> str:
     period_type = (raw or "").strip().lower().replace(" ", "_")
     return PERIOD_TYPE_ALIASES.get(period_type, period_type)
+
+
+def _parse_month(raw: str) -> int | None:
+    """Accept 5, 05, May, etc."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    try:
+        month = int(s)
+        return month if 1 <= month <= 12 else None
+    except ValueError:
+        pass
+    s_lower = s.lower()
+    for i in range(1, 13):
+        if calendar.month_name[i].lower() == s_lower or calendar.month_abbr[i].lower() == s_lower:
+            return i
+    raise ValueError(f"Invalid month: {raw!r} (use 1–12 or month name).")
 
 
 def _parse_fy_start(raw: str) -> int | None:
@@ -168,100 +186,143 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
     pending_one_time_keys: dict[tuple[int, int], set[str]] = defaultdict(set)
 
     for i, raw in enumerate(reader, start=2):
-        errors: list[str] = []
-        client_id = _upper(_cell(raw, header_map, "CLIENT_ID"))
-        master_raw = _cell(raw, header_map, "TASK_MASTER")
-        assignee_raw = _cell(raw, header_map, "ASSIGNEE_EMAILS")
-        verifier_emails_raw = _cell(raw, header_map, "VERIFIER_EMAIL")
-        document_checker_email = _cell(raw, header_map, "DOCUMENT_CHECKER_EMAIL").lower()
-        period_type = _normalize_period_type(_cell(raw, header_map, "PERIOD_TYPE"))
-        due_raw = _cell(raw, header_map, "DUE_DATE")
-
-        client = clients_by_id.get(client_id)
-        if not client_id:
-            errors.append("CLIENT_ID is required.")
-        elif not client:
-            errors.append(f"CLIENT_ID not found or not in your branch: {client_id}")
-        elif not client_allowed_for_user(user, client):
-            errors.append(f"CLIENT_ID not allowed for your branch: {client_id}")
-
-        master = _resolve_task_master(master_raw) if master_raw else None
-        if not master_raw:
-            errors.append("TASK_MASTER is required (use Group | Master or master name).")
-        elif not master:
-            errors.append(
-                f"TASK_MASTER not found or inactive: {master_raw} "
-                "(only active task masters can be used)."
-            )
-
-        assignee_emails = [e.strip().lower() for e in assignee_raw.replace(";", ",").split(",") if e.strip()]
-        assignees = []
-        if not assignee_emails:
-            errors.append("ASSIGNEE_EMAILS is required (comma or semicolon separated).")
-        else:
-            for em in assignee_emails:
-                u = staff_by_email.get(em)
-                if not u:
-                    errors.append(f"Unknown assignee email: {em}")
-                else:
-                    assignees.append(u)
-            if len({u.pk for u in assignees}) != len(assignees):
-                errors.append("ASSIGNEE_EMAILS must be different people.")
-
-        verifier_emails = [
-            e.strip().lower()
-            for e in verifier_emails_raw.replace(";", ",").split(",")
-            if e.strip()
-        ]
-        verifiers = []
-        if not verifier_emails:
-            errors.append("VERIFIER_EMAIL is required (comma or semicolon separated).")
-        else:
-            for em in verifier_emails:
-                u = staff_by_email.get(em)
-                if not u:
-                    errors.append(f"Unknown verifier email: {em}")
-                else:
-                    verifiers.append(u)
-            if len({u.pk for u in verifiers}) != len(verifiers):
-                errors.append("VERIFIER_EMAIL must be different people.")
-
-        document_checker = (
-            staff_by_email.get(document_checker_email) if document_checker_email else None
-        )
-        if not document_checker_email:
-            errors.append("DOCUMENT_CHECKER_EMAIL is required.")
-        elif not document_checker:
-            errors.append(f"Unknown document checker email: {document_checker_email}")
-
-        if user.is_authenticated:
-            if user.pk in {u.pk for u in assignees}:
-                errors.append("Creator cannot be an assignee.")
-            if verifiers and {u.pk for u in verifiers}.intersection({u.pk for u in assignees}):
-                errors.append("A verifier cannot also be an assignee.")
-            if document_checker and document_checker.pk in {u.pk for u in assignees}:
-                errors.append("Document checker cannot be an assignee.")
-
-        due_date = _parse_due_date(due_raw)
-
-        locked_period = period_type_for_task_master(master) if master else None
-        if locked_period:
-            if period_type and period_type != locked_period:
-                errors.append(
-                    f"PERIOD_TYPE must be {locked_period} for this recurring task master."
-                )
-            period_type = locked_period
-
-        period_key = ""
-        period_type_stored = period_type
         try:
-            month = int(_cell(raw, header_map, "PERIOD_MONTH") or "0") or None
-            fy_raw = _cell(raw, header_map, "PERIOD_FY")
-            fy_start = _parse_fy_start(fy_raw) if fy_raw else None
-            quarter = _upper(_cell(raw, header_map, "PERIOD_QUARTER")) or None
-            half = _upper(_cell(raw, header_map, "PERIOD_HALF")) or None
-            y_from = int(_cell(raw, header_map, "PERIOD_YEAR_FROM") or "0") or None
-            y_to = int(_cell(raw, header_map, "PERIOD_YEAR_TO") or "0") or None
+            row = _parse_task_csv_row(
+                raw,
+                row_num=i,
+                header_map=header_map,
+                user=user,
+                clients_by_id=clients_by_id,
+                staff_by_email=staff_by_email,
+                seen_keys=seen_keys,
+                pending_one_time_keys=pending_one_time_keys,
+            )
+        except Exception as exc:
+            row = TaskParsedRow(
+                row_num=i,
+                data={
+                    "client_id_display": _upper(_cell(raw, header_map, "CLIENT_ID")),
+                    "task_master_display": _cell(raw, header_map, "TASK_MASTER"),
+                    "assignees_display": _cell(raw, header_map, "ASSIGNEE_EMAILS"),
+                    "verifiers_display": _cell(raw, header_map, "VERIFIER_EMAIL"),
+                    "due_date_display": _cell(raw, header_map, "DUE_DATE"),
+                },
+                errors=[f"Row could not be parsed: {exc}"],
+            )
+        rows.append(row)
+
+    return rows, file_errors
+
+
+def _parse_task_csv_row(
+    raw: dict,
+    *,
+    row_num: int,
+    header_map: dict[str, str],
+    user,
+    clients_by_id: dict,
+    staff_by_email: dict,
+    seen_keys: set[tuple],
+    pending_one_time_keys: dict[tuple[int, int], set[str]],
+) -> TaskParsedRow:
+    errors: list[str] = []
+    client_id = _upper(_cell(raw, header_map, "CLIENT_ID"))
+    master_raw = _cell(raw, header_map, "TASK_MASTER")
+    assignee_raw = _cell(raw, header_map, "ASSIGNEE_EMAILS")
+    verifier_emails_raw = _cell(raw, header_map, "VERIFIER_EMAIL")
+    document_checker_email = _cell(raw, header_map, "DOCUMENT_CHECKER_EMAIL").lower()
+    period_type = _normalize_period_type(_cell(raw, header_map, "PERIOD_TYPE"))
+    due_raw = _cell(raw, header_map, "DUE_DATE")
+
+    client = clients_by_id.get(client_id)
+    if not client_id:
+        errors.append("CLIENT_ID is required.")
+    elif not client:
+        errors.append(f"CLIENT_ID not found or not in your branch: {client_id}")
+    elif not client_allowed_for_user(user, client):
+        errors.append(f"CLIENT_ID not allowed for your branch: {client_id}")
+
+    master = _resolve_task_master(master_raw) if master_raw else None
+    if not master_raw:
+        errors.append("TASK_MASTER is required (use Group | Master or master name).")
+    elif not master:
+        errors.append(
+            f"TASK_MASTER not found or inactive: {master_raw} "
+            "(only active task masters can be used)."
+        )
+
+    assignee_emails = [e.strip().lower() for e in assignee_raw.replace(";", ",").split(",") if e.strip()]
+    assignees = []
+    if not assignee_emails:
+        errors.append("ASSIGNEE_EMAILS is required (comma or semicolon separated).")
+    else:
+        for em in assignee_emails:
+            u = staff_by_email.get(em)
+            if not u:
+                errors.append(f"Unknown assignee email: {em}")
+            else:
+                assignees.append(u)
+        if len({u.pk for u in assignees}) != len(assignees):
+            errors.append("ASSIGNEE_EMAILS must be different people.")
+
+    verifier_emails = [
+        e.strip().lower()
+        for e in verifier_emails_raw.replace(";", ",").split(",")
+        if e.strip()
+    ]
+    verifiers = []
+    if not verifier_emails:
+        errors.append("VERIFIER_EMAIL is required (comma or semicolon separated).")
+    else:
+        for em in verifier_emails:
+            u = staff_by_email.get(em)
+            if not u:
+                errors.append(f"Unknown verifier email: {em}")
+            else:
+                verifiers.append(u)
+        if len({u.pk for u in verifiers}) != len(verifiers):
+            errors.append("VERIFIER_EMAIL must be different people.")
+
+    document_checker = (
+        staff_by_email.get(document_checker_email) if document_checker_email else None
+    )
+    if not document_checker_email:
+        errors.append("DOCUMENT_CHECKER_EMAIL is required.")
+    elif not document_checker:
+        errors.append(f"Unknown document checker email: {document_checker_email}")
+
+    if user.is_authenticated:
+        if user.pk in {u.pk for u in assignees}:
+            errors.append("Creator cannot be an assignee.")
+        if verifiers and {u.pk for u in verifiers}.intersection({u.pk for u in assignees}):
+            errors.append("A verifier cannot also be an assignee.")
+        if document_checker and document_checker.pk in {u.pk for u in assignees}:
+            errors.append("Document checker cannot be an assignee.")
+
+    due_date = _parse_due_date(due_raw)
+
+    locked_period = period_type_for_task_master(master) if master else None
+    if locked_period:
+        if period_type and period_type != locked_period:
+            errors.append(
+                f"PERIOD_TYPE must be {locked_period} for this recurring task master."
+            )
+        period_type = locked_period
+    elif master and not master.is_recurring:
+        period_type = PERIOD_ONE_TIME
+
+    period_key = ""
+    period_type_stored = period_type
+    try:
+        month_raw = _cell(raw, header_map, "PERIOD_MONTH")
+        month = _parse_month(month_raw) if month_raw else None
+        fy_raw = _cell(raw, header_map, "PERIOD_FY")
+        fy_start = _parse_fy_start(fy_raw) if fy_raw else None
+        quarter = _upper(_cell(raw, header_map, "PERIOD_QUARTER")) or None
+        half = _upper(_cell(raw, header_map, "PERIOD_HALF")) or None
+        y_from = int(_cell(raw, header_map, "PERIOD_YEAR_FROM") or "0") or None
+        y_to = int(_cell(raw, header_map, "PERIOD_YEAR_TO") or "0") or None
+        if period_type != PERIOD_ONE_TIME:
             period_key = build_period_key(
                 period_type,
                 month=month,
@@ -271,101 +332,99 @@ def parse_tasks_csv(csv_bytes: bytes, *, user) -> tuple[list[TaskParsedRow], lis
                 year_from=y_from,
                 year_to=y_to,
             )
-        except (ValueError, DjangoValidationError) as exc:
-            errors.append(f"Period: {_period_error_message(exc)}")
+    except (ValueError, DjangoValidationError) as exc:
+        errors.append(f"Period: {_period_error_message(exc)}")
 
-        if master and master.is_recurring and period_key and not errors:
-            try:
-                _, due_date = compute_create_due_dates(master, period_key, timezone.localdate())
-            except (ValueError, KeyError, TypeError, DjangoValidationError) as exc:
-                errors.append(f"Period: {_period_error_message(exc)}")
-        elif not due_raw:
-            errors.append("DUE_DATE is required for one-time tasks (YYYY-MM-DD or DD-MM-YYYY).")
-        elif not due_date:
-            errors.append(f"Invalid DUE_DATE: {due_raw}")
-
-        if (
-            period_type == PERIOD_ONE_TIME
-            and client
-            and master
-            and due_date
-            and not errors
-        ):
-            slot_key = (client.pk, master.pk)
-            client_pending = pending_one_time_keys[slot_key]
-            period_key = allocate_one_time_period_key(
-                client,
-                master,
-                due_date,
-                pending_period_keys=client_pending,
-            )
-            pending_one_time_keys[slot_key].add(period_key)
-
-        priority = _cell(raw, header_map, "PRIORITY").lower() or TaskMaster.PRIORITY_NORMAL
-        if priority not in dict(TaskMaster.PRIORITY_CHOICES):
-            errors.append("PRIORITY must be low, normal, or urgent.")
-
+    if master and master.is_recurring and period_key and not errors:
         try:
-            is_billable = _parse_bool_yes(_cell(raw, header_map, "IS_BILLABLE"))
-        except ValueError as exc:
-            errors.append(str(exc))
-            is_billable = False
+            _, due_date = compute_create_due_dates(master, period_key, timezone.localdate())
+        except (ValueError, KeyError, TypeError, IndexError, DjangoValidationError) as exc:
+            errors.append(f"Period: {_period_error_message(exc)}")
+    elif not due_raw:
+        errors.append("DUE_DATE is required for one-time tasks (YYYY-MM-DD or DD-MM-YYYY).")
+    elif not due_date:
+        errors.append(f"Invalid DUE_DATE: {due_raw}")
 
-        fees_raw = _cell(raw, header_map, "FEES_AMOUNT")
-        fees_amount = None
-        if fees_raw:
-            try:
-                fees_amount = Decimal(fees_raw)
-            except InvalidOperation:
-                errors.append("FEES_AMOUNT must be a number.")
-        if (
-            client
-            and master
-            and period_key
-            and period_type
-            and not errors
-            and period_type != PERIOD_ONE_TIME
-        ):
-            dup_key = (client.pk, master.pk, period_key)
-            if dup_key in seen_keys:
-                errors.append("Duplicate row for same client, task master, and period in this file.")
-            else:
-                existing = find_overlapping_task(
-                    client=client,
-                    master=master,
-                    period_type=period_type,
-                    period_key=period_key,
-                )
-                if existing:
-                    errors.append(
-                        overlap_error_message(
-                            period_type=period_type,
-                            period_key=period_key,
-                            existing=existing,
-                        )
+    if (
+        period_type == PERIOD_ONE_TIME
+        and client
+        and master
+        and due_date
+        and not errors
+    ):
+        slot_key = (client.pk, master.pk)
+        client_pending = pending_one_time_keys[slot_key]
+        period_key = allocate_one_time_period_key(
+            client,
+            master,
+            due_date,
+            pending_period_keys=client_pending,
+        )
+        pending_one_time_keys[slot_key].add(period_key)
+
+    priority = _cell(raw, header_map, "PRIORITY").lower() or TaskMaster.PRIORITY_NORMAL
+    if priority not in dict(TaskMaster.PRIORITY_CHOICES):
+        errors.append("PRIORITY must be low, normal, or urgent.")
+
+    try:
+        is_billable = _parse_bool_yes(_cell(raw, header_map, "IS_BILLABLE"))
+    except ValueError as exc:
+        errors.append(str(exc))
+        is_billable = False
+
+    fees_raw = _cell(raw, header_map, "FEES_AMOUNT")
+    fees_amount = None
+    if fees_raw:
+        try:
+            fees_amount = Decimal(fees_raw)
+        except InvalidOperation:
+            errors.append("FEES_AMOUNT must be a number.")
+    if (
+        client
+        and master
+        and period_key
+        and period_type
+        and not errors
+        and period_type != PERIOD_ONE_TIME
+    ):
+        dup_key = (client.pk, master.pk, period_key)
+        if dup_key in seen_keys:
+            errors.append("Duplicate row for same client, task master, and period in this file.")
+        else:
+            existing = find_overlapping_task(
+                client=client,
+                master=master,
+                period_type=period_type,
+                period_key=period_key,
+            )
+            if existing:
+                errors.append(
+                    overlap_error_message(
+                        period_type=period_type,
+                        period_key=period_key,
+                        existing=existing,
                     )
-                else:
-                    seen_keys.add(dup_key)
+                )
+            else:
+                seen_keys.add(dup_key)
 
-        cleaned = {
-            "client": client,
-            "task_master": master,
-            "assignees": assignees,
-            "verifiers": verifiers,
-            "document_checker": document_checker,
-            "period_key": period_key,
-            "period_type": period_type_stored,
-            "due_date": due_date,
-            "priority": priority,
-            "is_billable": is_billable,
-            "fees_amount": fees_amount,
-            # Preview labels (kept even when row has errors)
-            "client_id_display": client_id,
-            "task_master_display": master_raw,
-            "assignees_display": assignee_raw,
-            "verifiers_display": verifier_emails_raw,
-            "due_date_display": due_raw,
-        }
-        rows.append(TaskParsedRow(row_num=i, data=cleaned, errors=errors))
-
-    return rows, file_errors
+    cleaned = {
+        "client": client,
+        "task_master": master,
+        "assignees": assignees,
+        "verifiers": verifiers,
+        "document_checker": document_checker,
+        "period_key": period_key,
+        "period_type": period_type_stored,
+        "due_date": due_date,
+        "priority": priority,
+        "is_billable": is_billable,
+        "fees_amount": fees_amount,
+        # Preview labels (kept even when row has errors)
+        "client_id_display": client_id,
+        "task_master_display": master_raw,
+        "assignees_display": assignee_raw,
+        "verifiers_display": verifier_emails_raw,
+        "due_date_display": due_raw,
+    }
+    return TaskParsedRow(row_num=row_num, data=cleaned, errors=errors)
