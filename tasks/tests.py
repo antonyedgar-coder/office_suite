@@ -1164,6 +1164,32 @@ class TaskCsvImportTests(TestCase):
         self.assertEqual(rows[0].data["period_type"], "one_time")
         self.assertTrue(rows[0].data["period_key"].startswith("FY"))
 
+    def test_parse_quarter_number_in_period_quarter(self):
+        from tasks.task_csv_import import parse_tasks_csv
+
+        quarterly_master = TaskMaster.objects.create(
+            task_group=self.master.task_group,
+            name="CSV Quarterly",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_QUARTERLY,
+            recurrence_config={
+                "create_day": 1,
+                "due_day": 15,
+                "quarter_anchor": "first_month_same_qtr",
+            },
+        )
+        csv_text = (
+            "CLIENT_ID,TASK_MASTER,ASSIGNEE_EMAILS,VERIFIER_EMAIL,DOCUMENT_CHECKER_EMAIL,PERIOD_TYPE,"
+            "PERIOD_MONTH,PERIOD_FY,PERIOD_QUARTER,PERIOD_HALF,PERIOD_YEAR_FROM,"
+            "PERIOD_YEAR_TO,DUE_DATE,PRIORITY,IS_BILLABLE,FEES_AMOUNT\n"
+            f"CSV001,CSV TG|{quarterly_master.name},assign@example.com,verify@example.com,docs@example.com,quarterly,"
+            ",2025-26,4,,,,,15-01-2026,normal,NO,\n"
+        )
+        rows, errs = parse_tasks_csv(csv_text.encode(), user=self.creator)
+        self.assertEqual(errs, [])
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[0].data["period_key"], "2025-Q4")
+
     def test_parse_month_name_in_period_month(self):
         from tasks.task_csv_import import parse_tasks_csv
 

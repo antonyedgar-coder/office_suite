@@ -66,6 +66,42 @@ HALF_CHOICES = [
 _QUARTER_NUM = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
 _HALF_NUM = {"H1": 1, "H2": 2}
 
+
+def normalize_quarter(raw: str | None) -> str | None:
+    """Accept Q1–Q4 or 1–4 (CSV bulk upload often uses numbers)."""
+    if not raw:
+        return None
+    s = str(raw).strip().upper()
+    if s in _QUARTER_NUM:
+        return s
+    if s.startswith("Q") and len(s) == 2 and s[1].isdigit():
+        n = int(s[1])
+        if 1 <= n <= 4:
+            return f"Q{n}"
+    if s.isdigit():
+        n = int(s)
+        if 1 <= n <= 4:
+            return f"Q{n}"
+    raise ValidationError(f"Invalid quarter: {raw!r} (use 1–4 or Q1–Q4).")
+
+
+def normalize_half(raw: str | None) -> str | None:
+    """Accept H1–H2 or 1–2."""
+    if not raw:
+        return None
+    s = str(raw).strip().upper()
+    if s in _HALF_NUM:
+        return s
+    if s.startswith("H") and len(s) == 2 and s[1].isdigit():
+        n = int(s[1])
+        if 1 <= n <= 2:
+            return f"H{n}"
+    if s.isdigit():
+        n = int(s)
+        if 1 <= n <= 2:
+            return f"H{n}"
+    raise ValidationError(f"Invalid half year: {raw!r} (use 1–2 or H1–H2).")
+
 import calendar
 
 MONTH_CHOICES = [(i, calendar.month_name[i]) for i in range(1, 13)]
@@ -124,13 +160,15 @@ def build_period_key(
             raise ValidationError("Financial year is required for monthly period.")
         return f"{cal_year}-{month:02d}"
     if period_type == PERIOD_QUARTERLY:
-        if not quarter or fy_start is None:
+        quarter_code = normalize_quarter(quarter)
+        if not quarter_code or fy_start is None:
             raise ValidationError("Quarter and FY are required for quarterly period.")
-        return f"{fy_start}-Q{_QUARTER_NUM[quarter]}"
+        return f"{fy_start}-Q{_QUARTER_NUM[quarter_code]}"
     if period_type == PERIOD_HALF_YEARLY:
-        if not half or fy_start is None:
+        half_code = normalize_half(half)
+        if not half_code or fy_start is None:
             raise ValidationError("Half and FY are required for half-yearly period.")
-        return f"{fy_start}-H{_HALF_NUM[half]}"
+        return f"{fy_start}-H{_HALF_NUM[half_code]}"
     if period_type == PERIOD_YEARLY:
         if fy_start is None:
             raise ValidationError("FY is required for yearly period.")
