@@ -1,9 +1,10 @@
 from decimal import Decimal
 from django.contrib import messages
 import base64
+from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -39,6 +40,71 @@ def _client_search_q(request):
 
 def _mis_activity_date_label(d) -> str:
     return d.strftime("%d-%m-%Y") if d else "unknown date"
+
+
+def _mis_client_picker_label(client: Client) -> str:
+    name = (client.client_name or "").strip()
+    pan = (client.pan or "").strip().upper()
+    if pan:
+        return f"{name} — {pan}"
+    return name
+
+
+def _mis_client_picker_option(client: Client) -> dict[str, str]:
+    return {
+        "id": str(client.pk),
+        "label": _mis_client_picker_label(client),
+        "branch": client.branch or "",
+    }
+
+
+def _mis_client_picker_seed(user, instance=None) -> list[dict[str, str]]:
+    """Embed only the saved client on edit — full search uses mis_client_search."""
+    if instance is None or not getattr(instance, "pk", None) or not getattr(instance, "client_id", None):
+        return []
+    client = getattr(instance, "client", None)
+    if client is None:
+        client = Client.objects.filter(pk=instance.client_id).only("pk", "client_name", "pan", "branch").first()
+    if not client:
+        return []
+    return [_mis_client_picker_option(client)]
+
+
+def _mis_form_page_context(user, form, **extra):
+    extra["client_picker_seed"] = _mis_client_picker_seed(user, form.instance)
+    extra["mis_client_search_url"] = reverse("mis_client_search")
+    return extra
+
+
+@login_required
+def mis_client_search(request):
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("mis.add_feesdetail")
+        or request.user.has_perm("mis.change_feesdetail")
+        or request.user.has_perm("mis.add_receipt")
+        or request.user.has_perm("mis.change_receipt")
+        or request.user.has_perm("mis.add_expensedetail")
+        or request.user.has_perm("mis.change_expensedetail")
+        or request.user.has_perm("mis.add_tenderdetail")
+        or request.user.has_perm("mis.change_tenderdetail")
+    ):
+        return JsonResponse({"results": []}, status=403)
+    q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return JsonResponse({"results": []})
+    q_upper = q.upper()
+    qs = (
+        approved_clients_for_user(request.user)
+        .filter(
+            Q(client_name__icontains=q)
+            | Q(pan__icontains=q_upper)
+            | Q(client_id__icontains=q_upper)
+        )
+        .only("pk", "client_name", "pan", "branch")
+        .order_by("client_name")[:50]
+    )
+    return JsonResponse({"results": [_mis_client_picker_option(c) for c in qs]})
 
 
 @require_perm("mis.view_feesdetail")
@@ -79,12 +145,14 @@ def fees_create(request):
     return render(
         request,
         "mis/fees_form.html",
-        {
-            "form": form,
-            "mode": "create",
-            "cancel_url": reverse("mis_fees_list"),
-            "breadcrumbs": ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("New fees entry",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="create",
+            cancel_url=reverse("mis_fees_list"),
+            breadcrumbs=ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("New fees entry",)),
+        ),
     )
 
 
@@ -112,13 +180,15 @@ def fees_edit(request, pk: int):
     return render(
         request,
         "mis/fees_form.html",
-        {
-            "form": form,
-            "mode": "edit",
-            "obj": obj,
-            "cancel_url": reverse("mis_fees_list"),
-            "breadcrumbs": ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("Edit fees entry",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="edit",
+            obj=obj,
+            cancel_url=reverse("mis_fees_list"),
+            breadcrumbs=ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("Edit fees entry",)),
+        ),
     )
 
 
@@ -177,12 +247,14 @@ def tender_create(request):
     return render(
         request,
         "mis/tender_form.html",
-        {
-            "form": form,
-            "mode": "create",
-            "cancel_url": reverse("mis_tender_list"),
-            "breadcrumbs": ui_breadcrumbs(("Tender", "mis_tender_list"), ("New tender entry",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="create",
+            cancel_url=reverse("mis_tender_list"),
+            breadcrumbs=ui_breadcrumbs(("Tender", "mis_tender_list"), ("New tender entry",)),
+        ),
     )
 
 
@@ -210,13 +282,15 @@ def tender_edit(request, pk: int):
     return render(
         request,
         "mis/tender_form.html",
-        {
-            "form": form,
-            "mode": "edit",
-            "obj": obj,
-            "cancel_url": reverse("mis_tender_list"),
-            "breadcrumbs": ui_breadcrumbs(("Tender", "mis_tender_list"), ("Edit tender entry",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="edit",
+            obj=obj,
+            cancel_url=reverse("mis_tender_list"),
+            breadcrumbs=ui_breadcrumbs(("Tender", "mis_tender_list"), ("Edit tender entry",)),
+        ),
     )
 
 
@@ -275,12 +349,14 @@ def receipt_create(request):
     return render(
         request,
         "mis/receipt_form.html",
-        {
-            "form": form,
-            "mode": "create",
-            "cancel_url": reverse("mis_receipt_list"),
-            "breadcrumbs": ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("New receipt",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="create",
+            cancel_url=reverse("mis_receipt_list"),
+            breadcrumbs=ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("New receipt",)),
+        ),
     )
 
 
@@ -308,13 +384,15 @@ def receipt_edit(request, pk: int):
     return render(
         request,
         "mis/receipt_form.html",
-        {
-            "form": form,
-            "mode": "edit",
-            "obj": obj,
-            "cancel_url": reverse("mis_receipt_list"),
-            "breadcrumbs": ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("Edit receipt",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="edit",
+            obj=obj,
+            cancel_url=reverse("mis_receipt_list"),
+            breadcrumbs=ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("Edit receipt",)),
+        ),
     )
 
 
@@ -373,12 +451,14 @@ def expense_create(request):
     return render(
         request,
         "mis/expense_form.html",
-        {
-            "form": form,
-            "mode": "create",
-            "cancel_url": reverse("mis_expense_list"),
-            "breadcrumbs": ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("New expense",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="create",
+            cancel_url=reverse("mis_expense_list"),
+            breadcrumbs=ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("New expense",)),
+        ),
     )
 
 
@@ -406,13 +486,15 @@ def expense_edit(request, pk: int):
     return render(
         request,
         "mis/expense_form.html",
-        {
-            "form": form,
-            "mode": "edit",
-            "obj": obj,
-            "cancel_url": reverse("mis_expense_list"),
-            "breadcrumbs": ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("Edit expense",)),
-        },
+        _mis_form_page_context(
+            request.user,
+            form,
+            form=form,
+            mode="edit",
+            obj=obj,
+            cancel_url=reverse("mis_expense_list"),
+            breadcrumbs=ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("Edit expense",)),
+        ),
     )
 
 

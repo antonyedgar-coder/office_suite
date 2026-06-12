@@ -147,6 +147,15 @@ class MisEditFlowTests(_MisTestBase):
         self.assertEqual(edit_resp.status_code, 200, edit_resp.content)
         self.assertIn(b'value="2026-05-24"', edit_resp.content)
         self.assertIn(b"mis-client-picker-data", edit_resp.content)
+        self.assertIn(self.client_record.client_name.encode(), edit_resp.content)
+
+    def test_mis_client_search_api(self):
+        self._grant("add_feesdetail")
+        resp = self.http.get("/mis/clients/search/", {"q": "TEST"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertGreaterEqual(len(data["results"]), 1)
+        self.assertEqual(data["results"][0]["id"], str(self.client_record.pk))
 
     def test_expense_edit_get_with_inactive_category(self):
         self._grant("change_expensedetail", "view_expensedetail")

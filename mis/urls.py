@@ -4,6 +4,7 @@ from django.views.generic import RedirectView
 from . import views
 
 urlpatterns = [
+    path("clients/search/", views.mis_client_search, name="mis_client_search"),
     path("fees/", views.fees_list, name="mis_fees_list"),
     path("fees/new/", views.fees_create, name="mis_fees_create"),
     path("fees/<int:pk>/delete/", views.fees_delete, name="mis_fees_delete"),

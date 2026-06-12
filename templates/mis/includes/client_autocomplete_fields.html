@@ -17,7 +17,7 @@
   {{ form.client }}
   {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
   {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
-  <div class="form-text">Start typing (name/PAN) and select the suggestion.</div>
+  <div class="form-text">Type at least 2 characters (name/PAN) and select the suggestion.</div>
 </div>
 <div class="col-12 col-md-3">
   <label class="form-label">Branch</label>
@@ -25,7 +25,7 @@
   <div class="form-text">Filled automatically from Client Master.</div>
 </div>
 
-{{ form.client_picker_options|json_script:"mis-client-picker-data" }}
+{{ client_picker_seed|json_script:"mis-client-picker-data" }}
 
 <script>
   (function () {
@@ -36,7 +36,10 @@
     var dataEl = document.getElementById("mis-client-picker-data");
     if (!search || !hidden || !list || !dataEl) return;
 
+    var searchUrl = "{{ mis_client_search_url|escapejs }}";
     var clients = [];
+    var fetchTimer = null;
+
     try {
       clients = JSON.parse(dataEl.textContent);
     } catch (e) {
@@ -69,6 +72,19 @@
       return null;
     }
 
+    function mergeClients(items) {
+      var byId = {};
+      for (var i = 0; i < clients.length; i++) {
+        byId[clients[i].id] = clients[i];
+      }
+      for (var j = 0; j < items.length; j++) {
+        byId[items[j].id] = items[j];
+      }
+      clients = Object.keys(byId).map(function (k) {
+        return byId[k];
+      });
+    }
+
     function renderSuggestions(q) {
       list.innerHTML = "";
       var qq = (q || "").toLowerCase().trim();
@@ -92,6 +108,28 @@
       setBranchFromMatch(match);
     }
 
+    function fetchClients(q) {
+      if (!searchUrl || (q || "").trim().length < 2) {
+        renderSuggestions(search.value);
+        return;
+      }
+      fetch(searchUrl + "?q=" + encodeURIComponent(q.trim()), {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      })
+        .then(function (resp) {
+          if (!resp.ok) return [];
+          return resp.json();
+        })
+        .then(function (data) {
+          mergeClients((data && data.results) || []);
+          renderSuggestions(search.value);
+        })
+        .catch(function () {
+          renderSuggestions(search.value);
+        });
+    }
+
     if (!search.value && hidden.value) {
       var existing = findMatchById(hidden.value);
       if (existing) {
@@ -106,7 +144,11 @@
     search.addEventListener("input", function () {
       hidden.value = "";
       setBranchFromMatch(null);
-      renderSuggestions(search.value);
+      if (fetchTimer) window.clearTimeout(fetchTimer);
+      var q = search.value || "";
+      fetchTimer = window.setTimeout(function () {
+        fetchClients(q);
+      }, 200);
     });
     search.addEventListener("change", syncHiddenFromLabel);
     search.addEventListener("blur", syncHiddenFromLabel);

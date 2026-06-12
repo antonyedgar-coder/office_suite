@@ -1,8 +1,9 @@
 from decimal import Decimal
 
 from django import forms
+from django.db.models import Q
 
-from core.branch_access import approved_clients_for_user, client_allowed_for_user
+from core.branch_access import approved_clients_for_user, branch_access_for_user, client_allowed_for_user
 
 from masters.models import Client, ExpenseCategory
 
@@ -49,13 +50,18 @@ def _client_field(queryset=None):
 
 def _mis_client_queryset(user, instance=None):
     """Approved clients for pickers; always include the saved client when editing."""
-    if user is not None:
-        qs = approved_clients_for_user(user)
-    else:
-        qs = Client.approved_objects().all()
-    if instance is not None and getattr(instance, "pk", None) and getattr(instance, "client_id", None):
-        qs = qs | Client.objects.filter(pk=instance.client_id)
-    return qs.distinct().order_by("client_name")
+    approved = Client.approved_objects()
+    br = branch_access_for_user(user)
+    if br:
+        approved = approved.filter(branch=br)
+    client_pk = None
+    if instance is not None and getattr(instance, "pk", None):
+        client_pk = getattr(instance, "client_id", None)
+    if client_pk:
+        return Client.objects.filter(Q(pk__in=approved.values("pk")) | Q(pk=client_pk)).order_by(
+            "client_name"
+        )
+    return approved.order_by("client_name")
 
 
 def _mis_date_field():
@@ -121,22 +127,6 @@ class _ClientAutocompleteMixin:
                     queryset=Client.objects.none()
 
                 ).label_from_instance(c)
-
-    @property
-    def client_picker_options(self) -> list[dict[str, str]]:
-        label_field = ClientNamePanChoiceField(queryset=Client.objects.none())
-        options: list[dict[str, str]] = []
-        for client in self.fields["client"].queryset:
-            options.append(
-                {
-                    "id": str(client.pk),
-                    "label": label_field.label_from_instance(client),
-                    "branch": client.branch or "",
-                }
-            )
-        return options
-
-
 
     def clean(self):
 
