@@ -1,9 +1,8 @@
 from decimal import Decimal
 
 from django import forms
-from django.db.models import Q
 
-from core.branch_access import approved_clients_for_user, branch_access_for_user, client_allowed_for_user
+from core.branch_access import approved_clients_for_user, client_allowed_for_user
 
 from masters.models import Client, ExpenseCategory
 
@@ -49,19 +48,17 @@ def _client_field(queryset=None):
 
 
 def _mis_client_queryset(user, instance=None):
-    """Approved clients for pickers; always include the saved client when editing."""
-    approved = Client.approved_objects()
-    br = branch_access_for_user(user)
-    if br:
-        approved = approved.filter(branch=br)
-    client_pk = None
+    """Clients allowed in the hidden client field (validated on save)."""
+    if user is not None:
+        qs = approved_clients_for_user(user)
+    else:
+        qs = Client.approved_objects().all()
+    saved_pk = None
     if instance is not None and getattr(instance, "pk", None):
-        client_pk = getattr(instance, "client_id", None)
-    if client_pk:
-        return Client.objects.filter(Q(pk__in=approved.values("pk")) | Q(pk=client_pk)).order_by(
-            "client_name"
-        )
-    return approved.order_by("client_name")
+        saved_pk = getattr(instance, "client_id", None)
+    if saved_pk and not qs.filter(pk=saved_pk).exists():
+        return Client.objects.filter(pk=saved_pk).order_by("client_name")
+    return qs.order_by("client_name")
 
 
 def _mis_date_field():
@@ -114,7 +111,10 @@ class _ClientAutocompleteMixin:
 
         if "date" in self.fields:
             self.fields["date"].widget = _mis_date_field()
-            self.fields["date"].input_formats = ["%Y-%m-%d"]
+            date_formats = list(self.fields["date"].input_formats or [])
+            if "%Y-%m-%d" not in date_formats:
+                date_formats.insert(0, "%Y-%m-%d")
+            self.fields["date"].input_formats = date_formats
 
         if getattr(self.instance, "pk", None) and getattr(self.instance, "client_id", None):
 
@@ -265,9 +265,10 @@ class ExpenseDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, user=user, **kwargs)
         category_qs = ExpenseCategory.objects.filter(is_active=True)
-        if getattr(self.instance, "pk", None) and getattr(self.instance, "category_id", None):
-            category_qs = category_qs | ExpenseCategory.objects.filter(pk=self.instance.category_id)
-        self.fields["category"].queryset = category_qs.distinct().order_by("name")
+        saved_cat = getattr(self.instance, "category_id", None) if getattr(self.instance, "pk", None) else None
+        if saved_cat and not category_qs.filter(pk=saved_cat).exists():
+            category_qs = ExpenseCategory.objects.filter(pk=saved_cat)
+        self.fields["category"].queryset = category_qs.order_by("name")
         self.fields["category"].empty_label = "Select category…"
         self.fields["category"].label = "Category"
         self.fields["payment_mode"].label = "Payment mode"

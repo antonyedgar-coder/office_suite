@@ -71,8 +71,7 @@ def _mis_client_picker_seed(user, instance=None) -> list[dict[str, str]]:
 
 
 def _mis_form_page_context(user, form, **extra):
-    extra["client_picker_seed"] = _mis_client_picker_seed(user, form.instance)
-    extra["mis_client_search_url"] = reverse("mis_client_search")
+    extra.setdefault("client_picker_seed", _mis_client_picker_seed(user, form.instance))
     return extra
 
 
@@ -80,12 +79,16 @@ def _mis_form_page_context(user, form, **extra):
 def mis_client_search(request):
     if not (
         request.user.is_superuser
+        or request.user.has_perm("mis.view_feesdetail")
         or request.user.has_perm("mis.add_feesdetail")
         or request.user.has_perm("mis.change_feesdetail")
+        or request.user.has_perm("mis.view_receipt")
         or request.user.has_perm("mis.add_receipt")
         or request.user.has_perm("mis.change_receipt")
+        or request.user.has_perm("mis.view_expensedetail")
         or request.user.has_perm("mis.add_expensedetail")
         or request.user.has_perm("mis.change_expensedetail")
+        or request.user.has_perm("mis.view_tenderdetail")
         or request.user.has_perm("mis.add_tenderdetail")
         or request.user.has_perm("mis.change_tenderdetail")
     ):

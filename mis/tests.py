@@ -38,6 +38,13 @@ class _MisTestBase(TestCase):
 
 
 class MisEditFlowTests(_MisTestBase):
+    def test_fees_create_get(self):
+        self._grant("add_feesdetail", "view_feesdetail")
+        resp = self.http.get("/mis/fees/new/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIn(b"mis-client-picker-data", resp.content)
+        self.assertIn(b"clientSearch", resp.content)
+
     def test_fees_create_then_edit_get(self):
         self._grant("add_feesdetail", "change_feesdetail", "view_feesdetail")
         create_resp = self.http.post(
