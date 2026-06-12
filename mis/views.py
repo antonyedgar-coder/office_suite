@@ -73,6 +73,7 @@ def _mis_client_picker_seed(user, instance=None) -> list[dict[str, str]]:
 
 
 def _mis_form_page_context(user, form, **extra):
+    extra["form"] = form
     extra["clients_json"] = json.dumps(_mis_client_picker_seed(user, form.instance))
     return extra
 
@@ -153,7 +154,6 @@ def fees_create(request):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="create",
             cancel_url=reverse("mis_fees_list"),
             breadcrumbs=ui_breadcrumbs(("Fees Details", "mis_fees_list"), ("New fees entry",)),
@@ -188,7 +188,6 @@ def fees_edit(request, pk: int):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="edit",
             obj=obj,
             cancel_url=reverse("mis_fees_list"),
@@ -255,7 +254,6 @@ def tender_create(request):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="create",
             cancel_url=reverse("mis_tender_list"),
             breadcrumbs=ui_breadcrumbs(("Tender", "mis_tender_list"), ("New tender entry",)),
@@ -290,7 +288,6 @@ def tender_edit(request, pk: int):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="edit",
             obj=obj,
             cancel_url=reverse("mis_tender_list"),
@@ -357,7 +354,6 @@ def receipt_create(request):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="create",
             cancel_url=reverse("mis_receipt_list"),
             breadcrumbs=ui_breadcrumbs(("Receipts", "mis_receipt_list"), ("New receipt",)),
@@ -392,7 +388,6 @@ def receipt_edit(request, pk: int):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="edit",
             obj=obj,
             cancel_url=reverse("mis_receipt_list"),
@@ -459,7 +454,6 @@ def expense_create(request):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="create",
             cancel_url=reverse("mis_expense_list"),
             breadcrumbs=ui_breadcrumbs(("Client Expenses", "mis_expense_list"), ("New expense",)),
@@ -494,7 +488,6 @@ def expense_edit(request, pk: int):
         _mis_form_page_context(
             request.user,
             form,
-            form=form,
             mode="edit",
             obj=obj,
             cancel_url=reverse("mis_expense_list"),
