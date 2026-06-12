@@ -7,6 +7,7 @@ from django.test import Client as DjangoTestClient, TestCase
 
 from core.models import Employee
 from masters.models import Client, ClientGroup, ExpenseCategory
+from mis.forms import FeesDetailForm
 from mis.models import ExpenseDetail, FeesDetail, Receipt, TenderDetail
 
 User = get_user_model()
@@ -156,6 +157,19 @@ class MisEditFlowTests(_MisTestBase):
         self.assertIn(b'value="2026-05-24"', edit_resp.content)
         self.assertIn(b"mis-client-picker-data", edit_resp.content)
         self.assertIn(self.client_record.client_name.encode(), edit_resp.content)
+
+    def test_fees_form_has_client_search_field_on_edit(self):
+        self._grant("change_feesdetail", "view_feesdetail")
+        obj = FeesDetail.objects.create(
+            date=date(2026, 5, 24),
+            client=self.client_record,
+            fees_amount=Decimal("100.00"),
+            expenses_invoice_amount=Decimal("0.00"),
+            gst_amount=Decimal("0.00"),
+        )
+        form = FeesDetailForm(instance=obj, user=self.user)
+        self.assertIn("client_search", form.fields)
+        self.assertIn(self.client_record.client_name, form.fields["client_search"].initial or "")
 
     def test_mis_client_search_api(self):
         self._grant("add_feesdetail")

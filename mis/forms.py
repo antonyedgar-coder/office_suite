@@ -64,35 +64,23 @@ def _mis_client_queryset(user, instance=None):
 
 
 
-class _ClientAutocompleteMixin:
-
-    client_search = forms.CharField(
-
+def _client_search_field():
+    return forms.CharField(
         label="Client name",
-
         required=False,
-
         widget=forms.TextInput(
-
             attrs={
-
                 "class": "form-control",
-
                 "placeholder": "Type client name or PAN…",
-
                 "autocomplete": "off",
-
                 "data-mis-client-search": "1",
-
             }
-
         ),
-
         help_text="Start typing client name or PAN and choose from suggestions.",
-
     )
 
 
+class _ClientAutocompleteMixin:
 
     def __init__(self, *args, user=None, **kwargs):
 
@@ -100,6 +88,8 @@ class _ClientAutocompleteMixin:
 
         super().__init__(*args, **kwargs)
 
+        # ModelForm does not inherit declared fields from a plain mixin class.
+        self.fields["client_search"] = _client_search_field()
         self.fields["client"] = _client_field(_mis_client_queryset(user, self.instance))
 
         if getattr(self.instance, "pk", None) and getattr(self.instance, "client_id", None):
