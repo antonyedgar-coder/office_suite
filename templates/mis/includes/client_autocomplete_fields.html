@@ -5,7 +5,14 @@
 </div>
 <div class="col-12 col-md-5">
   <label class="form-label">Client name</label>
-  <input class="form-control" id="clientSearch" list="clientSuggestions" placeholder="Type client name or PAN…" autocomplete="off" />
+  <input
+    class="form-control"
+    id="clientSearch"
+    list="clientSuggestions"
+    placeholder="Type client name or PAN…"
+    autocomplete="off"
+    value="{{ form.client_search.initial|default:'' }}"
+  />
   <datalist id="clientSuggestions"></datalist>
   {{ form.client }}
   {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
@@ -18,26 +25,48 @@
   <div class="form-text">Filled automatically from Client Master.</div>
 </div>
 
+{{ form.client_picker_options|json_script:"mis-client-picker-data" }}
+
 <script>
   (function () {
     var search = document.getElementById("clientSearch");
     var hidden = document.querySelector("input[data-mis-client-hidden='1']");
     var branchEl = document.getElementById("clientBranch");
     var list = document.getElementById("clientSuggestions");
-    if (!search || !hidden || !list) return;
+    var dataEl = document.getElementById("mis-client-picker-data");
+    if (!search || !hidden || !list || !dataEl) return;
 
     var clients = [];
-    {% for opt in form.fields.client.queryset %}
-      clients.push({
-        id: "{{ opt.pk }}",
-        label: "{% if opt.pan %}{{ opt.client_name|escapejs }} — {{ opt.pan|upper|escapejs }}{% else %}{{ opt.client_name|escapejs }}{% endif %}",
-        branch: "{{ opt.branch|escapejs }}"
-      });
-    {% endfor %}
+    try {
+      clients = JSON.parse(dataEl.textContent);
+    } catch (e) {
+      clients = [];
+    }
 
     function setBranchFromMatch(match) {
       if (!branchEl) return;
       branchEl.value = match && match.branch ? match.branch : "";
+    }
+
+    function findMatchByLabel(label) {
+      var v = (label || "").trim();
+      for (var i = 0; i < clients.length; i++) {
+        if (clients[i].label === v) {
+          return clients[i];
+        }
+      }
+      return null;
+    }
+
+    function findMatchById(id) {
+      var needle = String(id || "").trim();
+      if (!needle) return null;
+      for (var i = 0; i < clients.length; i++) {
+        if (String(clients[i].id) === needle) {
+          return clients[i];
+        }
+      }
+      return null;
     }
 
     function renderSuggestions(q) {
@@ -58,29 +87,22 @@
     }
 
     function syncHiddenFromLabel() {
-      var v = (search.value || "").trim();
-      var match = null;
-      for (var i = 0; i < clients.length; i++) {
-        if (clients[i].label === v) {
-          match = clients[i];
-          break;
-        }
-      }
+      var match = findMatchByLabel(search.value);
       hidden.value = match ? match.id : "";
       setBranchFromMatch(match);
     }
 
-    if (hidden.value) {
-      for (var i = 0; i < clients.length; i++) {
-        if (clients[i].id === hidden.value) {
-          search.value = clients[i].label;
-          setBranchFromMatch(clients[i]);
-          break;
-        }
+    if (!search.value && hidden.value) {
+      var existing = findMatchById(hidden.value);
+      if (existing) {
+        search.value = existing.label;
+        setBranchFromMatch(existing);
       }
+    } else if (search.value) {
+      syncHiddenFromLabel();
     }
 
-    renderSuggestions("");
+    renderSuggestions(search.value || "");
     search.addEventListener("input", function () {
       hidden.value = "";
       setBranchFromMatch(null);

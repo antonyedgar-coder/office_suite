@@ -1,8 +1,7 @@
 from decimal import Decimal
 
-
-
 from django import forms
+
 from core.branch_access import approved_clients_for_user, client_allowed_for_user
 
 from masters.models import Client, ExpenseCategory
@@ -48,6 +47,24 @@ def _client_field(queryset=None):
     )
 
 
+def _mis_client_queryset(user, instance=None):
+    """Approved clients for pickers; always include the saved client when editing."""
+    if user is not None:
+        qs = approved_clients_for_user(user)
+    else:
+        qs = Client.approved_objects().all()
+    if instance is not None and getattr(instance, "pk", None) and getattr(instance, "client_id", None):
+        qs = qs | Client.objects.filter(pk=instance.client_id)
+    return qs.distinct().order_by("client_name")
+
+
+def _mis_date_field():
+    return forms.DateInput(
+        attrs={"class": "form-control", "type": "date"},
+        format="%Y-%m-%d",
+    )
+
+
 
 
 
@@ -87,9 +104,11 @@ class _ClientAutocompleteMixin:
 
         super().__init__(*args, **kwargs)
 
-        if user is not None:
+        self.fields["client"] = _client_field(_mis_client_queryset(user, self.instance))
 
-            self.fields["client"] = _client_field(approved_clients_for_user(user))
+        if "date" in self.fields:
+            self.fields["date"].widget = _mis_date_field()
+            self.fields["date"].input_formats = ["%Y-%m-%d"]
 
         if getattr(self.instance, "pk", None) and getattr(self.instance, "client_id", None):
 
@@ -102,6 +121,20 @@ class _ClientAutocompleteMixin:
                     queryset=Client.objects.none()
 
                 ).label_from_instance(c)
+
+    @property
+    def client_picker_options(self) -> list[dict[str, str]]:
+        label_field = ClientNamePanChoiceField(queryset=Client.objects.none())
+        options: list[dict[str, str]] = []
+        for client in self.fields["client"].queryset:
+            options.append(
+                {
+                    "id": str(client.pk),
+                    "label": label_field.label_from_instance(client),
+                    "branch": client.branch or "",
+                }
+            )
+        return options
 
 
 
@@ -140,8 +173,6 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
         fields = ["date", "client", "fees_amount", "expenses_invoice_amount", "gst_amount", "remarks"]
 
         widgets = {
-
-            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
 
             "fees_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
 
@@ -197,7 +228,6 @@ class ReceiptForm(_ClientAutocompleteMixin, forms.ModelForm):
         model = Receipt
         fields = ["date", "client", "fees_received", "expenses_received", "remarks"]
         widgets = {
-            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "fees_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "expenses_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "remarks": forms.Textarea(
@@ -234,7 +264,6 @@ class ExpenseDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
         model = ExpenseDetail
         fields = ["date", "client", "category", "payment_mode", "expenses_paid", "remarks"]
         widgets = {
-            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "category": forms.Select(attrs={"class": "form-select"}),
             "payment_mode": forms.Select(attrs={"class": "form-select"}),
             "expenses_paid": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
@@ -245,7 +274,10 @@ class ExpenseDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, user=user, **kwargs)
-        self.fields["category"].queryset = ExpenseCategory.objects.filter(is_active=True).order_by("name")
+        category_qs = ExpenseCategory.objects.filter(is_active=True)
+        if getattr(self.instance, "pk", None) and getattr(self.instance, "category_id", None):
+            category_qs = category_qs | ExpenseCategory.objects.filter(pk=self.instance.category_id)
+        self.fields["category"].queryset = category_qs.distinct().order_by("name")
         self.fields["category"].empty_label = "Select category…"
         self.fields["category"].label = "Category"
         self.fields["payment_mode"].label = "Payment mode"
@@ -266,7 +298,6 @@ class TenderDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
         model = TenderDetail
         fields = ["date", "client", "tender_fees", "tender_deposit", "remarks"]
         widgets = {
-            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "tender_fees": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "tender_deposit": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "remarks": forms.Textarea(

@@ -37,6 +37,10 @@ def _client_search_q(request):
     return (request.GET.get("q") or "").strip().upper()
 
 
+def _mis_activity_date_label(d) -> str:
+    return d.strftime("%d-%m-%Y") if d else "unknown date"
+
+
 @require_perm("mis.view_feesdetail")
 def fees_list(request):
     q = _client_search_q(request)
@@ -65,7 +69,7 @@ def fees_create(request):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS fees entry saved for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS fees entry saved for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Fees saved for {obj.client.client_name}.")
@@ -86,7 +90,10 @@ def fees_create(request):
 
 @require_perm("mis.change_feesdetail")
 def fees_edit(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(FeesDetail.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(FeesDetail.objects.select_related("client"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         form = FeesDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
@@ -95,7 +102,7 @@ def fees_edit(request, pk: int):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS fees entry updated for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS fees entry updated for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Fees updated for {obj.client.client_name}.")
@@ -117,14 +124,17 @@ def fees_edit(request, pk: int):
 
 @require_perm("mis.delete_feesdetail")
 def fees_delete(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(FeesDetail.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(FeesDetail.objects.select_related("client"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         log_client_activity(
             client=obj.client,
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
-            activity=f"MIS fees entry deleted for {obj.date:%d-%m-%Y}.",
+            activity=f"MIS fees entry deleted for {_mis_activity_date_label(obj.date)}.",
             remarks=obj.remarks,
         )
         obj.delete()
@@ -157,7 +167,7 @@ def tender_create(request):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS tender entry saved for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS tender entry saved for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Tender entry saved for {obj.client.client_name}.")
@@ -178,7 +188,10 @@ def tender_create(request):
 
 @require_perm("mis.change_tenderdetail")
 def tender_edit(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(TenderDetail.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(TenderDetail.objects.select_related("client"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         form = TenderDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
@@ -187,7 +200,7 @@ def tender_edit(request, pk: int):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS tender entry updated for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS tender entry updated for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Tender entry updated for {obj.client.client_name}.")
@@ -209,14 +222,17 @@ def tender_edit(request, pk: int):
 
 @require_perm("mis.delete_tenderdetail")
 def tender_delete(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(TenderDetail.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(TenderDetail.objects.select_related("client"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         log_client_activity(
             client=obj.client,
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
-            activity=f"MIS tender entry deleted for {obj.date:%d-%m-%Y}.",
+            activity=f"MIS tender entry deleted for {_mis_activity_date_label(obj.date)}.",
             remarks=obj.remarks,
         )
         obj.delete()
@@ -249,7 +265,7 @@ def receipt_create(request):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS receipt saved for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS receipt saved for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Receipt saved for {obj.client.client_name}.")
@@ -270,7 +286,10 @@ def receipt_create(request):
 
 @require_perm("mis.change_receipt")
 def receipt_edit(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(Receipt.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(Receipt.objects.select_related("client"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         form = ReceiptForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
@@ -279,7 +298,7 @@ def receipt_edit(request, pk: int):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS receipt updated for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS receipt updated for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Receipt updated for {obj.client.client_name}.")
@@ -301,14 +320,17 @@ def receipt_edit(request, pk: int):
 
 @require_perm("mis.delete_receipt")
 def receipt_delete(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(Receipt.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(Receipt.objects.select_related("client"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         log_client_activity(
             client=obj.client,
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
-            activity=f"MIS receipt deleted for {obj.date:%d-%m-%Y}.",
+            activity=f"MIS receipt deleted for {_mis_activity_date_label(obj.date)}.",
             remarks=obj.remarks,
         )
         obj.delete()
@@ -341,7 +363,7 @@ def expense_create(request):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS expense saved for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS expense saved for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Expense saved for {obj.client.client_name}.")
@@ -362,7 +384,10 @@ def expense_create(request):
 
 @require_perm("mis.change_expensedetail")
 def expense_edit(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(ExpenseDetail.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(ExpenseDetail.objects.select_related("client", "category"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         form = ExpenseDetailForm(request.POST, instance=obj, user=request.user)
         if form.is_valid():
@@ -371,7 +396,7 @@ def expense_edit(request, pk: int):
                 client=obj.client,
                 user=request.user,
                 category=ClientActivityLog.CATEGORY_MIS,
-                activity=f"MIS expense updated for {obj.date:%d-%m-%Y}.",
+                activity=f"MIS expense updated for {_mis_activity_date_label(obj.date)}.",
                 remarks=obj.remarks,
             )
             messages.success(request, f"Expense updated for {obj.client.client_name}.")
@@ -393,14 +418,17 @@ def expense_edit(request, pk: int):
 
 @require_perm("mis.delete_expensedetail")
 def expense_delete(request, pk: int):
-    obj = get_object_or_404(filter_mis_qs(ExpenseDetail.objects.all(), request.user), pk=pk)
+    obj = get_object_or_404(
+        filter_mis_qs(ExpenseDetail.objects.select_related("client", "category"), request.user),
+        pk=pk,
+    )
     if request.method == "POST":
         label = f"{obj.client.client_name} ({obj.date})"
         log_client_activity(
             client=obj.client,
             user=request.user,
             category=ClientActivityLog.CATEGORY_MIS,
-            activity=f"MIS expense deleted for {obj.date:%d-%m-%Y}.",
+            activity=f"MIS expense deleted for {_mis_activity_date_label(obj.date)}.",
             remarks=obj.remarks,
         )
         obj.delete()
