@@ -1,6 +1,8 @@
-from decimal import Decimal
-from django.contrib import messages
 import base64
+import json
+from decimal import Decimal
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
@@ -71,7 +73,7 @@ def _mis_client_picker_seed(user, instance=None) -> list[dict[str, str]]:
 
 
 def _mis_form_page_context(user, form, **extra):
-    extra["client_picker_seed"] = _mis_client_picker_seed(user, form.instance)
+    extra["clients_json"] = json.dumps(_mis_client_picker_seed(user, form.instance))
     return extra
 
 

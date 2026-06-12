@@ -43,6 +43,7 @@ class MisEditFlowTests(_MisTestBase):
         resp = self.http.get("/mis/fees/new/")
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertIn(b"mis-client-picker-data", resp.content)
+        self.assertIn(b"/mis/clients/search/", resp.content)
         self.assertIn(b"clientSearch", resp.content)
 
     def test_fees_create_then_edit_get(self):

@@ -25,11 +25,7 @@
   <div class="form-text">Filled automatically from Client Master.</div>
 </div>
 
-{% if client_picker_seed %}
-{{ client_picker_seed|json_script:"mis-client-picker-data" }}
-{% else %}
-<script id="mis-client-picker-data" type="application/json">[]</script>
-{% endif %}
+<script id="mis-client-picker-data" type="application/json">{{ clients_json|default:"[]"|safe }}</script>
 
 <script>
   (function () {
@@ -45,7 +41,8 @@
     var fetchTimer = null;
 
     try {
-      clients = JSON.parse(dataEl.textContent);
+      clients = JSON.parse(dataEl.textContent || "[]");
+      if (!Array.isArray(clients)) clients = [];
     } catch (e) {
       clients = [];
     }
@@ -58,9 +55,7 @@
     function findMatchByLabel(label) {
       var v = (label || "").trim();
       for (var i = 0; i < clients.length; i++) {
-        if (clients[i].label === v) {
-          return clients[i];
-        }
+        if (clients[i].label === v) return clients[i];
       }
       return null;
     }
@@ -69,24 +64,16 @@
       var needle = String(id || "").trim();
       if (!needle) return null;
       for (var i = 0; i < clients.length; i++) {
-        if (String(clients[i].id) === needle) {
-          return clients[i];
-        }
+        if (String(clients[i].id) === needle) return clients[i];
       }
       return null;
     }
 
     function mergeClients(items) {
       var byId = {};
-      for (var i = 0; i < clients.length; i++) {
-        byId[clients[i].id] = clients[i];
-      }
-      for (var j = 0; j < items.length; j++) {
-        byId[items[j].id] = items[j];
-      }
-      clients = Object.keys(byId).map(function (k) {
-        return byId[k];
-      });
+      for (var i = 0; i < clients.length; i++) byId[clients[i].id] = clients[i];
+      for (var j = 0; j < items.length; j++) byId[items[j].id] = items[j];
+      clients = Object.keys(byId).map(function (k) { return byId[k]; });
     }
 
     function renderSuggestions(q) {
@@ -113,7 +100,7 @@
     }
 
     function fetchClients(q) {
-      if (!searchUrl || (q || "").trim().length < 2) {
+      if ((q || "").trim().length < 2) {
         renderSuggestions(search.value);
         return;
       }
@@ -121,17 +108,12 @@
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       })
-        .then(function (resp) {
-          if (!resp.ok) return [];
-          return resp.json();
-        })
+        .then(function (resp) { return resp.ok ? resp.json() : { results: [] }; })
         .then(function (data) {
           mergeClients((data && data.results) || []);
           renderSuggestions(search.value);
         })
-        .catch(function () {
-          renderSuggestions(search.value);
-        });
+        .catch(function () { renderSuggestions(search.value); });
     }
 
     if (!search.value && hidden.value) {
@@ -149,10 +131,7 @@
       hidden.value = "";
       setBranchFromMatch(null);
       if (fetchTimer) window.clearTimeout(fetchTimer);
-      var q = search.value || "";
-      fetchTimer = window.setTimeout(function () {
-        fetchClients(q);
-      }, 200);
+      fetchTimer = window.setTimeout(function () { fetchClients(search.value); }, 200);
     });
     search.addEventListener("change", syncHiddenFromLabel);
     search.addEventListener("blur", syncHiddenFromLabel);

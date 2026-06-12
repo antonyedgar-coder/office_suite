@@ -61,13 +61,6 @@ def _mis_client_queryset(user, instance=None):
     return qs.order_by("client_name")
 
 
-def _mis_date_field():
-    return forms.DateInput(
-        attrs={"class": "form-control", "type": "date"},
-        format="%Y-%m-%d",
-    )
-
-
 
 
 
@@ -108,13 +101,6 @@ class _ClientAutocompleteMixin:
         super().__init__(*args, **kwargs)
 
         self.fields["client"] = _client_field(_mis_client_queryset(user, self.instance))
-
-        if "date" in self.fields:
-            self.fields["date"].widget = _mis_date_field()
-            date_formats = list(self.fields["date"].input_formats or [])
-            if "%Y-%m-%d" not in date_formats:
-                date_formats.insert(0, "%Y-%m-%d")
-            self.fields["date"].input_formats = date_formats
 
         if getattr(self.instance, "pk", None) and getattr(self.instance, "client_id", None):
 
@@ -163,6 +149,8 @@ class FeesDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
         fields = ["date", "client", "fees_amount", "expenses_invoice_amount", "gst_amount", "remarks"]
 
         widgets = {
+
+            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
 
             "fees_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
 
@@ -218,6 +206,7 @@ class ReceiptForm(_ClientAutocompleteMixin, forms.ModelForm):
         model = Receipt
         fields = ["date", "client", "fees_received", "expenses_received", "remarks"]
         widgets = {
+            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "fees_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "expenses_received": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "remarks": forms.Textarea(
@@ -289,6 +278,7 @@ class TenderDetailForm(_ClientAutocompleteMixin, forms.ModelForm):
         model = TenderDetail
         fields = ["date", "client", "tender_fees", "tender_deposit", "remarks"]
         widgets = {
+            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "tender_fees": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "tender_deposit": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "remarks": forms.Textarea(
