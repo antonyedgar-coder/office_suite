@@ -260,3 +260,23 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
 DSC_EXPIRY_NOTIFY_DAYS_BEFORE = int(os.getenv("DSC_EXPIRY_NOTIFY_DAYS_BEFORE", "30"))
 DSC_EXPIRY_NOTIFY_RUN_TIME = os.getenv("DSC_EXPIRY_NOTIFY_RUN_TIME", "08:00")
 
+# Log 500 errors (full traceback) to stdout for DigitalOcean Runtime Logs.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
+

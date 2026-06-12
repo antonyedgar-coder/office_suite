@@ -26,9 +26,9 @@
 </div>
 
 {% if client_picker_seed %}
-  {{ client_picker_seed|json_script:"mis-client-picker-data" }}
+{{ client_picker_seed|json_script:"mis-client-picker-data" }}
 {% else %}
-  <script id="mis-client-picker-data" type="application/json">[]</script>
+<script id="mis-client-picker-data" type="application/json">[]</script>
 {% endif %}
 
 <script>
@@ -40,7 +40,7 @@
     var dataEl = document.getElementById("mis-client-picker-data");
     if (!search || !hidden || !list || !dataEl) return;
 
-    var searchUrl = "{% url 'mis_client_search' %}";
+    var searchUrl = "/mis/clients/search/";
     var clients = [];
     var fetchTimer = null;
 

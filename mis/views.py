@@ -71,7 +71,7 @@ def _mis_client_picker_seed(user, instance=None) -> list[dict[str, str]]:
 
 
 def _mis_form_page_context(user, form, **extra):
-    extra.setdefault("client_picker_seed", _mis_client_picker_seed(user, form.instance))
+    extra["client_picker_seed"] = _mis_client_picker_seed(user, form.instance)
     return extra
 
 
