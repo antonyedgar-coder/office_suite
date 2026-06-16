@@ -1,0 +1,25 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+  (function () {
+    if (window.__misSingleDatePickerBound) return;
+    window.__misSingleDatePickerBound = true;
+
+    function initMisDatePickers() {
+      if (typeof flatpickr === "undefined") return;
+      document.querySelectorAll(".mis-date-picker:not([data-mis-fp-init])").forEach(function (el) {
+        el.dataset.misFpInit = "1";
+        flatpickr(el, {
+          dateFormat: "d-m-Y",
+          allowInput: true,
+        });
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initMisDatePickers);
+    } else {
+      initMisDatePickers();
+    }
+  })();
+</script>

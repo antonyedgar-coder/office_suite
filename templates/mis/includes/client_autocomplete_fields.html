@@ -1,7 +1,9 @@
+{% include "mis/includes/mis_date_picker_assets.html" %}
 <div class="col-12 col-md-4">
-  <label class="form-label">Date</label>
+  <label class="form-label required-field" for="{{ form.date.id_for_label }}">Date</label>
   {{ form.date }}
   {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+  <div class="form-text">Pick from calendar or type dd-mm-yyyy.</div>
 </div>
 <div class="col-12 col-md-5">
   <label class="form-label">Client name</label>

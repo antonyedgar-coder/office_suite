@@ -85,6 +85,10 @@ class MisEditFlowTests(_MisTestBase):
     def test_expense_create_then_edit_get(self):
         self._grant("add_expensedetail", "change_expensedetail", "view_expensedetail")
         cat = ExpenseCategory.objects.create(name="General", is_active=True)
+        get_resp = self.http.get("/mis/expenses/new/")
+        self.assertEqual(get_resp.status_code, 200, get_resp.content)
+        self.assertIn(b"mis-date-picker", get_resp.content)
+        self.assertIn(b"flatpickr", get_resp.content)
         create_resp = self.http.post(
             "/mis/expenses/new/",
             {
@@ -100,6 +104,25 @@ class MisEditFlowTests(_MisTestBase):
         obj = ExpenseDetail.objects.get()
         edit_resp = self.http.get(f"/mis/expenses/{obj.pk}/")
         self.assertEqual(edit_resp.status_code, 200, edit_resp.content)
+        self.assertIn(b'value="24-05-2026"', edit_resp.content)
+
+    def test_expense_create_accepts_dd_mm_yyyy_date(self):
+        self._grant("add_expensedetail", "view_expensedetail")
+        cat = ExpenseCategory.objects.create(name="Travel", is_active=True)
+        resp = self.http.post(
+            "/mis/expenses/new/",
+            {
+                "date": "24-05-2026",
+                "client": str(self.client_record.pk),
+                "category": str(cat.pk),
+                "payment_mode": "CASH",
+                "expenses_paid": "100.00",
+                "remarks": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 302, resp.content)
+        obj = ExpenseDetail.objects.get()
+        self.assertEqual(obj.date, date(2026, 5, 24))
 
     def test_tender_create_then_edit_get(self):
         self._grant("add_tenderdetail", "change_tenderdetail", "view_tenderdetail")
