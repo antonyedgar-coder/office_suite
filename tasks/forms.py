@@ -520,6 +520,20 @@ class TaskCreateForm(forms.Form):
 
     )
 
+    description = forms.CharField(
+        label="Description",
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "id_description",
+                "maxlength": "50",
+                "placeholder": "Optional (max 50 characters)",
+            }
+        ),
+    )
+
 
 
     def __init__(self, *args, user=None, **kwargs):

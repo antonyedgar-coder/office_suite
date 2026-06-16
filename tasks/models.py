@@ -217,6 +217,7 @@ class Task(models.Model):
         related_name="tasks",
     )
     title = models.CharField(max_length=255)
+    description = models.CharField(max_length=50, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ASSIGNED, db_index=True)
     priority = models.CharField(max_length=16, choices=TaskMaster.PRIORITY_CHOICES, default=TaskMaster.PRIORITY_NORMAL)
     due_date = models.DateField()

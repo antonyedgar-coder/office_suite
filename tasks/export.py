@@ -18,6 +18,7 @@ def task_list_csv_response(
     *,
     base_qs=None,
     filename: str = "tasks.csv",
+    show_submitter_verifier_names: bool = False,
 ) -> HttpResponse:
     tasks = get_filtered_tasks(user, filters, base_qs=base_qs, limit=100_000)
     rows = prepare_task_list_rows(tasks, include_assignees=True)
@@ -33,6 +34,7 @@ def task_list_csv_response(
             "Client",
             "Client ID",
             "Task",
+            "Description",
             "Period key",
             "Frequency",
             "Period",
@@ -42,9 +44,17 @@ def task_list_csv_response(
             "Users",
             "Verifier",
             "Submitted",
-            "Submitted by",
+            *(
+                ["Submitted by"]
+                if show_submitter_verifier_names
+                else []
+            ),
             "Approved",
-            "Approved by",
+            *(
+                ["Approved by"]
+                if show_submitter_verifier_names
+                else []
+            ),
             "Billable",
             "Fees",
             "Currency",
@@ -54,27 +64,33 @@ def task_list_csv_response(
     for row in rows:
         t = row.task
         p = row.period
-        writer.writerow(
+        csv_row = [
+            row.created_date,
+            t.client.client_name,
+            t.client_id,
+            t.display_title,
+            t.description or "",
+            t.period_key,
+            p.frequency or "",
+            p.period or "",
+            p.next_period or "",
+            t.get_status_display(),
+            t.due_date.strftime("%d-%b-%Y") if t.due_date else "",
+            row.assignee_names,
+            format_task_verifier_names(t),
+            row.submitted_date,
+        ]
+        if show_submitter_verifier_names:
+            csv_row.append(row.submitted_by_name)
+        csv_row.append(row.verified_date)
+        if show_submitter_verifier_names:
+            csv_row.append(row.verified_by_name)
+        csv_row.extend(
             [
-                row.created_date,
-                t.client.client_name,
-                t.client_id,
-                t.display_title,
-                t.period_key,
-                p.frequency or "",
-                p.period or "",
-                p.next_period or "",
-                t.get_status_display(),
-                t.due_date.strftime("%d-%b-%Y") if t.due_date else "",
-                row.assignee_names,
-                format_task_verifier_names(t),
-                row.submitted_date,
-                row.submitted_by_name,
-                row.verified_date,
-                row.verified_by_name,
                 "Yes" if t.is_billable else "No",
                 str(t.fees_amount) if t.fees_amount is not None else "",
                 t.currency,
             ]
         )
+        writer.writerow(csv_row)
     return response

@@ -598,7 +598,15 @@ def task_master_bulk_import_template(request):
     return response
 
 
-def _task_list_context(request, *, list_title, show_new_task, csv_url_name, base_qs=None):
+def _task_list_context(
+    request,
+    *,
+    list_title,
+    show_new_task,
+    csv_url_name,
+    base_qs=None,
+    show_submitter_verifier_names: bool = False,
+):
     filters = parse_task_list_filters(request)
     tasks = get_filtered_tasks(request.user, filters, base_qs=base_qs)
     ctx = filter_context(request.user, filters)
@@ -608,6 +616,7 @@ def _task_list_context(request, *, list_title, show_new_task, csv_url_name, base
             "task_rows": prepare_task_list_rows(tasks),
             "list_title": list_title,
             "show_new_task": show_new_task,
+            "show_submitter_verifier_names": show_submitter_verifier_names,
             "csv_export_url": reverse(csv_url_name) + (f"?{qs}" if qs else ""),
         }
     )
@@ -643,6 +652,7 @@ def task_report(request):
             list_title="Task report",
             show_new_task=False,
             csv_url_name="task_report_csv",
+            show_submitter_verifier_names=True,
         ),
     )
 
@@ -656,7 +666,13 @@ def task_list_csv(request):
 @require_perm("tasks.view_task")
 def task_report_csv(request):
     filters = parse_task_list_filters(request)
-    return task_list_csv_response(request, request.user, filters, filename="task-report.csv")
+    return task_list_csv_response(
+        request,
+        request.user,
+        filters,
+        filename="task-report.csv",
+        show_submitter_verifier_names=True,
+    )
 
 
 @require_perm("tasks.add_task")
@@ -691,6 +707,7 @@ def task_create(request):
                 due_date=due_date,
                 is_billable=form.cleaned_data.get("is_billable"),
                 fees_amount=form.cleaned_data.get("fees_amount"),
+                description=form.cleaned_data.get("description") or "",
             )
             if form.cleaned_data.get("priority"):
                 task.priority = form.cleaned_data["priority"]

@@ -5,15 +5,20 @@
         <th>Created</th>
         <th>Client name</th>
         <th>Task</th>
+        <th>Description</th>
         <th>Frequency</th>
         <th>Period</th>
         <th>Next period</th>
         <th>Status</th>
         <th>Due</th>
         <th>Submitted</th>
-        <th>By</th>
+        {% if show_submitter_verifier_names %}
+          <th>By</th>
+        {% endif %}
         <th>Verified</th>
-        <th>By</th>
+        {% if show_submitter_verifier_names %}
+          <th>By</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -22,18 +27,23 @@
           <td class="text-nowrap">{{ row.created_date|default:"—" }}</td>
           <td>{{ row.task.client.client_name }}</td>
           <td><a href="{% url 'task_detail' row.task.pk %}">{{ row.task.title }}</a></td>
+          <td>{{ row.task.description|default:"—" }}</td>
           <td class="text-nowrap">{{ row.period.frequency|default:"—" }}</td>
           <td class="text-nowrap">{{ row.period.period|default:"—" }}</td>
           <td class="text-nowrap">{{ row.period.next_period|default:"—" }}</td>
           <td>{% include "includes/status_badge_task.html" with status=row.task.status label=row.task.get_status_display %}</td>
           <td class="text-nowrap">{{ row.task.due_date|date:"d-M-Y" }}</td>
           <td class="text-nowrap">{{ row.submitted_date|default:"—" }}</td>
-          <td class="mono">{{ row.submitted_by|default:"—" }}</td>
+          {% if show_submitter_verifier_names %}
+            <td class="mono">{{ row.submitted_by|default:"—" }}</td>
+          {% endif %}
           <td class="text-nowrap">{{ row.verified_date|default:"—" }}</td>
-          <td class="mono">{{ row.verified_by|default:"—" }}</td>
+          {% if show_submitter_verifier_names %}
+            <td class="mono">{{ row.verified_by|default:"—" }}</td>
+          {% endif %}
         </tr>
       {% empty %}
-        <tr><td colspan="12" class="text-secondary">No tasks match your filters.</td></tr>
+        <tr><td colspan="{% if show_submitter_verifier_names %}13{% else %}11{% endif %}" class="text-secondary">No tasks match your filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>

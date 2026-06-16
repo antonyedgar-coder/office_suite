@@ -126,8 +126,62 @@ class TaskWorkflowTests(TestCase):
             list(task.assignments.values_list("user_id", flat=True)),
             [new_assignee.pk],
         )
+        self.assertTrue(
+            TaskNotification.objects.filter(
+                user=new_assignee,
+                task=task,
+                kind=TaskNotification.KIND_ASSIGNED,
+            ).exists()
+        )
+        self.assertTrue(
+            TaskNotification.objects.filter(
+                user=new_verifier,
+                task=task,
+                kind=TaskNotification.KIND_GENERAL,
+            ).exists()
+        )
+        self.assertTrue(
+            TaskNotification.objects.filter(
+                user=new_doc,
+                task=task,
+                kind=TaskNotification.KIND_GENERAL,
+            ).exists()
+        )
 
-    def test_complete_task_cannot_edit_team(self):
+    def test_create_task_with_description(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="2026-09",
+            due_date=date(2026, 9, 15),
+            auto_created=True,
+            description="Quarterly review",
+        )
+        self.assertEqual(task.description, "Quarterly review")
+
+    def test_create_form_description_max_length(self):
+        assignee = User.objects.create_user(email="assignee@example.com", password="pass12345")
+        form = TaskCreateForm(
+            data={
+                "task_master": self.master.pk,
+                "client": self.client.pk,
+                "assignee_ids": str(assignee.pk),
+                "verifier_ids": str(self.verifier.pk),
+                "document_checker": self.document_checker.pk,
+                "due_date": "2026-09-15",
+                "period_type": "monthly",
+                "period_month": "9",
+                "period_year": "2026",
+                "description": "x" * 51,
+            },
+            user=self.user,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("description", form.errors)
         task = create_task_from_master(
             master=self.master,
             client=self.client,

@@ -178,6 +178,7 @@ def create_task_from_master(
     due_date=None,
     is_billable=None,
     fees_amount=None,
+    description: str = "",
 ) -> Task:
     if not master.is_active or master.archived_at is not None:
         raise ValidationError(
@@ -204,6 +205,7 @@ def create_task_from_master(
         task_master=master,
         enrollment=enrollment,
         title=master.name,
+        description=(description or "").strip()[:50],
         status=initial_status,
         priority=master.default_priority,
         due_date=due_date,
@@ -606,45 +608,72 @@ def update_task_team(
             _set_assignees(sibling, new_ids, actor=actor)
 
     added_assignees = new_assignee_ids - old_assignee_ids
-    if added_assignees and task.status != Task.STATUS_PENDING_ASSIGNMENT:
-        for uid in added_assignees:
-            u = User.objects.get(pk=uid)
-            notify_user(
-                u,
-                f"You were assigned: {task.display_title} — {format_task_client_suffix(task)}",
-                kind=TaskNotification.KIND_ASSIGNED,
-                link=f"/tasks/{task.pk}/",
-                task=task,
-            )
+    client_label = format_task_client_suffix(task)
+    task_link = f"/tasks/{task.pk}/"
+
+    if added_assignees:
+        for u in User.objects.filter(pk__in=added_assignees):
+            if task.status == Task.STATUS_PENDING_ASSIGNMENT:
+                notify_user(
+                    u,
+                    f"Approve your task assignment: {task.display_title} — {client_label}",
+                    kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
+                    link=task_link,
+                    task=task,
+                )
+            else:
+                notify_user(
+                    u,
+                    f"You were assigned: {task.display_title} — {client_label}",
+                    kind=TaskNotification.KIND_ASSIGNED,
+                    link=task_link,
+                    task=task,
+                )
 
     added_verifier_ids = new_verifier_ids - old_verifier_ids
-    for uid in added_verifier_ids:
-        u = User.objects.get(pk=uid)
-        if task.status == Task.STATUS_PENDING_ASSIGNMENT:
+    for u in User.objects.filter(pk__in=added_verifier_ids):
+        if task.status == Task.STATUS_SUBMITTED:
             notify_user(
                 u,
-                f"Approve task assignment: {task.display_title} — {format_task_client_suffix(task)}",
-                kind=TaskNotification.KIND_ASSIGNMENT_APPROVAL,
-                link=f"/tasks/{task.pk}/",
+                f"Task submitted for verification: {task.display_title} — {client_label}",
+                kind=TaskNotification.KIND_VERIFY,
+                link=task_link,
                 task=task,
             )
-        elif task.status == Task.STATUS_SUBMITTED:
+        elif task.status == Task.STATUS_VERIFIED:
             notify_user(
                 u,
-                f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
-                kind=TaskNotification.KIND_VERIFY,
-                link=f"/tasks/{task.pk}/",
+                f"Document check required: {task.display_title} — {client_label}",
+                kind=TaskNotification.KIND_DOCUMENT_CHECK,
+                link=task_link,
+                task=task,
+            )
+        else:
+            notify_user(
+                u,
+                f"You were added as verifier: {task.display_title} — {client_label}",
+                kind=TaskNotification.KIND_GENERAL,
+                link=task_link,
                 task=task,
             )
 
-    if old_doc_id != document_checker.pk and task.status == Task.STATUS_VERIFIED:
-        notify_user(
-            document_checker,
-            f"Document check required: {task.display_title} — {format_task_client_suffix(task)}",
-            kind=TaskNotification.KIND_DOCUMENT_CHECK,
-            link=f"/tasks/{task.pk}/",
-            task=task,
-        )
+    if old_doc_id != document_checker.pk:
+        if task.status == Task.STATUS_VERIFIED:
+            notify_user(
+                document_checker,
+                f"Document check required: {task.display_title} — {client_label}",
+                kind=TaskNotification.KIND_DOCUMENT_CHECK,
+                link=task_link,
+                task=task,
+            )
+        else:
+            notify_user(
+                document_checker,
+                f"You were assigned as document checker: {task.display_title} — {client_label}",
+                kind=TaskNotification.KIND_GENERAL,
+                link=task_link,
+                task=task,
+            )
 
     return task
 
