@@ -52,6 +52,13 @@
     <form method="post" id="taskEditForm">{% csrf_token %}
       {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
 
+      <div class="mb-3">
+        <label class="form-label" for="id_description">Description</label>
+        {{ form.description }}
+        <div class="form-text">Optional, up to 50 characters.</div>
+        {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors }}</div>{% endif %}
+      </div>
+
       <div class="mb-3 field-wrap">
         <label class="form-label" for="taskAssigneeSearch">Users</label>
         <input class="form-control" id="taskAssigneeSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />

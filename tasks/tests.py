@@ -182,6 +182,33 @@ class TaskWorkflowTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("description", form.errors)
+
+    def test_update_task_team_saves_description(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.user,
+            period_key="2026-10",
+            due_date=date(2026, 10, 15),
+            auto_created=True,
+        )
+        update_task_team(
+            task,
+            assignee_users=[self.user],
+            verifiers=[self.verifier],
+            document_checker=self.document_checker,
+            due_date=date(2026, 10, 20),
+            priority=task.priority,
+            description="Updated note",
+            actor=self.user,
+        )
+        task.refresh_from_db()
+        self.assertEqual(task.description, "Updated note")
+
+    def test_complete_task_cannot_edit_team(self):
         task = create_task_from_master(
             master=self.master,
             client=self.client,

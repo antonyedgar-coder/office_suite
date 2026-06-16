@@ -1023,6 +1023,7 @@ def task_edit(request, pk: int):
                     document_checker=form.cleaned_data["document_checker"],
                     due_date=form.cleaned_data["due_date"],
                     priority=form.cleaned_data["priority"],
+                    description=form.cleaned_data.get("description") or "",
                     actor=request.user,
                 )
             except ValidationError as exc:

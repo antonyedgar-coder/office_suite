@@ -559,6 +559,7 @@ def update_task_team(
     priority,
     actor,
     verifier=None,
+    description: str | None = None,
 ) -> Task:
     if not task_team_is_editable(task):
         raise ValidationError("This task cannot be edited in its current status.")
@@ -573,7 +574,12 @@ def update_task_team(
     task.document_checker = document_checker
     task.due_date = due_date
     task.priority = priority
-    task.save(update_fields=["document_checker", "due_date", "priority", "updated_at"])
+    if description is not None:
+        task.description = (description or "").strip()[:50]
+    update_fields = ["document_checker", "due_date", "priority", "updated_at"]
+    if description is not None:
+        update_fields.append("description")
+    task.save(update_fields=update_fields)
     task.verifiers.set(verifier_users)
 
     changes: list[str] = []

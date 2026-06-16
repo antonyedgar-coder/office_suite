@@ -845,6 +845,19 @@ class TaskEditForm(forms.Form):
         choices=TaskMaster.PRIORITY_CHOICES,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    description = forms.CharField(
+        label="Description",
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "id_description",
+                "maxlength": "50",
+                "placeholder": "Optional (max 50 characters)",
+            }
+        ),
+    )
 
     def __init__(self, *args, task=None, user=None, **kwargs):
         self._task = task
@@ -861,6 +874,7 @@ class TaskEditForm(forms.Form):
             self.fields["document_checker"].initial = task.document_checker_id
             self.fields["due_date"].initial = task.due_date
             self.fields["priority"].initial = task.priority
+            self.fields["description"].initial = task.description
 
     def clean(self):
         cleaned = super().clean()
