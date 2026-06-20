@@ -38,9 +38,6 @@
           {% if perms.mis.view_expensedetail %}
             <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_expense_list' %}">MIS • Client Expenses</a>
           {% endif %}
-          {% if perms.dirkyc.view_dir3kyc %}
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'dirkyc_list' %}">DIR-3 KYC</a>
-          {% endif %}
           {% if perms.reports.access_reports_menu or perms.reports.view_director_mapping_report or perms.reports.view_dir3kyc_report %}
             <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_index' %}">Reports</a>
           {% endif %}
@@ -78,7 +75,7 @@
   {% endif %}
 
   <div class="row g-3 mt-0">
-    <div class="col-12 {% if show_mis_dashboard %}col-lg-4{% else %}col-lg-6{% endif %}">
+    <div class="col-12 {% if show_mis_dashboard %}col-lg-6{% else %}col-lg-12{% endif %}">
       <div class="card p-3 h-100">
         <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
           <div class="fw-semibold">Clients by type</div>
@@ -102,33 +99,8 @@
       </div>
     </div>
 
-    <div class="col-12 {% if show_mis_dashboard %}col-lg-4{% else %}col-lg-6{% endif %}">
-      <div class="card p-3 h-100">
-        <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
-          <div class="fw-semibold">DIR-3 eKYC pending</div>
-          <div class="text-secondary small">As on <span class="mono">{{ today }}</span></div>
-        </div>
-        <div class="d-flex flex-wrap gap-3 align-items-end mb-2">
-          <div>
-            <div class="text-secondary small">Pending directors</div>
-            <div class="fs-2 fw-semibold mono">{{ dir3_pending_count }}</div>
-          </div>
-          <div>
-            <div class="text-secondary small">Tracked directors</div>
-            <div class="fs-5 fw-semibold mono">{{ dir3_total_directors }}</div>
-          </div>
-        </div>
-        <p class="text-secondary small mb-3">
-          Pending: never filed, or today is on/after the next allowed filing date from the last filing (Indian FY rule).
-        </p>
-        {% if perms.dirkyc.view_dir3kyc %}
-          <a class="btn btn-sm btn-outline-primary" href="{% url 'dirkyc_list' %}">Open DIR-3 KYC</a>
-        {% endif %}
-      </div>
-    </div>
-
     {% if show_mis_dashboard %}
-    <div class="col-12 col-lg-4">
+    <div class="col-12 col-lg-6">
       <div class="card p-3 h-100">
         <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
           <div class="fw-semibold">MIS this financial year</div>

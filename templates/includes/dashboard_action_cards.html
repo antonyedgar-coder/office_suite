@@ -27,16 +27,4 @@
       </a>
     </div>
   {% endif %}
-  {% if dir3_pending_count %}
-    <div class="col-6 col-md-4 col-lg-3">
-      <a
-        href="{% if perms.dirkyc.view_dir3kyc %}{% url 'dirkyc_list' %}{% else %}#{% endif %}"
-        class="dashboard-action-card has-items"
-      >
-        <div class="dac-count">{{ dir3_pending_count }}</div>
-        <div class="dac-label">DIR-3 pending</div>
-        <div class="dac-hint">Directors due for KYC</div>
-      </a>
-    </div>
-  {% endif %}
 </div>

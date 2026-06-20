@@ -7,13 +7,12 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Count, OuterRef, Subquery, Sum
+from django.db.models import Count, Sum
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 
-from dirkyc.fy import earliest_next_dirkyc_allowed_date, fy_label_for_date, fy_label_to_date_range
-from dirkyc.models import Dir3Kyc
-from masters.models import DIRECTOR_ELIGIBLE_CLIENT_TYPES, Client, DirectorMapping
+from dirkyc.fy import fy_label_for_date, fy_label_to_date_range
+from masters.models import Client, DirectorMapping
 from mis.models import ExpenseDetail, FeesDetail, Receipt
 
 from .activity_log import log_activity_from_request
@@ -78,21 +77,6 @@ def dashboard_view(request):
         client_qs.values("client_type").annotate(count=Count("pk")).order_by("-count", "client_type")
     )
 
-    last_kyc_sq = (
-        Dir3Kyc.objects.filter(director=OuterRef("pk")).order_by("-date_done", "-id").values("date_done")[:1]
-    )
-    director_qs = (
-        client_qs.filter(client_type__in=sorted(DIRECTOR_ELIGIBLE_CLIENT_TYPES), is_director=True)
-        .exclude(din="")
-        .annotate(last_kyc_date=Subquery(last_kyc_sq))
-    )
-    dir3_total_directors = director_qs.count()
-    dir3_pending_count = 0
-    for director in director_qs.iterator(chunk_size=256):
-        last_done = director.last_kyc_date
-        if last_done is None or today >= earliest_next_dirkyc_allowed_date(last_done):
-            dir3_pending_count += 1
-
     user = request.user
     show_mis_dashboard = user.is_superuser or (
         user.has_perm("mis.add_feesdetail")
@@ -126,8 +110,6 @@ def dashboard_view(request):
         "pending_client_count": pending_client_count,
         "show_pending_clients_card": show_pending_clients_card,
         "client_type_counts": client_type_counts,
-        "dir3_pending_count": dir3_pending_count,
-        "dir3_total_directors": dir3_total_directors,
         "mis_fy_label": fy_label,
         "mis_fy_period_start": fy_start,
         "mis_fy_period_end": fy_end,

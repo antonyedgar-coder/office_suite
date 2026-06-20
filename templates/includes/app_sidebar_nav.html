@@ -1,4 +1,4 @@
-{# Sidebar sections: Masters → Tasks → DSC Management → MIS → DIR-3 eKYC → Reports #}
+{# Sidebar sections: Masters → Tasks → Documents → DSC Management → MIS → Reports #}
 {% with url_name=request.resolver_match.url_name|default:"" nav_prefix=nav_id_prefix|default:"main" %}
   {% if user.is_superuser or perms.masters.view_client or perms.masters.approve_client or perms.masters.view_clientportalcredential or perms.masters.view_directormapping or perms.masters.add_masterrequest %}
     <div
@@ -105,27 +105,6 @@
         {% if user.is_superuser or perms.mis.add_feesdetail %}
           <a class="nav-link {% if url_name == 'mis_bulk_import' %}active{% endif %}" href="{% url 'mis_bulk_import' %}"><i class="bi bi-cloud-upload nav-link-icon" aria-hidden="true"></i><span>Bulk upload</span></a>
         {% endif %}
-      </div>
-    </div>
-  {% endif %}
-
-  {% if user.is_superuser or perms.dirkyc.view_dir3kyc %}
-    <div
-      class="nav-accordion-item{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} is-open{% endif %}"
-      data-nav-section="dirkyc"
-    >
-      <button
-        type="button"
-        class="nav-accordion-toggle"
-        aria-expanded="{% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}true{% else %}false{% endif %}"
-        aria-controls="nav-panel-{{ nav_prefix }}-dirkyc"
-      >
-        <i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i>
-        <span>DIR-3 eKYC</span>
-        <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
-      </button>
-      <div id="nav-panel-{{ nav_prefix }}-dirkyc" class="nav-accordion-panel"{% if url_name not in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %} hidden{% endif %}>
-        <a class="nav-link {% if url_name in 'dirkyc_list dirkyc_create dirkyc_edit dirkyc_delete' %}active{% endif %}" href="{% url 'dirkyc_list' %}"><i class="bi bi-shield-check nav-link-icon" aria-hidden="true"></i><span>DIR-3 KYC</span></a>
       </div>
     </div>
   {% endif %}
