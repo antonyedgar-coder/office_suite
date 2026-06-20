@@ -63,6 +63,14 @@ class TaskMaster(models.Model):
     frequency = models.CharField(max_length=32, choices=FREQUENCY_CHOICES, blank=True)
     recurrence_config = models.JSONField(default=dict, blank=True)
     default_currency = models.CharField(max_length=8, default=CURRENCY_INR)
+    requires_verifier = models.BooleanField(
+        default=True,
+        help_text="When enabled, a verifier must approve before the task can complete (or before document check in full workflow).",
+    )
+    requires_document_checker = models.BooleanField(
+        default=True,
+        help_text="When enabled, a document checker must mark the task complete after submission or verification.",
+    )
     archived_at = models.DateTimeField(null=True, blank=True)
     created_by = created_by_field()
 
@@ -132,6 +140,8 @@ class TaskRecurrenceEnrollment(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="task_enrollments_as_document_checker",
+        null=True,
+        blank=True,
     )
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -143,6 +153,8 @@ class TaskRecurrenceEnrollment(models.Model):
     paused_until = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
     started_at = models.DateField()
+    requires_verifier = models.BooleanField(default=True)
+    requires_document_checker = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -229,7 +241,11 @@ class Task(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="tasks_to_document_check",
+        null=True,
+        blank=True,
     )
+    requires_verifier = models.BooleanField(default=True)
+    requires_document_checker = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

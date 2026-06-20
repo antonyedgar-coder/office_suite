@@ -150,11 +150,21 @@ def _my_open_qs(base, user):
 
 
 def _document_check_queue_qs(base, user):
-    return base.filter(document_checker=user, status=Task.STATUS_VERIFIED)
+    return base.filter(
+        document_checker=user,
+        requires_document_checker=True,
+    ).filter(
+        Q(status=Task.STATUS_VERIFIED, requires_verifier=True)
+        | Q(status=Task.STATUS_SUBMITTED, requires_verifier=False)
+    )
 
 
 def _verify_queue_qs(base, user):
-    return base.filter(verifiers=user, status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT])
+    return base.filter(
+        verifiers=user,
+        requires_verifier=True,
+        status__in=[Task.STATUS_SUBMITTED, Task.STATUS_PENDING_ASSIGNMENT],
+    )
 
 
 def _task_detail_cards(

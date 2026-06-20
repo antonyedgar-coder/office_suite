@@ -68,6 +68,7 @@
         {% if form.assignee_picker.errors %}<div class="text-danger small">{{ form.assignee_picker.errors }}</div>{% endif %}
       </div>
 
+      {% if task.requires_verifier %}
       <div class="mb-3 field-wrap">
         <label class="form-label" for="taskVerifierSearch">Verifiers</label>
         <input class="form-control" id="taskVerifierSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />
@@ -76,7 +77,9 @@
         {{ form.verifier_ids }}
         {% if form.verifier_picker.errors %}<div class="text-danger small">{{ form.verifier_picker.errors }}</div>{% endif %}
       </div>
+      {% endif %}
 
+      {% if task.requires_document_checker %}
       <div class="mb-3 field-wrap">
         <label class="form-label" for="taskDocCheckerSearch">Document checker</label>
         <input class="form-control" id="taskDocCheckerSearch" placeholder="Type name or email (min. 1 character)…" autocomplete="off" />
@@ -84,6 +87,7 @@
         {{ form.document_checker }}
         {% if form.document_checker.errors %}<div class="text-danger small">{{ form.document_checker.errors }}</div>{% endif %}
       </div>
+      {% endif %}
 
       <div class="row">
         <div class="col-md-6 mb-3">

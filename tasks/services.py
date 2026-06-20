@@ -21,6 +21,15 @@ from .notifications import notify_admin_group, notify_user
 from .recurrence import compute_create_due_dates, first_period_key, should_create_today
 from .transitions import validate_transition
 from .user_labels import user_person_name
+from .workflow import (
+    allows_document_rework,
+    allows_verifier_rework,
+    document_check_statuses,
+    needs_document_check,
+    submit_completes_task,
+    validate_team_for_workflow,
+    verify_completes_task,
+)
 
 User = get_user_model()
 
@@ -106,14 +115,14 @@ def resolve_task_billing(*, is_billable=None, fees_amount=None):
     return billable, fees
 
 
-def _normalize_verifiers(*, verifiers=None, verifier=None):
+def _normalize_verifiers(*, verifiers=None, verifier=None, required: bool = True):
     if verifiers is not None:
         users = list(verifiers)
     elif verifier is not None:
         users = [verifier]
     else:
         users = []
-    if not users:
+    if required and not users:
         raise ValidationError("At least one verifier is required.")
     return users
 
@@ -144,6 +153,17 @@ def transition_task_status(task: Task, new_status: str, *, user, message: str = 
         task.completed_at = now
         task.completed_by = user
         update_fields.extend(["completed_at", "completed_by"])
+        if old in (Task.STATUS_ASSIGNED, Task.STATUS_REWORK):
+            if not task.started_at:
+                task.started_at = now
+                update_fields.append("started_at")
+            task.submitted_at = now
+            task.submitted_by = user
+            update_fields.extend(["submitted_at", "submitted_by"])
+        elif old == Task.STATUS_SUBMITTED and task.requires_verifier and not task.requires_document_checker:
+            task.approved_at = now
+            task.approved_by = user
+            update_fields.extend(["approved_at", "approved_by"])
     elif new_status == Task.STATUS_CANCELLED:
         task.cancelled_at = now
         task.cancelled_by = user
@@ -189,7 +209,26 @@ def create_task_from_master(
     if due_date is None:
         _, due_date = compute_create_due_dates(master, pk, started)
 
-    verifier_users = _normalize_verifiers(verifiers=verifiers, verifier=verifier)
+    requires_verifier = bool(
+        enrollment.requires_verifier if enrollment is not None else master.requires_verifier
+    )
+    requires_document_checker = bool(
+        enrollment.requires_document_checker
+        if enrollment is not None
+        else master.requires_document_checker
+    )
+    verifier_users = _normalize_verifiers(
+        verifiers=verifiers,
+        verifier=verifier,
+        required=requires_verifier,
+    )
+    validate_team_for_workflow(
+        requires_verifier=requires_verifier,
+        requires_document_checker=requires_document_checker,
+        assignee_users=assignee_users,
+        verifier_users=verifier_users,
+        document_checker=document_checker if requires_document_checker else None,
+    )
     billable, fees = resolve_task_billing(
         is_billable=is_billable,
         fees_amount=fees_amount,
@@ -209,7 +248,9 @@ def create_task_from_master(
         status=initial_status,
         priority=master.default_priority,
         due_date=due_date,
-        document_checker=document_checker,
+        document_checker=document_checker if requires_document_checker else None,
+        requires_verifier=requires_verifier,
+        requires_document_checker=requires_document_checker,
         created_by=created_by,
         period_key=pk,
         period_type=period_type or "",
@@ -237,7 +278,9 @@ def create_task_from_master(
         metadata={
             "assignee_ids": ids,
             "verifier_ids": [u.pk for u in verifier_users],
-            "document_checker_id": document_checker.pk,
+            "document_checker_id": document_checker.pk if document_checker else None,
+            "requires_verifier": requires_verifier,
+            "requires_document_checker": requires_document_checker,
         },
     )
     if needs_assignment_approval:
@@ -306,13 +349,28 @@ def start_enrollment_if_recurring(
 ) -> TaskRecurrenceEnrollment | None:
     if not master.is_recurring:
         return None
-    verifier_users = _normalize_verifiers(verifiers=verifiers, verifier=verifier)
+    requires_verifier = bool(master.requires_verifier)
+    requires_document_checker = bool(master.requires_document_checker)
+    verifier_users = _normalize_verifiers(
+        verifiers=verifiers,
+        verifier=verifier,
+        required=requires_verifier,
+    )
+    validate_team_for_workflow(
+        requires_verifier=requires_verifier,
+        requires_document_checker=requires_document_checker,
+        assignee_users=assignee_users,
+        verifier_users=verifier_users,
+        document_checker=document_checker if requires_document_checker else None,
+    )
     started = started_at or timezone.localdate()
     enrollment, created = TaskRecurrenceEnrollment.objects.get_or_create(
         client=client,
         task_master=master,
         defaults={
-            "document_checker": document_checker,
+            "document_checker": document_checker if requires_document_checker else None,
+            "requires_verifier": requires_verifier,
+            "requires_document_checker": requires_document_checker,
             "started_at": started,
             "created_by": created_by,
             "is_active": True,
@@ -324,8 +382,17 @@ def start_enrollment_if_recurring(
     TaskEnrollmentAssignee.objects.filter(enrollment=enrollment).delete()
     for u in assignee_users:
         TaskEnrollmentAssignee.objects.create(enrollment=enrollment, user=u)
-    enrollment.document_checker = document_checker
-    enrollment.save(update_fields=["document_checker", "updated_at"])
+    enrollment.document_checker = document_checker if requires_document_checker else None
+    enrollment.requires_verifier = requires_verifier
+    enrollment.requires_document_checker = requires_document_checker
+    enrollment.save(
+        update_fields=[
+            "document_checker",
+            "requires_verifier",
+            "requires_document_checker",
+            "updated_at",
+        ]
+    )
     enrollment.verifiers.set(verifier_users)
     return enrollment
 
@@ -339,18 +406,53 @@ def submit_task(task: Task, user) -> Task:
     if not hasattr(task, "client") or not hasattr(task, "task_master"):
         task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
     if task.status == Task.STATUS_DOCUMENT_REWORK:
+        if not allows_document_rework(task):
+            raise ValidationError("This task does not use document rework.")
         return resubmit_for_document_check(task, user)
     validate_submit_for_client_type(task)
     validate_checklist_before_submit(task)
-    transition_task_status(task, Task.STATUS_SUBMITTED, user=user)
-    from .verifiers import notify_task_verifiers
+    client_suffix = format_task_client_suffix(task)
+    task_link = f"/tasks/{task.pk}/"
 
-    notify_task_verifiers(
-        task,
-        message=f"Task submitted for verification: {task.display_title} — {format_task_client_suffix(task)}",
-        kind=TaskNotification.KIND_VERIFY,
-        link=f"/tasks/{task.pk}/",
-    )
+    if submit_completes_task(task):
+        transition_task_status(task, Task.STATUS_COMPLETE, user=user, message="Task submitted and completed.")
+        for a in task.assignments.select_related("user"):
+            notify_user(
+                a.user,
+                f"Task complete: {task.display_title} — {client_suffix}",
+                kind=TaskNotification.KIND_APPROVED,
+                link=task_link,
+                task=task,
+            )
+        if task.created_by_id:
+            notify_user(
+                task.created_by,
+                f"Task complete: {task.display_title} — {client_suffix}",
+                kind=TaskNotification.KIND_APPROVED,
+                link=task_link,
+                task=task,
+            )
+        return task
+
+    transition_task_status(task, Task.STATUS_SUBMITTED, user=user)
+
+    if task.requires_verifier:
+        from .verifiers import notify_task_verifiers
+
+        notify_task_verifiers(
+            task,
+            message=f"Task submitted for verification: {task.display_title} — {client_suffix}",
+            kind=TaskNotification.KIND_VERIFY,
+            link=task_link,
+        )
+    elif needs_document_check(task) and task.document_checker_id:
+        notify_user(
+            task.document_checker,
+            f"Document check required: {task.display_title} — {client_suffix}",
+            kind=TaskNotification.KIND_DOCUMENT_CHECK,
+            link=task_link,
+            task=task,
+        )
     return task
 
 
@@ -358,6 +460,8 @@ def submit_task(task: Task, user) -> Task:
 def resubmit_for_document_check(task: Task, user, message: str = "") -> Task:
     if task.status != Task.STATUS_DOCUMENT_REWORK:
         raise ValidationError("This task is not awaiting document correction.")
+    if not allows_document_rework(task):
+        raise ValidationError("This task does not use document rework.")
     transition_task_status(
         task,
         Task.STATUS_VERIFIED,
@@ -368,18 +472,21 @@ def resubmit_for_document_check(task: Task, user, message: str = "") -> Task:
     task.submitted_at = now
     task.submitted_by = user
     task.save(update_fields=["submitted_at", "submitted_by", "updated_at"])
-    notify_user(
-        task.document_checker,
-        f"Document check (resubmitted): {task.display_title} — {format_task_client_suffix(task)}",
-        kind=TaskNotification.KIND_DOCUMENT_CHECK,
-        link=f"/tasks/{task.pk}/",
-        task=task,
-    )
+    if task.document_checker_id:
+        notify_user(
+            task.document_checker,
+            f"Document check (resubmitted): {task.display_title} — {format_task_client_suffix(task)}",
+            kind=TaskNotification.KIND_DOCUMENT_CHECK,
+            link=f"/tasks/{task.pk}/",
+            task=task,
+        )
     return task
 
 
 @transaction.atomic
 def send_back_for_document_correction(task: Task, user, message: str = "") -> Task:
+    if not allows_document_rework(task):
+        raise ValidationError("This task does not use document correction.")
     if task.document_checker_id != user.pk and not user.is_superuser:
         raise ValidationError("Only the designated document checker can send this task back.")
     if task.status != Task.STATUS_VERIFIED:
@@ -405,34 +512,60 @@ def send_back_for_document_correction(task: Task, user, message: str = "") -> Ta
 def verify_task(task: Task, user, message: str = "") -> Task:
     from .verifiers import user_is_task_verifier
 
+    if not task.requires_verifier:
+        raise ValidationError("This task does not require verification.")
     if not user_is_task_verifier(user, task):
         raise ValidationError("Only a designated verifier can verify this task.")
     if not hasattr(task, "client") or not hasattr(task, "task_master"):
         task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
     if (getattr(task.client, "client_type", None) or "").strip() == "New Client":
-        raise ValidationError('New Client tasks cannot be verified.')
+        raise ValidationError("New Client tasks cannot be verified.")
+    client_suffix = format_task_client_suffix(task)
+    task_link = f"/tasks/{task.pk}/"
+
+    if verify_completes_task(task):
+        transition_task_status(task, Task.STATUS_COMPLETE, user=user, message=message or "Task verified and completed.")
+        for a in task.assignments.select_related("user"):
+            notify_user(
+                a.user,
+                f"Task complete: {task.display_title} — {client_suffix}",
+                kind=TaskNotification.KIND_APPROVED,
+                link=task_link,
+                task=task,
+            )
+        if task.created_by_id:
+            notify_user(
+                task.created_by,
+                f"Task complete: {task.display_title} — {client_suffix}",
+                kind=TaskNotification.KIND_APPROVED,
+                link=task_link,
+                task=task,
+            )
+        return task
+
     transition_task_status(task, Task.STATUS_VERIFIED, user=user, message=message or "Task verified.")
-    notify_user(
-        task.document_checker,
-        f"Document check required: {task.display_title} — {format_task_client_suffix(task)}",
-        kind=TaskNotification.KIND_DOCUMENT_CHECK,
-        link=f"/tasks/{task.pk}/",
-        task=task,
-    )
+    if task.document_checker_id:
+        notify_user(
+            task.document_checker,
+            f"Document check required: {task.display_title} — {client_suffix}",
+            kind=TaskNotification.KIND_DOCUMENT_CHECK,
+            link=task_link,
+            task=task,
+        )
     for a in task.assignments.select_related("user"):
         notify_user(
             a.user,
-            f"Task verified: {task.display_title} — {format_task_client_suffix(task)}",
+            f"Task verified: {task.display_title} — {client_suffix}",
             kind=TaskNotification.KIND_APPROVED,
-            link=f"/tasks/{task.pk}/",
+            link=task_link,
             task=task,
         )
     if task.created_by_id:
         notify_user(
             task.created_by,
-            f"Task verified: {task.display_title} — {format_task_client_suffix(task)}",
+            f"Task verified: {task.display_title} — {client_suffix}",
             kind=TaskNotification.KIND_APPROVED,
-            link=f"/tasks/{task.pk}/",
+            link=task_link,
             task=task,
         )
     return task
@@ -440,10 +573,13 @@ def verify_task(task: Task, user, message: str = "") -> Task:
 
 @transaction.atomic
 def complete_task(task: Task, user, message: str = "") -> Task:
+    if not needs_document_check(task):
+        raise ValidationError("This task does not require document checking.")
     if task.document_checker_id != user.pk and not user.is_superuser:
         raise ValidationError("Only the designated document checker can mark this task complete.")
-    if task.status != Task.STATUS_VERIFIED:
-        raise ValidationError("Task must be verified before document checking can be completed.")
+    allowed_statuses = document_check_statuses(task)
+    if task.status not in allowed_statuses:
+        raise ValidationError("Task is not ready for document checking.")
     if not hasattr(task, "client") or not hasattr(task, "task_master"):
         task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
     if (getattr(task.client, "client_type", None) or "").strip() == "New Client":
@@ -520,6 +656,8 @@ def delete_task(task: Task, user) -> None:
 
 @transaction.atomic
 def rework_task(task: Task, user, message: str = "") -> Task:
+    if not allows_verifier_rework(task):
+        raise ValidationError("This task does not use verifier rework.")
     transition_task_status(task, Task.STATUS_REWORK, user=user, message=message)
     for a in task.assignments.select_related("user"):
         notify_user(
@@ -564,14 +702,29 @@ def update_task_team(
     if not task_team_is_editable(task):
         raise ValidationError("This task cannot be edited in its current status.")
 
-    verifier_users = _normalize_verifiers(verifiers=verifiers, verifier=verifier)
+    requires_verifier = bool(task.requires_verifier)
+    requires_document_checker = bool(task.requires_document_checker)
+    verifier_users = _normalize_verifiers(
+        verifiers=verifiers,
+        verifier=verifier,
+        required=requires_verifier,
+    )
+    doc_checker = document_checker if requires_document_checker else None
+    validate_team_for_workflow(
+        requires_verifier=requires_verifier,
+        requires_document_checker=requires_document_checker,
+        assignee_users=assignee_users,
+        verifier_users=verifier_users,
+        document_checker=doc_checker,
+    )
+
     old_verifier_ids = set(task.verifiers.values_list("pk", flat=True))
     new_verifier_ids = {u.pk for u in verifier_users}
     old_doc_id = task.document_checker_id
     old_assignee_ids = set(task.assignments.values_list("user_id", flat=True))
     new_assignee_ids = {u.pk for u in assignee_users}
 
-    task.document_checker = document_checker
+    task.document_checker = doc_checker
     task.due_date = due_date
     task.priority = priority
     if description is not None:
@@ -584,10 +737,16 @@ def update_task_team(
 
     changes: list[str] = []
     if old_verifier_ids != new_verifier_ids:
-        names = ", ".join(user_person_name(u) for u in verifier_users)
-        changes.append(f"Verifiers set to {names}.")
-    if old_doc_id != document_checker.pk:
-        changes.append(f"Document checker set to {user_person_name(document_checker)}.")
+        if verifier_users:
+            names = ", ".join(user_person_name(u) for u in verifier_users)
+            changes.append(f"Verifiers set to {names}.")
+        else:
+            changes.append("Verifiers cleared.")
+    if old_doc_id != (doc_checker.pk if doc_checker else None):
+        if doc_checker:
+            changes.append(f"Document checker set to {user_person_name(doc_checker)}.")
+        else:
+            changes.append("Document checker cleared.")
     if changes:
         _log_activity(task, actor, TaskActivity.TYPE_REMARK, message=" ".join(changes))
 
@@ -596,8 +755,17 @@ def update_task_team(
 
     if task.enrollment_id:
         enrollment = task.enrollment
-        enrollment.document_checker = document_checker
-        enrollment.save(update_fields=["document_checker", "updated_at"])
+        enrollment.document_checker = doc_checker
+        enrollment.requires_verifier = requires_verifier
+        enrollment.requires_document_checker = requires_document_checker
+        enrollment.save(
+            update_fields=[
+                "document_checker",
+                "requires_verifier",
+                "requires_document_checker",
+                "updated_at",
+            ]
+        )
         enrollment.verifiers.set(verifier_users)
         TaskEnrollmentAssignee.objects.filter(enrollment=enrollment).delete()
         for u in assignee_users:
@@ -638,6 +806,8 @@ def update_task_team(
 
     added_verifier_ids = new_verifier_ids - old_verifier_ids
     for u in User.objects.filter(pk__in=added_verifier_ids):
+        if not task.requires_verifier:
+            continue
         if task.status == Task.STATUS_SUBMITTED:
             notify_user(
                 u,
@@ -663,10 +833,10 @@ def update_task_team(
                 task=task,
             )
 
-    if old_doc_id != document_checker.pk:
-        if task.status == Task.STATUS_VERIFIED:
+    if old_doc_id != (doc_checker.pk if doc_checker else None) and doc_checker:
+        if task.status in document_check_statuses(task):
             notify_user(
-                document_checker,
+                doc_checker,
                 f"Document check required: {task.display_title} — {client_label}",
                 kind=TaskNotification.KIND_DOCUMENT_CHECK,
                 link=task_link,
@@ -674,7 +844,7 @@ def update_task_team(
             )
         else:
             notify_user(
-                document_checker,
+                doc_checker,
                 f"You were assigned as document checker: {task.display_title} — {client_label}",
                 kind=TaskNotification.KIND_GENERAL,
                 link=task_link,

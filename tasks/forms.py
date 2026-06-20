@@ -39,6 +39,7 @@ from .recurrence import compute_create_due_dates
 from .recurrence_config import validate_recurrence_config
 
 from .user_labels import staff_users_queryset, user_display_label
+from .workflow import validate_team_for_workflow
 
 
 
@@ -112,6 +113,10 @@ class TaskMasterForm(forms.ModelForm):
 
             "default_priority",
 
+            "requires_verifier",
+
+            "requires_document_checker",
+
             "is_active",
 
             "is_recurring",
@@ -129,6 +134,12 @@ class TaskMasterForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
 
             "default_priority": forms.Select(attrs={"class": "form-select"}),
+
+            "requires_verifier": forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_requires_verifier"}),
+
+            "requires_document_checker": forms.CheckboxInput(
+                attrs={"class": "form-check-input", "id": "id_requires_document_checker"}
+            ),
 
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
 
@@ -159,6 +170,18 @@ class TaskMasterForm(forms.ModelForm):
             from .checklist import master_checklist_labels
 
             self.fields["checklist_json"].initial = json.dumps(master_checklist_labels(self.instance))
+
+        self.fields["requires_verifier"].label = "Requires verifier"
+        self.fields["requires_document_checker"].label = "Requires document checker"
+        self.fields["requires_verifier"].help_text = (
+            "When ticked, a verifier must approve submitted work (or complete the task if document check is off)."
+        )
+        self.fields["requires_document_checker"].help_text = (
+            "When ticked, a document checker must mark the task complete after submit or verification."
+        )
+        if not self.is_bound:
+            self.fields["requires_verifier"].initial = True
+            self.fields["requires_document_checker"].initial = True
 
 
 
@@ -650,14 +673,29 @@ class TaskCreateForm(forms.Form):
 
         cleaned["assignees"] = assignees
 
+        master = cleaned.get("task_master")
+        requires_verifier = bool(master.requires_verifier) if master else True
+        requires_document_checker = bool(master.requires_document_checker) if master else True
+
         verifier_raw = (cleaned.get("verifier_ids") or "").strip()
         verifier_id_list = [int(x) for x in verifier_raw.split(",") if x.strip().isdigit()]
-        verifiers = list(self._staff_qs.filter(pk__in=verifier_id_list))
-        if not verifiers or len(verifiers) != len(set(verifier_id_list)):
-            self.add_error("verifier_picker", "Add at least one verifier from the suggestions.")
+        verifiers = list(self._staff_qs.filter(pk__in=verifier_id_list)) if verifier_id_list else []
+        if requires_verifier:
+            if not verifiers or len(verifiers) != len(set(verifier_id_list)):
+                self.add_error("verifier_picker", "Add at least one verifier from the suggestions.")
+        elif verifiers:
+            self.add_error("verifier_picker", "Verifiers are not used for this task master.")
         cleaned["verifiers"] = verifiers
 
         document_checker = cleaned.get("document_checker")
+        if requires_document_checker:
+            if not document_checker:
+                self.add_error("document_checker", "Select a document checker.")
+        elif document_checker:
+            self.add_error("document_checker", "Document checker is not used for this task master.")
+        else:
+            cleaned["document_checker"] = None
+
         user = self._task_user
         if user and user.is_authenticated and assignees:
             assignee_ids = {u.pk for u in assignees}
@@ -679,7 +717,18 @@ class TaskCreateForm(forms.Form):
             if document_checker.pk in assignee_ids:
                 self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
 
-
+        if assignees:
+            try:
+                validate_team_for_workflow(
+                    requires_verifier=requires_verifier,
+                    requires_document_checker=requires_document_checker,
+                    assignee_users=assignees,
+                    verifier_users=verifiers,
+                    document_checker=document_checker,
+                )
+            except DjangoValidationError as exc:
+                msg = exc.messages[0] if exc.messages else str(exc)
+                self.add_error(None, msg)
 
         master = cleaned.get("task_master")
         if master and not TaskMaster.selectable_for_new_tasks().filter(pk=master.pk).exists():
@@ -885,22 +934,41 @@ class TaskEditForm(forms.Form):
             self.add_error("assignee_picker", "Add at least one valid user from the suggestions.")
         cleaned["assignees"] = assignees
 
+        task = self._task
+        requires_verifier = bool(task.requires_verifier) if task else True
+        requires_document_checker = bool(task.requires_document_checker) if task else True
+
         verifier_raw = (cleaned.get("verifier_ids") or "").strip()
         verifier_id_list = [int(x) for x in verifier_raw.split(",") if x.strip().isdigit()]
-        verifiers = list(self._staff_qs.filter(pk__in=verifier_id_list))
-        if not verifiers or len(verifiers) != len(set(verifier_id_list)):
-            self.add_error("verifier_picker", "Add at least one verifier from the suggestions.")
+        verifiers = list(self._staff_qs.filter(pk__in=verifier_id_list)) if verifier_id_list else []
+        if requires_verifier:
+            if not verifiers or len(verifiers) != len(set(verifier_id_list)):
+                self.add_error("verifier_picker", "Add at least one verifier from the suggestions.")
+        elif verifiers:
+            self.add_error("verifier_picker", "Verifiers are not used for this task.")
         cleaned["verifiers"] = verifiers
 
         document_checker = cleaned.get("document_checker")
-        if assignees and verifiers:
-            assignee_ids = {u.pk for u in assignees}
-            if assignee_ids.intersection({u.pk for u in verifiers}):
-                self.add_error("verifier_picker", "A verifier cannot also be an assigned user.")
-        if assignees and document_checker:
-            assignee_ids = {u.pk for u in assignees}
-            if document_checker.pk in assignee_ids:
-                self.add_error("document_checker", "Document checker cannot be one of the assigned users.")
+        if requires_document_checker:
+            if not document_checker:
+                self.add_error("document_checker", "Select a document checker.")
+        elif document_checker:
+            self.add_error("document_checker", "Document checker is not used for this task.")
+        else:
+            cleaned["document_checker"] = None
+
+        if assignees:
+            try:
+                validate_team_for_workflow(
+                    requires_verifier=requires_verifier,
+                    requires_document_checker=requires_document_checker,
+                    assignee_users=assignees,
+                    verifier_users=verifiers,
+                    document_checker=document_checker,
+                )
+            except DjangoValidationError as exc:
+                msg = exc.messages[0] if exc.messages else str(exc)
+                self.add_error(None, msg)
         return cleaned
 
 

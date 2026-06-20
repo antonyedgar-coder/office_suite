@@ -99,7 +99,7 @@
         <div class="form-text">Type to filter staff; click a name to add. Multiple users allowed. The task creator cannot be listed here — assigned users approve the task before work begins.</div>
       </div>
 
-      <div class="mb-3 field-wrap">
+      <div class="mb-3 field-wrap" id="taskVerifierWrap">
         <label class="form-label" for="taskVerifierSearch">Verifiers</label>
         <input class="form-control" id="taskVerifierSearch" placeholder="Type name or email (min. 2 characters)…" autocomplete="off" />
         <div id="taskVerifierSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
@@ -109,7 +109,7 @@
         <div class="form-text">Add one or more verifiers. They cannot be assigned users on the same task.</div>
       </div>
 
-      <div class="mb-3 field-wrap">
+      <div class="mb-3 field-wrap" id="taskDocCheckerWrap">
         <label class="form-label" for="taskDocCheckerSearch">Document checker</label>
         <input class="form-control" id="taskDocCheckerSearch" placeholder="Type name or email (min. 1 character)…" autocomplete="off" />
         <div id="taskDocCheckerSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
@@ -393,14 +393,34 @@
     if (feesInput && !billableCb.checked) feesInput.value = "";
   }
 
+  function syncWorkflowTeamFields(cfg) {
+    var verifierWrap = document.getElementById("taskVerifierWrap");
+    var docWrap = document.getElementById("taskDocCheckerWrap");
+    var needsVerifier = !cfg || cfg.requires_verifier !== false;
+    var needsDoc = !cfg || cfg.requires_document_checker !== false;
+    if (verifierWrap) verifierWrap.style.display = needsVerifier ? "" : "none";
+    if (docWrap) docWrap.style.display = needsDoc ? "" : "none";
+    if (!needsVerifier && verifierPicker) {
+      verifierPicker.clear && verifierPicker.clear();
+    }
+    if (!needsDoc) {
+      var docHidden = document.getElementById("taskDocCheckerHidden");
+      var docSearch = document.getElementById("taskDocCheckerSearch");
+      if (docHidden) docHidden.value = "";
+      if (docSearch) docSearch.value = "";
+    }
+  }
+
   function applyMasterDefaults() {
     if (!taskMasterSelect) return;
     var cfg = mastersMeta[taskMasterSelect.value];
     if (!cfg) {
       syncDueDateUi(false);
+      syncWorkflowTeamFields(null);
       return;
     }
     syncDueDateUi(!!cfg.is_recurring);
+    syncWorkflowTeamFields(cfg);
     if (periodType) {
       if (cfg.period_type) {
         periodType.value = cfg.period_type;

@@ -271,25 +271,35 @@ def _parse_task_csv_row(
         if e.strip()
     ]
     verifiers = []
-    if not verifier_emails:
-        errors.append("VERIFIER_EMAIL is required (comma or semicolon separated).")
-    else:
-        for em in verifier_emails:
-            u = staff_by_email.get(em)
-            if not u:
-                errors.append(f"Unknown verifier email: {em}")
-            else:
-                verifiers.append(u)
-        if len({u.pk for u in verifiers}) != len(verifiers):
-            errors.append("VERIFIER_EMAIL must be different people.")
+    requires_verifier = bool(master.requires_verifier) if master else True
+    requires_document_checker = bool(master.requires_document_checker) if master else True
+    if requires_verifier:
+        if not verifier_emails:
+            errors.append("VERIFIER_EMAIL is required (comma or semicolon separated).")
+        else:
+            for em in verifier_emails:
+                u = staff_by_email.get(em)
+                if not u:
+                    errors.append(f"Unknown verifier email: {em}")
+                else:
+                    verifiers.append(u)
+            if len({u.pk for u in verifiers}) != len(verifiers):
+                errors.append("VERIFIER_EMAIL must be different people.")
+    elif verifier_emails:
+        errors.append("This task master does not use verifiers.")
 
     document_checker = (
         staff_by_email.get(document_checker_email) if document_checker_email else None
     )
-    if not document_checker_email:
-        errors.append("DOCUMENT_CHECKER_EMAIL is required.")
-    elif not document_checker:
-        errors.append(f"Unknown document checker email: {document_checker_email}")
+    if requires_document_checker:
+        if not document_checker_email:
+            errors.append("DOCUMENT_CHECKER_EMAIL is required.")
+        elif not document_checker:
+            errors.append(f"Unknown document checker email: {document_checker_email}")
+    elif document_checker_email:
+        errors.append("This task master does not use a document checker.")
+    else:
+        document_checker = None
 
     if user.is_authenticated:
         if user.pk in {u.pk for u in assignees}:

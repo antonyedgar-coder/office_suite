@@ -754,9 +754,11 @@ def task_create(request):
         str(m.pk): {
             "period_type": period_type_for_task_master(m) or "",
             "is_recurring": m.is_recurring,
+            "requires_verifier": m.requires_verifier,
+            "requires_document_checker": m.requires_document_checker,
         }
         for m in TaskMaster.objects.filter(is_active=True, archived_at__isnull=True).only(
-            "pk", "is_recurring", "frequency"
+            "pk", "is_recurring", "frequency", "requires_verifier", "requires_document_checker"
         )
     }
     task_groups = [
@@ -1090,6 +1092,15 @@ def task_detail(request, pk: int):
     if not can_view_task:
         raise PermissionDenied
 
+    from .workflow import (
+        allows_document_rework,
+        allows_verifier_rework,
+        document_check_statuses,
+        submit_completes_task,
+        verify_completes_task,
+        workflow_label,
+    )
+
     remark_form = TaskRemarkForm()
     assignee_active = is_assignee and task.status != Task.STATUS_PENDING_ASSIGNMENT
     none_client_can_submit = may_submit_for_client_type(task)
@@ -1100,19 +1111,29 @@ def task_detail(request, pk: int):
             and none_client_can_submit
             and checklist_complete
         )
-        or task.status == Task.STATUS_DOCUMENT_REWORK
+        or (task.status == Task.STATUS_DOCUMENT_REWORK and allows_document_rework(task))
     )
     submit_button_label = (
         "Resubmit for document check"
         if task.status == Task.STATUS_DOCUMENT_REWORK
-        else "Submit for verification"
+        else (
+            "Complete task"
+            if submit_completes_task(task)
+            else (
+                "Submit for verification"
+                if task.requires_verifier
+                else "Submit for document check"
+            )
+        )
     )
-    can_verify = is_verifier and task.status == Task.STATUS_SUBMITTED
-    can_verify_rework = is_verifier and task.status == Task.STATUS_SUBMITTED
+    can_verify = task.requires_verifier and is_verifier and task.status == Task.STATUS_SUBMITTED
+    can_verify_rework = allows_verifier_rework(task) and is_verifier and task.status == Task.STATUS_SUBMITTED
     can_complete_documents = (
-        is_document_checker or request.user.is_superuser
-    ) and task.status == Task.STATUS_VERIFIED
-    can_send_back_documents = can_complete_documents
+        task.requires_document_checker
+        and (is_document_checker or request.user.is_superuser)
+        and task.status in document_check_statuses(task)
+    )
+    can_send_back_documents = can_complete_documents and allows_document_rework(task)
     can_approve_assignment = user_can_approve_task_assignment(request.user, task)
     can_toggle_checklist = assignee_active and task.status in (
         Task.STATUS_ASSIGNED,
@@ -1200,8 +1221,12 @@ def task_detail(request, pk: int):
             else:
                 if resubmit_for_documents:
                     messages.success(request, "Task resubmitted for document check.")
-                else:
+                elif submit_completes_task(task):
+                    messages.success(request, "Task completed.")
+                elif task.requires_verifier:
                     messages.success(request, "Task submitted for verification.")
+                else:
+                    messages.success(request, "Task submitted for document check.")
             return redirect("task_detail", pk=pk)
         if action == "remark":
             remark_form = TaskRemarkForm(request.POST)
@@ -1289,6 +1314,7 @@ def task_detail(request, pk: int):
             "can_cancel": can_cancel,
             "can_delete": can_delete,
             "can_edit": can_edit,
+            "workflow_label": workflow_label(task),
             "assignment_pending": task.status == Task.STATUS_PENDING_ASSIGNMENT,
             **task_doc_ctx,
         },
@@ -1335,6 +1361,7 @@ def task_verify_queue(request):
     assignment_base = tasks_for_user(user).none()
     submitted_base = tasks_for_user(user).filter(
         status=Task.STATUS_SUBMITTED,
+        requires_verifier=True,
         verifiers=user,
     )
     # New Client tasks are not allowed to submit/verify/complete; do not show any special "verify without submit" section.
@@ -1386,12 +1413,18 @@ def task_verify_approve(request, pk: int):
         raise Http404
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""
+    from .workflow import verify_completes_task
+
+    completes_on_verify = verify_completes_task(task)
     try:
         verify_task(task, request.user, message=message)
     except ValidationError as exc:
         messages.error(request, exc.messages[0] if exc.messages else str(exc))
         return redirect("task_detail", pk=pk)
-    messages.success(request, "Task verified. Sent to document checker.")
+    if completes_on_verify:
+        messages.success(request, "Task verified and completed.")
+    else:
+        messages.success(request, "Task verified. Sent to document checker.")
     return redirect("task_verify_queue")
 
 
@@ -1399,8 +1432,11 @@ def task_verify_approve(request, pk: int):
 def task_document_check_queue(request):
     user = request.user
     base = tasks_for_user(user).filter(
-        status=Task.STATUS_VERIFIED,
         document_checker=user,
+        requires_document_checker=True,
+    ).filter(
+        Q(status=Task.STATUS_VERIFIED, requires_verifier=True)
+        | Q(status=Task.STATUS_SUBMITTED, requires_verifier=False)
     )
     filters = parse_task_list_filters(request)
     ctx = filter_context(user, filters)
@@ -1419,9 +1455,14 @@ def task_document_check_queue(request):
 @require_POST
 def task_document_check_complete(request, pk: int):
     task = get_object_or_404(
-        tasks_for_user(request.user).filter(
-            status=Task.STATUS_VERIFIED,
+        tasks_for_user(request.user)
+        .filter(
             document_checker=request.user,
+            requires_document_checker=True,
+        )
+        .filter(
+            Q(status=Task.STATUS_VERIFIED, requires_verifier=True)
+            | Q(status=Task.STATUS_SUBMITTED, requires_verifier=False)
         ),
         pk=pk,
     )
@@ -1442,6 +1483,8 @@ def task_document_check_send_back(request, pk: int):
     task = get_object_or_404(
         tasks_for_user(request.user).filter(
             status=Task.STATUS_VERIFIED,
+            requires_document_checker=True,
+            requires_verifier=True,
             document_checker=request.user,
         ),
         pk=pk,

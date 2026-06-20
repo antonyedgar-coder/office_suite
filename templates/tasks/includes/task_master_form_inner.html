@@ -48,6 +48,20 @@
         <div class="col-md-4 mb-3 form-check pt-4">{{ form.is_recurring }} <label class="form-check-label" for="id_is_recurring">Recurring</label></div>
       </div>
       <div class="border rounded p-3 mb-3">
+        <h6 class="mb-2">Workflow</h6>
+        <p class="form-text small mb-2">Assignee is always required. Untick verifier and/or document checker for simpler task types.</p>
+        <div class="form-check mb-2">
+          {{ form.requires_verifier }}
+          <label class="form-check-label" for="id_requires_verifier">{{ form.requires_verifier.label }}</label>
+          {% if form.requires_verifier.help_text %}<div class="form-text">{{ form.requires_verifier.help_text }}</div>{% endif %}
+        </div>
+        <div class="form-check">
+          {{ form.requires_document_checker }}
+          <label class="form-check-label" for="id_requires_document_checker">{{ form.requires_document_checker.label }}</label>
+          {% if form.requires_document_checker.help_text %}<div class="form-text">{{ form.requires_document_checker.help_text }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="border rounded p-3 mb-3">
         <h6 class="mb-2">Checklist template</h6>
         <p class="form-text small">Items are copied to each new task from this master. Users tick them off on the task page.</p>
         <div id="checklistRows"></div>

@@ -1042,6 +1042,89 @@ class TaskDashboardContextTests(TestCase):
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskWorkflowPathTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="wf-staff@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="wf-verify@example.com", password="pass12345")
+        self.document_checker = User.objects.create_user(email="wf-docs@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="WF GROUP")
+        self.client_row = Client.objects.create(
+            client_name="WF CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="ABCDE1234W",
+        )
+        self.tg = TaskGroup.objects.create(name="WF", sort_order=1)
+
+    def _master(self, name, *, requires_verifier=True, requires_document_checker=True):
+        return TaskMaster.objects.create(
+            task_group=self.tg,
+            name=name,
+            requires_verifier=requires_verifier,
+            requires_document_checker=requires_document_checker,
+        )
+
+    def _task(self, master, **kwargs):
+        defaults = {
+            "master": master,
+            "client": self.client_row,
+            "assignee_users": [self.user],
+            "created_by": self.user,
+            "period_key": "2026-06",
+            "due_date": date(2026, 6, 15),
+            "auto_created": True,
+        }
+        if master.requires_verifier:
+            defaults["verifiers"] = [self.verifier]
+        if master.requires_document_checker:
+            defaults["document_checker"] = self.document_checker
+        defaults.update(kwargs)
+        return create_task_from_master(**defaults)
+
+    def test_simple_workflow_submit_completes(self):
+        master = self._master("Simple", requires_verifier=False, requires_document_checker=False)
+        task = self._task(master)
+        submit_task(task, self.user)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
+        self.assertFalse(task.requires_verifier)
+        self.assertFalse(task.requires_document_checker)
+
+    def test_verify_only_workflow(self):
+        master = self._master("Verify only", requires_verifier=True, requires_document_checker=False)
+        task = self._task(master)
+        submit_task(task, self.user)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_SUBMITTED)
+        verify_task(task, self.verifier)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
+
+    def test_document_only_workflow(self):
+        master = self._master("Doc only", requires_verifier=False, requires_document_checker=True)
+        task = self._task(master)
+        submit_task(task, self.user)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_SUBMITTED)
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
+
+    def test_full_workflow_unchanged(self):
+        master = self._master("Full")
+        task = self._task(master)
+        submit_task(task, self.user)
+        verify_task(task, self.verifier)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_COMPLETE)
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class TaskMasterFormTests(TestCase):
     def test_create_without_currency_field_in_post(self):
         tg = TaskGroup.objects.create(name="Form TG", is_active=True)
@@ -1052,6 +1135,8 @@ class TaskMasterFormTests(TestCase):
                 "description": "",
                 "default_priority": TaskMaster.PRIORITY_NORMAL,
                 "is_active": "on",
+                "requires_verifier": "on",
+                "requires_document_checker": "on",
                 "is_recurring": "",
                 "frequency": "",
                 "recurrence_config_json": "{}",
