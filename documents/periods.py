@@ -284,6 +284,18 @@ def build_one_time_task_filename(
     return f"{base}.{ext}" if ext else base
 
 
+def build_plain_display_filename(
+    *,
+    user_label: str,
+    extension: str,
+    sanitize,
+) -> str:
+    """Use the user-entered name as the stored filename (Supporting Documents)."""
+    name_part = sanitize(user_label) or "Document"
+    ext = (extension or "").lower().lstrip(".")
+    return f"{name_part}.{ext}" if ext else name_part
+
+
 def build_custom_user_filename(
     *,
     user_label: str,

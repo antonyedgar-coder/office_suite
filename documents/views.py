@@ -317,7 +317,6 @@ def document_file_list(request):
     folder_template_id = (request.GET.get("folder_template") or "").strip()
     doc_type_id = (request.GET.get("doc_type") or "").strip()
     fy_filter = (request.GET.get("fy") or "").strip()
-    q = (request.GET.get("q") or "").strip()
 
     qs = (
         ClientDocument.objects.filter(status=ClientDocument.STATUS_ACTIVE)
@@ -341,14 +340,6 @@ def document_file_list(request):
             Q(period_key__startswith=f"FY{fy_filter}")
             | Q(financial_year=fy_filter)
         )
-    if q:
-        qs = qs.filter(
-            Q(generated_filename__icontains=q)
-            | Q(client__client_name__icontains=q)
-            | Q(client__client_id__icontains=q)
-            | Q(document_type__name__icontains=q)
-            | Q(folder__template__name__icontains=q)
-        )
 
     folder_choices = (
         DocumentFolderTemplate.objects.filter(
@@ -369,6 +360,45 @@ def document_file_list(request):
         .order_by("folder__sort_order", "sort_order", "name")
     )
 
+    selected_client_label = ""
+    if client_id:
+        match_client = allowed_clients.filter(client_id=client_id).first()
+        if match_client:
+            selected_client_label = f"{match_client.client_name} — {match_client.client_id}"
+
+    selected_folder_label = ""
+    if folder_template_id.isdigit():
+        match_folder = folder_choices.filter(pk=int(folder_template_id)).first()
+        if match_folder:
+            selected_folder_label = match_folder.name
+
+    selected_doc_type_label = ""
+    if doc_type_id.isdigit():
+        match_type = doc_type_choices.filter(pk=int(doc_type_id)).first()
+        if match_type:
+            selected_doc_type_label = f"{match_type.folder.name} — {match_type.name}"
+
+    client_filter_options = [
+        {
+            "id": c.client_id,
+            "label": f"{c.client_name} — {c.client_id}",
+            "search": f"{c.client_name} {c.client_id} {c.pan or ''}".lower(),
+        }
+        for c in allowed_clients
+    ]
+    folder_filter_options = [
+        {"id": str(f.pk), "label": f.name, "search": f.name.lower()}
+        for f in folder_choices
+    ]
+    doc_type_filter_options = [
+        {
+            "id": str(dt.pk),
+            "label": f"{dt.folder.name} — {dt.name}",
+            "search": f"{dt.folder.name} {dt.name}".lower(),
+        }
+        for dt in doc_type_choices
+    ]
+
     return render(
         request,
         "documents/document_file_list.html",
@@ -378,7 +408,12 @@ def document_file_list(request):
             "filter_folder_template_id": folder_template_id,
             "filter_doc_type_id": doc_type_id,
             "filter_fy": fy_filter,
-            "filter_q": q,
+            "selected_client_label": selected_client_label,
+            "selected_folder_label": selected_folder_label,
+            "selected_doc_type_label": selected_doc_type_label,
+            "client_filter_options": client_filter_options,
+            "folder_filter_options": folder_filter_options,
+            "doc_type_filter_options": doc_type_filter_options,
             "client_choices": allowed_clients,
             "folder_choices": folder_choices,
             "doc_type_choices": doc_type_choices,

@@ -70,7 +70,7 @@
 
         {% if form.custom_display_name.errors %}<div class="text-danger small">{{ form.custom_display_name.errors }}</div>{% endif %}
 
-        <div class="form-field-hint">Enter any name you like. You can upload as many files as you need in Supporting Documents.</div>
+        <div class="form-field-hint">Enter the name to store for this file (extension is added from the uploaded file).</div>
 
       </div>
 
@@ -306,7 +306,7 @@
         }
         if (fileHint) {
           fileHint.textContent = custom
-            ? "FY and period are added when applicable."
+            ? "The stored filename will match the name you enter above."
             : "The stored filename is generated automatically from the document type and client.";
         }
       }

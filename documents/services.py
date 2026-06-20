@@ -26,6 +26,7 @@ from .folder_constants import (
 )
 from .periods import (
     build_custom_user_filename,
+    build_plain_display_filename,
     build_one_time_task_filename,
     build_standard_filename,
     extract_fy_from_period_key,
@@ -429,10 +430,8 @@ def save_client_document(
     if folder_template.allow_custom_filename:
         if not custom_name:
             raise ValidationError("Enter a name for this file.")
-        generated = build_custom_user_filename(
+        generated = build_plain_display_filename(
             user_label=custom_name,
-            period_key=period_key,
-            period_label=period_label,
             extension=ext,
             sanitize=_sanitize_filename_part,
         )
@@ -590,7 +589,7 @@ def rename_client_document(
     new_display_name: str,
     user,
 ) -> ClientDocument:
-    """Rename display filename (Supporting Documents only; FY and period kept)."""
+    """Rename display filename (Supporting Documents only)."""
     if doc.status != ClientDocument.STATUS_ACTIVE:
         raise ValidationError("Only active files can be renamed.")
     _require_document_editable(user, doc)
@@ -601,10 +600,8 @@ def rename_client_document(
     if not label:
         raise ValidationError("Enter a file name.")
     ext = _file_extension(doc.generated_filename)
-    generated = build_custom_user_filename(
+    generated = build_plain_display_filename(
         user_label=label,
-        period_key=doc.period_key,
-        period_label=doc.period_label,
         extension=ext,
         sanitize=_sanitize_filename_part,
     )

@@ -1,0 +1,96 @@
+<script>
+  (function () {
+    function readJson(id) {
+      var el = document.getElementById(id);
+      if (!el) return [];
+      try {
+        var data = JSON.parse(el.textContent || "[]");
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function filterOptions(options, typed) {
+      var q = (typed || "").trim().toLowerCase();
+      if (!q) return options;
+      return options.filter(function (o) {
+        var label = (o.label || "").toLowerCase();
+        var search = (o.search || label).toLowerCase();
+        return label.indexOf(q) !== -1 || search.indexOf(q) !== -1;
+      });
+    }
+
+    function rebuildDatalist(listId, options, typed) {
+      var list = document.getElementById(listId);
+      if (!list) return;
+      var filtered = filterOptions(options, typed);
+      list.innerHTML = "";
+      filtered.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o.label;
+        list.appendChild(opt);
+      });
+    }
+
+    function matchOption(options, typed) {
+      var q = (typed || "").trim().toLowerCase();
+      if (!q) return null;
+      var partial = null;
+      for (var i = 0; i < options.length; i++) {
+        var o = options[i];
+        var label = (o.label || "").toLowerCase();
+        var search = (o.search || label).toLowerCase();
+        if (label === q) return o;
+        if (!partial && (label.indexOf(q) !== -1 || search.indexOf(q) !== -1)) {
+          partial = o;
+        }
+      }
+      return partial;
+    }
+
+    function syncHidden(searchId, hiddenId, options) {
+      var search = document.getElementById(searchId);
+      var hidden = document.getElementById(hiddenId);
+      if (!search || !hidden) return;
+      if (!(search.value || "").trim()) {
+        hidden.value = "";
+        return;
+      }
+      var match = matchOption(options, search.value);
+      hidden.value = match ? String(match.id) : "";
+    }
+
+    function bindCombobox(searchId, hiddenId, listId, options) {
+      var search = document.getElementById(searchId);
+      var hidden = document.getElementById(hiddenId);
+      if (!search || !hidden) return;
+
+      function refresh() {
+        rebuildDatalist(listId, options, search.value);
+        syncHidden(searchId, hiddenId, options);
+      }
+
+      search.addEventListener("input", refresh);
+      search.addEventListener("focus", refresh);
+      refresh();
+    }
+
+    var clientOptions = readJson("doc-filter-clients");
+    var folderOptions = readJson("doc-filter-folders");
+    var docTypeOptions = readJson("doc-filter-doc-types");
+
+    bindCombobox("filterClientSearch", "filterClientValue", "filterClientOptions", clientOptions);
+    bindCombobox("filterFolderSearch", "filterFolderValue", "filterFolderOptions", folderOptions);
+    bindCombobox("filterDocTypeSearch", "filterDocTypeValue", "filterDocTypeOptions", docTypeOptions);
+
+    var form = document.getElementById("documentFileFilterForm");
+    if (form) {
+      form.addEventListener("submit", function () {
+        syncHidden("filterClientSearch", "filterClientValue", clientOptions);
+        syncHidden("filterFolderSearch", "filterFolderValue", folderOptions);
+        syncHidden("filterDocTypeSearch", "filterDocTypeValue", docTypeOptions);
+      });
+    }
+  })();
+</script>
