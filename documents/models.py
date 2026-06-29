@@ -99,6 +99,11 @@ class DocumentTypeTemplate(models.Model):
             if p.strip()
         }
 
+    def allowed_extensions_display(self) -> str:
+        from .file_types import format_extension_labels
+
+        return format_extension_labels(self.allowed_extension_set())
+
 
 class TaskMasterDocumentMapping(models.Model):
     """Links a task type to a document folder; all file types in that folder appear on the task."""

@@ -50,13 +50,13 @@
 
     <div class="mb-3">
 
-      <label class="form-label required-field" for="{{ form.allowed_extensions.id_for_label }}">Allowed file types</label>
+      <label class="form-label required-field" for="{{ form.allowed_file_types.id_for_label }}">Allowed file types</label>
 
-      {{ form.allowed_extensions }}
+      {{ form.allowed_file_types }}
 
-      {% if form.allowed_extensions.errors %}<div class="text-danger small">{{ form.allowed_extensions.errors }}</div>{% endif %}
+      {% if form.allowed_file_types.errors %}<div class="text-danger small">{{ form.allowed_file_types.errors }}</div>{% endif %}
 
-      <div class="form-field-hint">Comma-separated, without dots (e.g. pdf or pdf,xlsx).</div>
+      <div class="form-field-hint">{{ form.allowed_file_types.help_text }} PDF, JPEG, JPG, PNG, Word, XLSM, CSV, XLSX, PowerPoint, ZIP, and RAR are available.</div>
 
     </div>
 

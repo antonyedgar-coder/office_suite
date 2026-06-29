@@ -152,12 +152,12 @@ def ensure_standard_folder_templates() -> list[DocumentFolderTemplate]:
                     "allow_custom_filename": False,
                 },
             )
-    DocumentTypeTemplate.objects.get_or_create(
+    DocumentTypeTemplate.objects.update_or_create(
         folder=supporting,
         slug="supporting-file",
         defaults={
             "name": "Supporting file",
-            "allowed_extensions": "pdf,jpg,jpeg,png,xlsx,xls,doc,docx",
+            "allowed_extensions": "pdf,jpg,jpeg,png,doc,docx,xlsx,xls,xlsm,csv,ppt,pptx,zip,rar",
             "period_kind": "none",
             "sort_order": 10,
             "is_active": True,
@@ -257,6 +257,17 @@ def _file_extension(filename: str, content_type: str = "") -> str:
         "application/pdf": "pdf",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
         "application/vnd.ms-excel": "xls",
+        "application/vnd.ms-excel.sheet.macroenabled.12": "xlsm",
+        "text/csv": "csv",
+        "application/csv": "csv",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "application/msword": "doc",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+        "application/vnd.ms-powerpoint": "ppt",
+        "application/zip": "zip",
+        "application/x-zip-compressed": "zip",
+        "application/vnd.rar": "rar",
+        "application/x-rar-compressed": "rar",
         "image/jpeg": "jpg",
         "image/png": "png",
     }

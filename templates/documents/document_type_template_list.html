@@ -43,7 +43,7 @@
             <tr>
               <td>{{ row.folder.name }}</td>
               <td class="fw-medium">{{ row.name }}</td>
-              <td class="mono small">{{ row.allowed_extensions }}</td>
+              <td class="small">{{ row.allowed_extensions_display }}</td>
               <td class="small">{{ row.get_period_kind_display }}</td>
               <td class="small text-secondary mono">{{ row.name_template }}</td>
               <td>{% if row.is_active %}Yes{% else %}No{% endif %}</td>

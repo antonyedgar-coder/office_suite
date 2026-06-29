@@ -1,6 +1,11 @@
 from django import forms
 from django.utils.text import slugify
 
+from .file_types import (
+    DOCUMENT_FILE_TYPE_CHOICES,
+    extensions_from_file_type_choices,
+    file_type_choices_from_extensions,
+)
 from .models import DocumentFolderTemplate, DocumentTypeTemplate
 class DocumentFolderTemplateForm(forms.ModelForm):
     class Meta:
@@ -36,12 +41,23 @@ class DocumentFolderTemplateForm(forms.ModelForm):
 
 
 class DocumentTypeTemplateForm(forms.ModelForm):
+    allowed_file_types = forms.MultipleChoiceField(
+        choices=DOCUMENT_FILE_TYPE_CHOICES,
+        widget=forms.SelectMultiple(
+            attrs={
+                "class": "form-select",
+                "size": str(len(DOCUMENT_FILE_TYPE_CHOICES)),
+            }
+        ),
+        label="Allowed file types",
+        help_text="Hold Ctrl (Windows) or Cmd (Mac) to select more than one type.",
+    )
+
     class Meta:
         model = DocumentTypeTemplate
         fields = [
             "folder",
             "name",
-            "allowed_extensions",
             "period_kind",
             "name_template",
             "sort_order",
@@ -51,9 +67,6 @@ class DocumentTypeTemplateForm(forms.ModelForm):
             "folder": forms.Select(attrs={"class": "form-select"}),
             "name": forms.TextInput(
                 attrs={"class": "form-control", "placeholder": "e.g. GSTR-3B filed"}
-            ),
-            "allowed_extensions": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "pdf or pdf,xlsx"}
             ),
             "period_kind": forms.Select(attrs={"class": "form-select"}),
             "name_template": forms.TextInput(
@@ -76,9 +89,24 @@ class DocumentTypeTemplateForm(forms.ModelForm):
             self.fields["folder"].initial = folder_id
         elif getattr(self.instance, "pk", None):
             self.fields["folder"].initial = self.instance.folder_id
+        if self.instance.pk:
+            self.fields["allowed_file_types"].initial = file_type_choices_from_extensions(
+                self.instance.allowed_extensions
+            )
+        elif not self.is_bound:
+            self.fields["allowed_file_types"].initial = ["pdf"]
+
+    def clean_allowed_file_types(self):
+        selected = self.cleaned_data.get("allowed_file_types") or []
+        if not selected:
+            raise forms.ValidationError("Select at least one allowed file type.")
+        return selected
 
     def save(self, commit=True):
         obj = super().save(commit=False)
+        obj.allowed_extensions = extensions_from_file_type_choices(
+            self.cleaned_data.get("allowed_file_types") or []
+        )
         if not obj.slug:
             base = slugify(obj.name)[:80]
             obj.slug = base
