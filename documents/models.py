@@ -51,6 +51,19 @@ class DocumentFolderTemplate(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def is_system_folder(self) -> bool:
+        from .folder_constants import STANDARD_CLIENT_FOLDER_SLUGS
+
+        return self.slug in STANDARD_CLIENT_FOLDER_SLUGS
+
+    @property
+    def is_deletable(self) -> bool:
+        """Folder may be deleted only when no file types are mapped."""
+        if self.is_system_folder:
+            return False
+        return not self.document_types.exists()
+
 
 class DocumentTypeTemplate(models.Model):
     folder = models.ForeignKey(
@@ -103,6 +116,11 @@ class DocumentTypeTemplate(models.Model):
         from .file_types import format_extension_labels
 
         return format_extension_labels(self.allowed_extension_set())
+
+    @property
+    def is_deletable(self) -> bool:
+        """File type may be deleted only when no client documents use it."""
+        return not self.uploads.exists()
 
 
 class TaskMasterDocumentMapping(models.Model):

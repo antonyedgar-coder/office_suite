@@ -18,7 +18,6 @@ from masters.models import Client
 from masters.views import client_master_queryset_for_user
 
 from .client_forms import ClientDocumentClientForm
-from .folder_constants import STANDARD_CLIENT_FOLDER_SLUGS
 from .models import (
     ClientDocument,
     ClientDocumentFolder,
@@ -89,7 +88,9 @@ def document_folder_template_list(request):
 def document_type_template_list(request):
     _require_template_admin(request)
     q = (request.GET.get("q") or "").strip()
-    rows = DocumentTypeTemplate.objects.select_related("folder").order_by(
+    rows = DocumentTypeTemplate.objects.select_related("folder").annotate(
+        doc_count=Count("uploads"),
+    ).order_by(
         "folder__sort_order",
         "sort_order",
         "name",
@@ -154,6 +155,8 @@ def document_folder_template_edit(request, pk: int):
         {
             "form": form,
             "title": f"Edit folder — {obj.name}",
+            "folder": obj,
+            "can_delete_folder": obj.is_deletable,
             "breadcrumbs": ui_breadcrumbs(
                 ("Settings", "settings_hub"),
                 ("Folder creation", "document_folder_template_list"),
@@ -167,21 +170,29 @@ def document_folder_template_edit(request, pk: int):
 def document_folder_template_delete(request, pk: int):
     _require_template_admin(request)
     obj = get_object_or_404(DocumentFolderTemplate, pk=pk)
-    if obj.slug in STANDARD_CLIENT_FOLDER_SLUGS:
+    if obj.is_system_folder:
         messages.error(
             request,
             "Supporting Documents and KYC Documents are system folders and cannot be deleted.",
         )
         return redirect("document_folder_template_list")
+    file_type_count = obj.document_types.count()
     if request.method == "POST":
+        if file_type_count:
+            messages.error(
+                request,
+                "This folder cannot be deleted while file types are still mapped to it. "
+                "Delete those file types under File creation first.",
+            )
+            return redirect("document_folder_template_edit", pk=pk)
         name = obj.name
         try:
             obj.delete()
         except ProtectedError:
             messages.error(
                 request,
-                "This folder cannot be deleted because clients already have files or folder rows "
-                "linked to it. Remove those documents first, or set the folder to inactive instead.",
+                "This folder cannot be deleted because clients already have this folder "
+                "provisioned or files linked to it. Mark the folder inactive instead.",
             )
             return redirect("document_folder_template_edit", pk=pk)
         messages.success(request, f"Folder deleted: {name}.")
@@ -191,7 +202,8 @@ def document_folder_template_delete(request, pk: int):
         "documents/folder_template_delete_confirm.html",
         {
             "folder": obj,
-            "file_type_count": obj.document_types.count(),
+            "file_type_count": file_type_count,
+            "can_delete": obj.is_deletable,
             "client_folder_count": ClientDocumentFolder.objects.filter(template=obj).count(),
             "active_doc_count": ClientDocument.objects.filter(
                 folder__template=obj,
@@ -202,6 +214,40 @@ def document_folder_template_delete(request, pk: int):
                 ("Settings", "settings_hub"),
                 ("Folder creation", "document_folder_template_list"),
                 ("Delete folder",),
+            ),
+        },
+    )
+
+
+@login_required
+def document_type_template_delete(request, pk: int):
+    _require_template_admin(request)
+    obj = get_object_or_404(DocumentTypeTemplate.objects.select_related("folder"), pk=pk)
+    doc_count = obj.uploads.count()
+    if request.method == "POST":
+        if doc_count:
+            messages.error(
+                request,
+                "This file type cannot be deleted while documents are still saved under it. "
+                "Remove those files first, or mark the file type inactive instead.",
+            )
+            return redirect("document_type_template_edit", pk=pk)
+        name = obj.name
+        folder_name = obj.folder.name
+        obj.delete()
+        messages.success(request, f"File type deleted: {folder_name} — {name}.")
+        return redirect("document_type_template_list")
+    return render(
+        request,
+        "documents/document_type_template_delete_confirm.html",
+        {
+            "file_type": obj,
+            "doc_count": doc_count,
+            "can_delete": obj.is_deletable,
+            "breadcrumbs": ui_breadcrumbs(
+                ("Settings", "settings_hub"),
+                ("File creation", "document_type_template_list"),
+                ("Delete file type",),
             ),
         },
     )
@@ -253,6 +299,8 @@ def document_type_template_edit(request, pk: int):
         {
             "form": form,
             "title": f"Edit file — {obj.name}",
+            "file_type": obj,
+            "can_delete_file_type": obj.is_deletable,
             "breadcrumbs": ui_breadcrumbs(
                 ("Settings", "settings_hub"),
                 ("File creation", "document_type_template_list"),

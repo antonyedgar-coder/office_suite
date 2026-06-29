@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Delete file type — CA Office Suite{% endblock %}
+{% block page_title %}Delete file type{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_type_template_list' %}">Back to file types</a>
+  </p>
+
+  <div class="card p-3 col-lg-8">
+    <h6 class="mb-3">Delete file type</h6>
+    <p>
+      Delete file type <strong>{{ file_type.folder.name }} — {{ file_type.name }}</strong>? This cannot be undone.
+    </p>
+    <ul class="small text-secondary mb-3">
+      {% if doc_count %}
+        <li class="text-danger">{{ doc_count }} saved document(s) use this file type — deletion is blocked.</li>
+      {% else %}
+        <li>No documents are saved under this file type.</li>
+      {% endif %}
+    </ul>
+    {% if not can_delete %}
+      <p class="small text-secondary mb-3">
+        Remove or reassign those documents first, or mark this file type inactive under Edit.
+      </p>
+    {% endif %}
+    <form method="post" class="d-flex flex-wrap gap-2">
+      {% csrf_token %}
+      {% if can_delete %}
+        <button class="btn btn-danger" type="submit">Delete file type</button>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{% url 'document_type_template_edit' file_type.pk %}">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

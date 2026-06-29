@@ -32,7 +32,7 @@
               <td>{% if folder.is_active %}Yes{% else %}No{% endif %}</td>
               <td class="text-end text-nowrap">
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'document_folder_template_edit' folder.pk %}">Edit</a>
-                {% if folder.slug != "supporting-documents" and folder.slug != "kyc-documents" and folder.slug != "kyc" %}
+                {% if folder.is_deletable %}
                   <a class="btn btn-sm btn-outline-danger" href="{% url 'document_folder_template_delete' folder.pk %}">Delete</a>
                 {% endif %}
               </td>

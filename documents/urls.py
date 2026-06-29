@@ -47,6 +47,11 @@ urlpatterns = [
         name="document_type_template_edit",
     ),
     path(
+        "settings/file-types/<int:pk>/delete/",
+        views.document_type_template_delete,
+        name="document_type_template_delete",
+    ),
+    path(
         "clients/<str:client_id>/upload/",
         views.client_document_upload,
         name="client_document_upload",

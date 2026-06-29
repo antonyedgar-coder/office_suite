@@ -13,23 +13,36 @@
       Delete folder <strong>{{ folder.name }}</strong>? This cannot be undone.
     </p>
     <ul class="small text-secondary mb-3">
-      <li>{{ file_type_count }} file type(s) in this folder will be removed.</li>
-      <li>{{ task_link_count }} task type link(s) to this folder will be removed.</li>
+      {% if file_type_count %}
+        <li class="text-danger">{{ file_type_count }} file type(s) are still mapped to this folder — deletion is blocked.</li>
+        <li>Delete those file types under <strong>File creation</strong> first.</li>
+      {% else %}
+        <li>No file types are mapped to this folder.</li>
+      {% endif %}
+      {% if task_link_count %}
+        <li>{{ task_link_count }} task type link(s) to this folder will be removed.</li>
+      {% endif %}
       {% if client_folder_count %}
         <li class="text-warning">{{ client_folder_count }} client(s) have this folder provisioned.</li>
       {% endif %}
       {% if active_doc_count %}
-        <li class="text-danger">{{ active_doc_count }} active file(s) use this folder — deletion will be blocked.</li>
+        <li class="text-danger">{{ active_doc_count }} active file(s) use this folder — deletion may be blocked.</li>
       {% endif %}
     </ul>
-  {% if active_doc_count or client_folder_count %}
-    <p class="small text-secondary mb-3">
-      If deletion is blocked, remove client documents in this folder first or mark the folder inactive under Edit.
-    </p>
-  {% endif %}
+    {% if not can_delete %}
+      <p class="small text-secondary mb-3">
+        Remove all file types from this folder before deleting it, or mark the folder inactive under Edit.
+      </p>
+    {% elif active_doc_count or client_folder_count %}
+      <p class="small text-secondary mb-3">
+        If deletion is still blocked, remove client documents in this folder first or mark the folder inactive under Edit.
+      </p>
+    {% endif %}
     <form method="post" class="d-flex flex-wrap gap-2">
       {% csrf_token %}
-      <button class="btn btn-danger" type="submit">Delete folder</button>
+      {% if can_delete %}
+        <button class="btn btn-danger" type="submit">Delete folder</button>
+      {% endif %}
       <a class="btn btn-outline-secondary" href="{% url 'document_folder_template_edit' folder.pk %}">Cancel</a>
     </form>
   </div>
