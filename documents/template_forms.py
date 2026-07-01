@@ -43,14 +43,9 @@ class DocumentFolderTemplateForm(forms.ModelForm):
 class DocumentTypeTemplateForm(forms.ModelForm):
     allowed_file_types = forms.MultipleChoiceField(
         choices=DOCUMENT_FILE_TYPE_CHOICES,
-        widget=forms.SelectMultiple(
-            attrs={
-                "class": "form-select",
-                "size": str(len(DOCUMENT_FILE_TYPE_CHOICES)),
-            }
-        ),
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check-input"}),
         label="Allowed file types",
-        help_text="Hold Ctrl (Windows) or Cmd (Mac) to select more than one type.",
+        help_text="Tick every format staff may upload for this file type.",
     )
 
     class Meta:
@@ -102,14 +97,42 @@ class DocumentTypeTemplateForm(forms.ModelForm):
             raise forms.ValidationError("Select at least one allowed file type.")
         return selected
 
+    def clean(self):
+        cleaned = super().clean()
+        folder = cleaned.get("folder")
+        name = (cleaned.get("name") or "").strip()
+        if folder and name:
+            base_slug = slugify(name)[:80] or "file"
+            qs = DocumentTypeTemplate.objects.filter(folder=folder, slug=base_slug)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                self.add_error(
+                    "name",
+                    "A file type with this name already exists in this folder. Use a different name.",
+                )
+        return cleaned
+
+    def _unique_slug(self, folder: DocumentFolderTemplate, base_slug: str) -> str:
+        slug = (base_slug or "file")[:80]
+        n = 2
+        while True:
+            qs = DocumentTypeTemplate.objects.filter(folder=folder, slug=slug)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if not qs.exists():
+                return slug
+            suffix = f"-{n}"
+            slug = f"{base_slug[: 80 - len(suffix)]}{suffix}"
+            n += 1
+
     def save(self, commit=True):
         obj = super().save(commit=False)
         obj.allowed_extensions = extensions_from_file_type_choices(
             self.cleaned_data.get("allowed_file_types") or []
         )
         if not obj.slug:
-            base = slugify(obj.name)[:80]
-            obj.slug = base
+            obj.slug = self._unique_slug(obj.folder, slugify(obj.name)[:80] or "file")
         if commit:
             obj.save()
         return obj

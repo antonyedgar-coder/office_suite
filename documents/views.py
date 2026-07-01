@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import IntegrityError
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
@@ -261,9 +262,17 @@ def document_type_template_create(request):
     if request.method == "POST":
         form = DocumentTypeTemplateForm(request.POST, folder_id=initial_folder)
         if form.is_valid():
-            form.save()
-            messages.success(request, "File type created.")
-            return redirect("document_type_template_list")
+            try:
+                form.save()
+            except IntegrityError:
+                messages.error(
+                    request,
+                    "Could not save this file type — a duplicate entry may exist in this folder. "
+                    "Try a different name.",
+                )
+            else:
+                messages.success(request, "File type created.")
+                return redirect("document_type_template_list")
     else:
         form = DocumentTypeTemplateForm(folder_id=initial_folder)
     return render(
@@ -272,6 +281,7 @@ def document_type_template_create(request):
         {
             "form": form,
             "title": "New file type",
+            "can_delete_file_type": False,
             "breadcrumbs": ui_breadcrumbs(
                 ("Settings", "settings_hub"),
                 ("File creation", "document_type_template_list"),
@@ -288,9 +298,17 @@ def document_type_template_edit(request, pk: int):
     if request.method == "POST":
         form = DocumentTypeTemplateForm(request.POST, instance=obj)
         if form.is_valid():
-            form.save()
-            messages.success(request, "File type updated.")
-            return redirect("document_type_template_list")
+            try:
+                form.save()
+            except IntegrityError:
+                messages.error(
+                    request,
+                    "Could not save this file type — a duplicate entry may exist in this folder. "
+                    "Try a different name.",
+                )
+            else:
+                messages.success(request, "File type updated.")
+                return redirect("document_type_template_list")
     else:
         form = DocumentTypeTemplateForm(instance=obj)
     return render(
