@@ -13,12 +13,30 @@
 
   <div class="card p-3 mb-3">
     <form method="get" class="row g-2 align-items-end">
-      <div class="col-12 col-md-8">
-        <label class="form-label" for="fileTypeQ">Search</label>
-        <input class="form-control" id="fileTypeQ" name="q" value="{{ q }}" placeholder="File or folder name" />
+      <div class="col-12 col-md-5 col-lg-4">
+        <label class="form-label" for="folderQ">Folder</label>
+        <input
+          class="form-control"
+          id="folderQ"
+          name="folder_q"
+          value="{{ folder_q }}"
+          placeholder="Search folder name…"
+          autocomplete="off"
+        />
       </div>
-      <div class="col-12 col-md-4 d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Search</button>
+      <div class="col-12 col-md-5 col-lg-4">
+        <label class="form-label" for="fileTypeQ">File name (type)</label>
+        <input
+          class="form-control"
+          id="fileTypeQ"
+          name="type_q"
+          value="{{ type_q }}"
+          placeholder="Search file type name…"
+          autocomplete="off"
+        />
+      </div>
+      <div class="col-12 col-md-2 col-lg-4 d-flex flex-wrap gap-2">
+        <button type="submit" class="btn btn-primary">Apply filters</button>
         <a class="btn btn-outline-secondary" href="{% url 'document_type_template_list' %}">Clear</a>
       </div>
     </form>
@@ -56,7 +74,13 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="7" class="text-secondary">No file types yet. Create a folder first, then add file types here.</td>
+              <td colspan="7" class="text-secondary">
+                {% if filters_active %}
+                  No file types match your folder / file name filters.
+                {% else %}
+                  No file types yet. Create a folder first, then add file types here.
+                {% endif %}
+              </td>
             </tr>
           {% endfor %}
         </tbody>

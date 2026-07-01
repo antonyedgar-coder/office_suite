@@ -88,7 +88,8 @@ def document_folder_template_list(request):
 @login_required
 def document_type_template_list(request):
     _require_template_admin(request)
-    q = (request.GET.get("q") or "").strip()
+    folder_q = (request.GET.get("folder_q") or "").strip()
+    type_q = (request.GET.get("type_q") or "").strip()
     rows = DocumentTypeTemplate.objects.select_related("folder").annotate(
         doc_count=Count("uploads"),
     ).order_by(
@@ -96,14 +97,18 @@ def document_type_template_list(request):
         "sort_order",
         "name",
     )
-    if q:
-        rows = rows.filter(Q(name__icontains=q) | Q(folder__name__icontains=q))
+    if folder_q:
+        rows = rows.filter(folder__name__icontains=folder_q)
+    if type_q:
+        rows = rows.filter(name__icontains=type_q)
     return render(
         request,
         "documents/document_type_template_list.html",
         {
             "rows": rows,
-            "q": q,
+            "folder_q": folder_q,
+            "type_q": type_q,
+            "filters_active": bool(folder_q or type_q),
             "breadcrumbs": ui_breadcrumbs(
                 ("Settings", "settings_hub"),
                 ("File creation",),
