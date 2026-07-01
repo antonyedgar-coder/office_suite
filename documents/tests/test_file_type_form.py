@@ -49,3 +49,34 @@ class DocumentTypeTemplateFormTests(TestCase):
         form = DocumentTypeTemplateForm(self._form_data())
         self.assertFalse(form.is_valid())
         self.assertIn("name", form.errors)
+
+    def test_rename_frees_name_for_new_file_type(self):
+        original = DocumentTypeTemplate.objects.create(
+            folder=self.folder,
+            name="Financial Projection",
+            slug="financial-projection",
+            allowed_extensions="pdf",
+        )
+        rename_form = DocumentTypeTemplateForm(
+            {
+                "folder": str(self.folder.pk),
+                "name": "Signed Financial Projection",
+                "allowed_file_types": ["pdf"],
+                "period_kind": "none",
+                "name_template": "{document_type}-{client_name}",
+                "sort_order": "0",
+                "is_active": "on",
+            },
+            instance=original,
+        )
+        self.assertTrue(rename_form.is_valid(), rename_form.errors)
+        renamed = rename_form.save()
+        self.assertEqual(renamed.slug, "signed-financial-projection")
+
+        create_form = DocumentTypeTemplateForm(
+            self._form_data(name="Financial Projection", allowed_file_types=["pdf"])
+        )
+        self.assertTrue(create_form.is_valid(), create_form.errors)
+        new_type = create_form.save()
+        self.assertEqual(new_type.name, "Financial Projection")
+        self.assertEqual(new_type.slug, "financial-projection")

@@ -102,8 +102,7 @@ class DocumentTypeTemplateForm(forms.ModelForm):
         folder = cleaned.get("folder")
         name = (cleaned.get("name") or "").strip()
         if folder and name:
-            base_slug = slugify(name)[:80] or "file"
-            qs = DocumentTypeTemplate.objects.filter(folder=folder, slug=base_slug)
+            qs = DocumentTypeTemplate.objects.filter(folder=folder, name__iexact=name)
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
@@ -131,8 +130,8 @@ class DocumentTypeTemplateForm(forms.ModelForm):
         obj.allowed_extensions = extensions_from_file_type_choices(
             self.cleaned_data.get("allowed_file_types") or []
         )
-        if not obj.slug:
-            obj.slug = self._unique_slug(obj.folder, slugify(obj.name)[:80] or "file")
+        base = slugify(obj.name)[:80] or "file"
+        obj.slug = self._unique_slug(obj.folder, base)
         if commit:
             obj.save()
         return obj
