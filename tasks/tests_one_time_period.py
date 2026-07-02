@@ -4,7 +4,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.test.utils import modify_settings
 
-from documents.periods import build_one_time_task_filename
+from documents.models import DocumentFolderTemplate, DocumentTypeTemplate
+from documents.periods import PERIOD_MONTH
+from documents.services import render_generated_filename
 from masters.models import Client, ClientGroup
 from tasks.models import Task, TaskGroup, TaskMaster
 from tasks.one_time_period import (
@@ -14,12 +16,76 @@ from tasks.one_time_period import (
     parse_one_time_period_key,
 )
 
-
-def _sanitize(value: str) -> str:
-    return (value or "").strip().replace(" ", "_")
-
-
 User = get_user_model()
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class OneTimeFilenameTests(TestCase):
+    def setUp(self):
+        self.folder = DocumentFolderTemplate.objects.create(
+            name="GST",
+            slug="gst-one-time-filename",
+            sort_order=1,
+        )
+        self.doc_type = DocumentTypeTemplate.objects.create(
+            folder=self.folder,
+            name="GST Return filed",
+            slug="gst-return-filed",
+            allowed_extensions="pdf",
+            period_kind=PERIOD_MONTH,
+        )
+        self.client = Client.objects.create(
+            client_name="Acme Corp",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=ClientGroup.objects.create(name="FN GROUP"),
+            approval_status=Client.APPROVED,
+            pan="ABCDE1234F",
+        )
+
+    def test_one_time_task_uses_file_type_name_not_task_master(self):
+        master = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="GST", sort_order=1),
+            name="GST Return",
+            is_recurring=False,
+        )
+        verifier = User.objects.create_user(email="v-fn@ex.com", password="pass12345")
+        document_checker = User.objects.create_user(email="d-fn@ex.com", password="pass12345")
+        task = Task.objects.create(
+            client=self.client,
+            task_master=master,
+            period_type="one_time",
+            period_key="FY2024-25-2025-03",
+            due_date=date(2025, 3, 15),
+            title="One-time",
+            status=Task.STATUS_ASSIGNED,
+            document_checker=document_checker,
+        )
+        task.verifiers.set([verifier])
+        name = render_generated_filename(
+            self.doc_type,
+            client=self.client,
+            period_key="FY2024-25-2025-03",
+            period_label="March",
+            extension="pdf",
+            task=task,
+        )
+        self.assertIn("GST Return filed", name)
+        self.assertIn("Acme Corp", name)
+        self.assertNotIn("GST Return-", name)
+        self.assertTrue(name.endswith(".pdf"))
+
+    def test_one_time_period_key_monthly_file_type(self):
+        name = render_generated_filename(
+            self.doc_type,
+            client=self.client,
+            period_key="FY2024-25-2025-03",
+            period_label="March",
+            extension="pdf",
+            task=None,
+        )
+        self.assertIn("Mar", name)
+        self.assertIn("2024-25", name)
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
@@ -149,26 +215,3 @@ class OneTimePeriodKeyTests(TestCase):
         first_b = allocate_one_time_period_key(other_client, self.master, due)
         self.assertEqual(first_a, "FY2025-26-2026-04")
         self.assertEqual(first_b, "FY2025-26-2026-04")
-
-
-@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
-class OneTimeFilenameTests(TestCase):
-    def test_filename_format(self):
-        name = build_one_time_task_filename(
-            task_master_name="GST Return",
-            client_name="Acme Corp",
-            period_key="FY2024-25-2025-03",
-            extension="pdf",
-            sanitize=_sanitize,
-        )
-        self.assertEqual(name, "GST_Return-Acme_Corp_FY2024-25_Mar.pdf")
-
-    def test_filename_with_sequence(self):
-        name = build_one_time_task_filename(
-            task_master_name="GST Return",
-            client_name="Acme Corp",
-            period_key="FY2024-25-2025-03-2",
-            extension="pdf",
-            sanitize=_sanitize,
-        )
-        self.assertEqual(name, "GST_Return-Acme_Corp_FY2024-25_Mar_2.pdf")

@@ -27,7 +27,6 @@ from .folder_constants import (
 from .periods import (
     build_custom_user_filename,
     build_plain_display_filename,
-    build_one_time_task_filename,
     build_standard_filename,
     extract_fy_from_period_key,
     resolve_period,
@@ -225,20 +224,7 @@ def render_generated_filename(
     extension: str,
     task=None,
 ) -> str:
-    if task is not None and (task.period_type or "").strip() == "one_time":
-        master = getattr(task, "task_master", None)
-        if master is None and getattr(task, "task_master_id", None):
-            from tasks.models import TaskMaster
-
-            master = TaskMaster.objects.filter(pk=task.task_master_id).first()
-        if master:
-            return build_one_time_task_filename(
-                task_master_name=master.name,
-                client_name=client.client_name,
-                period_key=period_key,
-                extension=extension,
-                sanitize=_sanitize_filename_part,
-            )
+    """Auto filename always uses the file type name (Settings → File creation), not task/folder name."""
     return build_standard_filename(
         document_type_name=template.name,
         client_name=client.client_name,
