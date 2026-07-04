@@ -48,19 +48,33 @@
     var f = freq.value;
     var c = cfg || {};
     if (f === "monthly") {
-      fields.appendChild(selectRow("Month anchor", "month_anchor", ["same_month", "subsequent_month"], c.month_anchor));
+      fields.appendChild(selectRow("Month anchor", "month_anchor", [
+        { value: "same_month", label: "Same month (period = create month)" },
+        { value: "subsequent_month", label: "Next month (e.g. June GST created on 1 July)" },
+      ], c.month_anchor));
       fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
       fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
     } else if (f === "quarterly") {
-      fields.appendChild(selectRow("Quarter anchor", "quarter_anchor", ["first_month_same_qtr", "last_month_same_qtr", "first_month_next_qtr"], c.quarter_anchor));
+      fields.appendChild(selectRow("Quarter anchor", "quarter_anchor", [
+        { value: "first_month_same_qtr", label: "First month of same quarter" },
+        { value: "last_month_same_qtr", label: "Last month of same quarter" },
+        { value: "first_month_next_qtr", label: "First month of next quarter (prior quarter filing)" },
+      ], c.quarter_anchor));
       fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
       fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
     } else if (f === "half_yearly") {
-      fields.appendChild(selectRow("Half anchor", "half_anchor", ["first_month_same_half", "last_month_same_half", "first_month_next_half"], c.half_anchor));
+      fields.appendChild(selectRow("Half anchor", "half_anchor", [
+        { value: "first_month_same_half", label: "First month of same half" },
+        { value: "last_month_same_half", label: "Last month of same half" },
+        { value: "first_month_next_half", label: "First month of next half (prior half filing)" },
+      ], c.half_anchor));
       fields.appendChild(fieldRow("Create day", "create_day", "number", c.create_day));
       fields.appendChild(fieldRow("Due day", "due_day", "number", c.due_day));
     } else if (f === "annually") {
-      fields.appendChild(selectRow("FY anchor", "fy_anchor", ["same_fy", "next_fy"], c.fy_anchor));
+      fields.appendChild(selectRow("FY anchor", "fy_anchor", [
+        { value: "same_fy", label: "Same FY (period = create FY)" },
+        { value: "next_fy", label: "Next FY (prior FY filing, e.g. FY25-26 on 1 Apr 2026)" },
+      ], c.fy_anchor));
       fields.appendChild(
         selectRow(
           "Create task — month",

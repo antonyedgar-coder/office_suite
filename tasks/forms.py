@@ -973,13 +973,17 @@ class TaskEditForm(forms.Form):
 
 
 class TaskRemarkForm(forms.Form):
-
     message = forms.CharField(
-
-        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Write a note for the team…",
+                "id": "id_message",
+            }
+        ),
         required=True,
-
+        label="",
     )
 
 

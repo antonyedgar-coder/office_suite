@@ -12,13 +12,23 @@ class Command(BaseCommand):
         today = timezone.localdate()
         created = 0
         skipped = 0
+        errors = 0
         for enrollment in TaskRecurrenceEnrollment.objects.filter(is_active=True).select_related(
             "client", "task_master"
         ).prefetch_related("assignees", "verifiers"):
-            task = try_create_recurring_for_enrollment(enrollment, today)
+            try:
+                task = try_create_recurring_for_enrollment(enrollment, today)
+            except Exception as exc:
+                errors += 1
+                self.stderr.write(
+                    self.style.ERROR(f"Enrollment {enrollment.pk} failed: {exc}")
+                )
+                continue
             if task:
                 created += 1
                 self.stdout.write(f"Created task {task.pk} for {enrollment}")
             else:
                 skipped += 1
-        self.stdout.write(self.style.SUCCESS(f"Done. Created={created}, skipped={skipped}"))
+        self.stdout.write(
+            self.style.SUCCESS(f"Done. Created={created}, skipped={skipped}, errors={errors}")
+        )

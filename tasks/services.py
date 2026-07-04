@@ -748,7 +748,8 @@ def update_task_team(
         else:
             changes.append("Document checker cleared.")
     if changes:
-        _log_activity(task, actor, TaskActivity.TYPE_REMARK, message=" ".join(changes))
+        # Team changes belong in activity log, not user notes.
+        _log_activity(task, actor, TaskActivity.TYPE_ASSIGNED, message=" ".join(changes))
 
     new_ids = [u.pk for u in assignee_users]
     _set_assignees(task, new_ids, actor=actor)

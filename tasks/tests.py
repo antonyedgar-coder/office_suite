@@ -840,7 +840,7 @@ class TaskListDisplayTests(TestCase):
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class RecurrenceDateTests(TestCase):
-    def test_monthly_subsequent_month_due_in_next_calendar_month(self):
+    def test_monthly_subsequent_month_create_and_due_in_next_calendar_month(self):
         tg = TaskGroup.objects.create(name="GST")
         master = TaskMaster.objects.create(
             task_group=tg,
@@ -853,9 +853,171 @@ class RecurrenceDateTests(TestCase):
                 "due_day": 20,
             },
         )
+        # Period May is created/due in June (GST-style: prior month filing).
         create_d, due_d = compute_create_due_dates(master, "2026-05", date(2026, 1, 1))
-        self.assertEqual(create_d, date(2026, 5, 5))
+        self.assertEqual(create_d, date(2026, 6, 5))
         self.assertEqual(due_d, date(2026, 6, 20))
+
+    def test_monthly_subsequent_month_june_created_on_july_first(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="GST")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="GSTR monthly",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_MONTHLY,
+            recurrence_config={
+                "month_anchor": "subsequent_month",
+                "create_day": 1,
+                "due_day": 20,
+            },
+        )
+        ok, period_key = should_create_today(master, date(2026, 7, 1), date(2026, 5, 1))
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "2026-06")
+
+    def test_quarterly_next_qtr_creates_prior_quarter(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="QTR")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Quarterly next",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_QUARTERLY,
+            recurrence_config={
+                "quarter_anchor": "first_month_next_qtr",
+                "create_day": 1,
+                "due_day": 15,
+            },
+        )
+        # Q1 (Apr–Jun) created on 1 Jul (first day of Q2).
+        ok, period_key = should_create_today(master, date(2026, 7, 1), date(2025, 4, 1))
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "2026-Q1")
+        # Q4 (Jan–Mar of FY2025-26) created on 1 Apr 2026.
+        ok4, pk4 = should_create_today(master, date(2026, 4, 1), date(2025, 4, 1))
+        self.assertTrue(ok4)
+        self.assertEqual(pk4, "2025-Q4")
+        # Mid-quarter is not a create day.
+        ok_mid, _ = should_create_today(master, date(2026, 7, 15), date(2025, 4, 1))
+        self.assertFalse(ok_mid)
+
+    def test_quarterly_same_qtr_still_creates_in_period(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="QTR2")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Quarterly same",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_QUARTERLY,
+            recurrence_config={
+                "quarter_anchor": "first_month_same_qtr",
+                "create_day": 1,
+                "due_day": 15,
+            },
+        )
+        ok, period_key = should_create_today(master, date(2026, 7, 1), date(2025, 4, 1))
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "2026-Q2")
+
+    def test_half_yearly_next_half_creates_prior_half(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="HALF")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Half next",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_HALF_YEARLY,
+            recurrence_config={
+                "half_anchor": "first_month_next_half",
+                "create_day": 1,
+                "due_day": 15,
+            },
+        )
+        # H1 (Apr–Sep) created on 1 Oct.
+        ok, period_key = should_create_today(master, date(2026, 10, 1), date(2025, 4, 1))
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "2026-H1")
+        # H2 (Oct–Mar) created on 1 Apr next FY.
+        ok2, pk2 = should_create_today(master, date(2027, 4, 1), date(2025, 4, 1))
+        self.assertTrue(ok2)
+        self.assertEqual(pk2, "2026-H2")
+
+    def test_annual_next_fy_creates_prior_fy(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="ANN")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="Annual next FY",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_ANNUALLY,
+            recurrence_config={
+                "fy_anchor": "next_fy",
+                "create_month": 4,
+                "create_day": 1,
+                "due_month": 7,
+                "due_day": 15,
+            },
+        )
+        # FY2025-26 created on 1 Apr 2026 (start of next FY).
+        ok, period_key = should_create_today(master, date(2026, 4, 1), date(2025, 4, 1))
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "FY2025-26")
+
+    def test_every_3_years_creates_after_block_ends(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="3Y")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="3y recurring",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_EVERY_3_YEARS,
+            recurrence_config={
+                "create_month": 4,
+                "create_day": 1,
+                "due_month": 7,
+                "due_day": 15,
+            },
+        )
+        started = date(2023, 4, 1)
+        # Block 2023-2025 created on 1 Apr 2026.
+        ok, period_key = should_create_today(master, date(2026, 4, 1), started)
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "2023-2025")
+        # Not on an earlier date inside the block.
+        ok_early, _ = should_create_today(master, date(2025, 4, 1), started)
+        self.assertFalse(ok_early)
+        # Next block 2026-2028 created on 1 Apr 2029.
+        ok2, pk2 = should_create_today(master, date(2029, 4, 1), started)
+        self.assertTrue(ok2)
+        self.assertEqual(pk2, "2026-2028")
+
+    def test_every_5_years_creates_after_block_ends(self):
+        from tasks.recurrence import should_create_today
+
+        tg = TaskGroup.objects.create(name="5Y")
+        master = TaskMaster.objects.create(
+            task_group=tg,
+            name="5y recurring",
+            is_recurring=True,
+            frequency=TaskMaster.FREQ_EVERY_5_YEARS,
+            recurrence_config={
+                "create_month": 4,
+                "create_day": 1,
+                "due_month": 9,
+                "due_day": 30,
+            },
+        )
+        started = date(2020, 4, 1)
+        ok, period_key = should_create_today(master, date(2025, 4, 1), started)
+        self.assertTrue(ok)
+        self.assertEqual(period_key, "2020-2024")
 
     def test_annual_create_and_due_in_different_months(self):
         tg = TaskGroup.objects.create(name="ROC Annual")

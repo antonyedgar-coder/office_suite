@@ -136,7 +136,7 @@
       {% if can_complete_documents %}
         <div class="card p-3 mt-3">
           <h6>Document check</h6>
-          <p class="small text-secondary mb-2">Mark complete when documents are in order, or send back to users if corrections are needed (verifier is not notified). Use <strong>Add remark</strong> on this page if you need to record notes.</p>
+          <p class="small text-secondary mb-2">Mark complete when documents are in order, or send back to users if corrections are needed (verifier is not notified). Use <strong>Notes</strong> on this page if you need to leave a comment.</p>
           <form method="post" action="{% url 'task_document_check_complete' task.pk %}" class="mb-2">{% csrf_token %}<button class="btn btn-success btn-sm">Mark complete</button></form>
           {% if can_send_back_documents %}
             <form method="post" action="{% url 'task_document_check_send_back' task.pk %}">{% csrf_token %}<button type="submit" class="btn btn-warning btn-sm">Send back for correction</button></form>
@@ -145,25 +145,58 @@
       {% endif %}
     </div>
     <div class="col-lg-7">
-      <div class="card p-3 mb-3">
-        <h6 class="mb-3">Timeline</h6>
-        <ul class="list-unstyled mb-0">
-          {% for row in activity_rows %}
+      <div class="card p-3 task-notes-card">
+        <h6 class="mb-1">Notes</h6>
+        <p class="small text-secondary mb-3">Comments from the team on this task. System activity is in the activity log in the sidebar.</p>
+        <ul class="list-unstyled mb-0 task-notes-list">
+          {% for row in note_rows %}
             {% with act=row.activity %}
-            <li class="mb-2 border-bottom pb-2">
-              <span class="small text-secondary">{{ act.created_at }}</span> — {{ act.get_activity_type_display }}
-              {% if row.user_label %}<span class="small">({{ row.user_label }})</span>{% endif %}
-              {% if act.message %}<div>{{ act.message }}</div>{% endif %}
-              {% if act.new_status %}<div class="small">→ {{ act.new_status|task_status_label }}</div>{% endif %}
+            <li class="task-note-item mb-3 pb-3 border-bottom">
+              <div class="task-note-meta small text-secondary mb-1">
+                {% if row.user_label %}<strong class="text-body">{{ row.user_label }}</strong> · {% endif %}
+                {{ act.created_at|date:"d M Y, g:i A" }}
+              </div>
+              <div class="task-note-body">{{ act.message|linebreaksbr }}</div>
             </li>
             {% endwith %}
-          {% empty %}<li class="text-secondary">No activity yet.</li>{% endfor %}
+          {% empty %}
+            <li class="text-secondary task-notes-empty mb-3">No notes yet. Add the first comment below.</li>
+          {% endfor %}
         </ul>
-      </div>
-      <div class="card p-3">
-        <h6>Add remark</h6>
-        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="remark" />{{ remark_form.message }}<button class="btn btn-sm btn-outline-secondary mt-2">Add</button></form>
+        <form method="post" class="task-note-form mt-1">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="remark" />
+          <label class="form-label small text-secondary mb-1" for="id_message">Write a note</label>
+          {{ remark_form.message }}
+          <button type="submit" class="btn btn-sm btn-primary mt-2">Add note</button>
+        </form>
       </div>
     </div>
   </div>
+  <style>
+    .task-notes-card {
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+    .task-notes-list .task-note-body {
+      font-family: Georgia, "Times New Roman", Times, serif;
+      font-size: 1.05rem;
+      line-height: 1.55;
+      color: #1f2937;
+      white-space: pre-wrap;
+    }
+    .task-notes-list .task-note-meta {
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0.01em;
+    }
+    .task-notes-empty {
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: 0.95rem;
+    }
+    .task-note-form textarea {
+      font-family: Georgia, "Times New Roman", Times, serif;
+      font-size: 1.05rem;
+      line-height: 1.5;
+      min-height: 5.5rem;
+    }
+  </style>
 {% endblock %}

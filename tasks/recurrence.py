@@ -70,20 +70,80 @@ def half_for_date(d: date) -> tuple[int, int]:
 
 
 def period_key_for_date(master: TaskMaster, d: date, enrollment_started: date) -> str:
+    """
+    Period that would be auto-created on calendar date ``d``.
+
+    When the Task Master uses a "next" anchor, create falls in the following
+    period, so this returns the *prior* period (the one being filed for).
+    """
     freq = master.frequency
+    cfg = master.recurrence_config or {}
     if freq == master.FREQ_MONTHLY:
+        # subsequent_month: create on day N of month M for period M-1 (e.g. June GST on 1 July).
+        if cfg.get("month_anchor") == "subsequent_month":
+            y, m = d.year, d.month - 1
+            if m < 1:
+                m = 12
+                y -= 1
+            return f"{y:04d}-{m:02d}"
         return d.strftime("%Y-%m")
     if freq == master.FREQ_QUARTERLY:
         fy, q = quarter_for_date(d)
+        # first_month_next_qtr: create in Q is for previous quarter.
+        if cfg.get("quarter_anchor") == "first_month_next_qtr":
+            if q == 1:
+                return f"{fy - 1}-Q4"
+            return f"{fy}-Q{q - 1}"
         return f"{fy}-Q{q}"
     if freq == master.FREQ_HALF_YEARLY:
         fy, h = half_for_date(d)
+        # first_month_next_half: create in H is for previous half.
+        if cfg.get("half_anchor") == "first_month_next_half":
+            if h == 1:
+                return f"{fy - 1}-H2"
+            return f"{fy}-H1"
         return f"{fy}-H{h}"
     if freq == master.FREQ_ANNUALLY:
+        # next_fy: create in FY N is for previous FY.
+        if cfg.get("fy_anchor") == "next_fy":
+            y = fy_start_year(d) - 1
+            return f"FY{y}-{str(y + 1)[-2:]}"
         return fy_label(d)
+    # every_3_years / every_5_years — use YYYY-YYYY span keys (same as manual create).
     years = 3 if freq == master.FREQ_EVERY_3_YEARS else 5
-    cycle = _multi_year_cycle(enrollment_started, d, years)
-    return f"cycle-{cycle}"
+    return _multi_year_period_key_for_create_date(master, d, enrollment_started, years)
+
+
+def _multi_year_period_key_for_create_date(
+    master: TaskMaster,
+    d: date,
+    enrollment_started: date,
+    years: int,
+) -> str:
+    """
+    Block being created on ``d``.
+
+    Create for block Y1–Y2 falls after the block ends (calendar year Y2+1 when
+    create_month is Apr–Dec). On that day the span containing ``d`` is the *next*
+    block, so return the previous block.
+    """
+    from .period_keys import multi_year_span_key
+
+    current = multi_year_span_key(enrollment_started, d, years)
+    cfg = master.recurrence_config or {}
+    create_month = int(cfg.get("create_month") or 4)
+    # Jan–Mar create still falls inside the last FY of the block.
+    if create_month < 4:
+        return current
+    m = re.match(r"^(\d{4})-(\d{4})$", current)
+    if not m:
+        return current
+    block_start = int(m.group(1))
+    fy_s = fy_start_year(enrollment_started)
+    if block_start <= fy_s:
+        return current
+    prev_start = block_start - years
+    return f"{prev_start}-{prev_start + years - 1}"
 
 
 def _multi_year_cycle(started: date, ref: date, years: int) -> int:
@@ -120,9 +180,10 @@ def _anchor_month_quarter(fy: int, q: int, anchor: str) -> tuple[int, int]:
         m = months[-1]
         y = fy + 1 if m < 4 else fy
         return y, m
-    # first_month_next_qtr
-    nq = q + 1 if q < 4 else 1
-    return _anchor_month_quarter(fy, nq, "first_month_same_qtr")
+    # first_month_next_qtr — Q4 rolls into Q1 of the next FY.
+    if q == 4:
+        return _anchor_month_quarter(fy + 1, 1, "first_month_same_qtr")
+    return _anchor_month_quarter(fy, q + 1, "first_month_same_qtr")
 
 
 def _anchor_month_half(fy: int, half: int, anchor: str) -> tuple[int, int]:
@@ -140,8 +201,10 @@ def _anchor_month_half(fy: int, half: int, anchor: str) -> tuple[int, int]:
         m = months[-1]
         y = fy if m >= 4 else fy + 1
         return y, m
-    nh = 2 if half == 1 else 1
-    return _anchor_month_half(fy, nh, "first_month_same_half")
+    # first_month_next_half — H2 rolls into H1 of the next FY.
+    if half == 1:
+        return _anchor_month_half(fy, 2, "first_month_same_half")
+    return _anchor_month_half(fy + 1, 1, "first_month_same_half")
 
 
 def _parse_period_key(master: TaskMaster, period_key: str, enrollment_started: date) -> date:
@@ -187,15 +250,17 @@ def compute_create_due_dates(
 
     if freq == master.FREQ_MONTHLY:
         y, m = ref.year, ref.month
-        create_d = _clamp_day(y, m, cfg["create_day"])
         if cfg["month_anchor"] == "subsequent_month":
-            due_m = m + 1
-            due_y = y
-            if due_m > 12:
-                due_m = 1
-                due_y += 1
-            due_d = _clamp_day(due_y, due_m, cfg["due_day"])
+            # Period month M is created/due in calendar month M+1 (GST-style).
+            create_m = m + 1
+            create_y = y
+            if create_m > 12:
+                create_m = 1
+                create_y += 1
+            create_d = _clamp_day(create_y, create_m, cfg["create_day"])
+            due_d = _clamp_day(create_y, create_m, cfg["due_day"])
         else:
+            create_d = _clamp_day(y, m, cfg["create_day"])
             due_d = _clamp_day(y, m, cfg["due_day"])
         return create_d, due_d
 
@@ -253,7 +318,9 @@ def should_create_today(
     client=None,
 ) -> tuple[bool, str]:
     """Return (should_create, period_key) if today is the scheduled create date."""
-    pk = period_key_for_date(master, today, enrollment_started, client=client)
+    # client is accepted for call-site compatibility; period keys are not client-specific.
+    del client
+    pk = period_key_for_date(master, today, enrollment_started)
     create_d, _ = compute_create_due_dates(master, pk, enrollment_started)
     if create_d == today:
         return True, pk

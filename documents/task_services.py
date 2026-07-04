@@ -153,7 +153,8 @@ def build_task_document_slots(task: Task) -> list[dict]:
 
     if not seen_supporting:
         supporting_type = _supporting_document_type()
-        if supporting_type and task_allows_document_upload(task, folder_slug=SUPPORTING_DOCUMENTS_SLUG):
+        # Always show supporting docs on the task (including completed), even when upload is locked.
+        if supporting_type:
             _append_slots_for_document_type(
                 slots,
                 mapping=None,

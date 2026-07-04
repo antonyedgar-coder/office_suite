@@ -1238,19 +1238,43 @@ def task_detail(request, pk: int):
                     request.user,
                     TaskActivity.TYPE_REMARK,
                     message=remark_form.cleaned_data["message"],
+                    metadata={"user_note": True},
                 )
-                messages.success(request, "Remark added.")
+                messages.success(request, "Note added.")
                 return redirect("task_detail", pk=pk)
 
     activities = task.activities.select_related("user", "user__employee_profile").all()
     assignees = task.assignments.select_related("user", "user__employee_profile").all()
-    activity_rows = [
-        {
-            "activity": act,
-            "user_label": user_person_name(act.user) if act.user_id else "",
-        }
-        for act in activities
-    ]
+    # Notes panel shows only user-written comments (not system/team activity).
+    _system_note_prefixes = (
+        "Verifiers set to ",
+        "Verifiers cleared.",
+        "Document checker set to ",
+        "Document checker cleared.",
+        "Task assigned to ",
+        "Users updated to ",
+        "Task created",
+    )
+    note_rows = []
+    for act in activities:
+        if act.activity_type != TaskActivity.TYPE_REMARK:
+            continue
+        if act.metadata.get("user_note"):
+            note_rows.append(
+                {
+                    "activity": act,
+                    "user_label": user_person_name(act.user) if act.user_id else "",
+                }
+            )
+            continue
+        msg = (act.message or "").strip()
+        if msg and not any(msg.startswith(p) for p in _system_note_prefixes):
+            note_rows.append(
+                {
+                    "activity": act,
+                    "user_label": user_person_name(act.user) if act.user_id else "",
+                }
+            )
     from .period_display import format_period_display
 
     period_cols = format_period_display(
@@ -1293,7 +1317,7 @@ def task_detail(request, pk: int):
             "task": task,
             "period_frequency": period_cols.frequency,
             "period_label": period_cols.period,
-            "activity_rows": activity_rows,
+            "note_rows": note_rows,
             "assignees": assignees,
             "verifier_label": format_task_verifier_names(task),
             "document_checker_label": user_person_name(task.document_checker),
