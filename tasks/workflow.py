@@ -118,6 +118,26 @@ def can_transition(task: Task, new_status: str) -> bool:
     return new_status in allowed_transitions(task).get(task.status, set())
 
 
+def reopen_target_status(task: Task) -> str:
+    """
+    Status to restore when an admin reopens a completed task.
+
+    Full workflow → Verified (doc checker queue; no resubmit/re-verify).
+    Verify-only or doc-only → Submitted.
+    Simple → Assigned.
+    """
+    kind = task_workflow_kind(task)
+    if kind == WORKFLOW_FULL:
+        return Task.STATUS_VERIFIED
+    if kind in (WORKFLOW_VERIFY_ONLY, WORKFLOW_DOC_ONLY):
+        return Task.STATUS_SUBMITTED
+    return Task.STATUS_ASSIGNED
+
+
+def reopen_target_status_label(task: Task) -> str:
+    return dict(Task.STATUS_CHOICES).get(reopen_target_status(task), reopen_target_status(task))
+
+
 def validate_transition(task: Task, new_status: str) -> None:
     if new_status == task.status:
         return

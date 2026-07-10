@@ -314,6 +314,7 @@ class Task(models.Model):
             ("assign_task", "Can assign task"),
             ("verify_task", "Can verify task"),
             ("check_documents", "Can check task documents"),
+            ("reopen_task", "Can reopen completed task"),
         ]
         constraints = [
             models.UniqueConstraint(

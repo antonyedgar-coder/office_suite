@@ -26,6 +26,7 @@ from .forms import (
     TaskGroupForm,
     TaskMasterForm,
     TaskRemarkForm,
+    TaskReopenForm,
     TaskVerifyForm,
 )
 from .models import Task, TaskActivity, TaskGroup, TaskMaster, TaskNotification
@@ -78,6 +79,7 @@ from .services import (
     start_enrollment_if_recurring,
     cancel_task,
     delete_task,
+    reopen_task,
     send_back_for_document_correction,
     submit_task,
     task_team_is_editable,
@@ -1008,6 +1010,10 @@ def can_edit_task_team(user, task: Task) -> bool:
     )
 
 
+def can_reopen_task(user, task: Task) -> bool:
+    return task.status == Task.STATUS_COMPLETE and user.has_perm("tasks.reopen_task")
+
+
 @login_required
 def task_edit(request, pk: int):
     task = get_object_or_404(task_detail_queryset(request.user), pk=pk)
@@ -1161,6 +1167,7 @@ def task_detail(request, pk: int):
         Task.STATUS_CANCELLED,
     )
     can_edit = can_edit_task_team(request.user, task)
+    can_reopen = can_reopen_task(request.user, task)
     checklist_items = list(task.checklist_items.all())
 
     if request.method == "POST":
@@ -1338,6 +1345,7 @@ def task_detail(request, pk: int):
             "can_cancel": can_cancel,
             "can_delete": can_delete,
             "can_edit": can_edit,
+            "can_reopen": can_reopen,
             "workflow_label": workflow_label(task),
             "assignment_pending": task.status == Task.STATUS_PENDING_ASSIGNMENT,
             **task_doc_ctx,
@@ -1534,6 +1542,50 @@ def task_verify_rework(request, pk: int):
     rework_task(task, request.user, message=message)
     messages.success(request, "Task sent for rework.")
     return redirect("task_verify_queue")
+
+
+@login_required
+def task_reopen(request, pk: int):
+    if not request.user.has_perm("tasks.reopen_task"):
+        raise PermissionDenied
+    task = get_object_or_404(
+        Task.objects.select_related("client", "task_master"),
+        pk=pk,
+        status=Task.STATUS_COMPLETE,
+    )
+    from .period_display import format_period_display
+    from .workflow import reopen_target_status_label
+
+    period_cols = format_period_display(
+        task.period_key,
+        period_type=task.period_type or "",
+        master=task.task_master,
+    )
+    if request.method == "POST":
+        form = TaskReopenForm(request.POST)
+        if form.is_valid():
+            try:
+                reopen_task(task, request.user, reason=form.cleaned_data["reason"])
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0] if exc.messages else str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"Task reopened. Status is now {reopen_target_status_label(task)}.",
+                )
+                return redirect("task_detail", pk=pk)
+    else:
+        form = TaskReopenForm()
+    return render(
+        request,
+        "tasks/task_reopen_confirm.html",
+        {
+            "task": task,
+            "form": form,
+            "reopen_target_label": reopen_target_status_label(task),
+            "period_label": period_cols.period,
+        },
+    )
 
 
 @require_perm("tasks.view_task")

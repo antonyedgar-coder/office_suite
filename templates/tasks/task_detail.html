@@ -50,6 +50,9 @@
           {% if can_delete %}
             <form method="post" onsubmit="return confirm('Permanently delete this task? This cannot be undone.');">{% csrf_token %}<input type="hidden" name="action" value="delete" /><button class="btn btn-sm btn-outline-danger">Delete task</button></form>
           {% endif %}
+          {% if can_reopen %}
+            <a class="btn btn-sm btn-outline-warning" href="{% url 'task_reopen' task.pk %}">Reopen task</a>
+          {% endif %}
         </div>
       </div>
       {% if show_task_documents %}

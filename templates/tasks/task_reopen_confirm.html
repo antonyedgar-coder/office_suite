@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load task_labels %}
+{% block title %}Reopen task — CA Office Suite{% endblock %}
+{% block page_title %}Reopen task{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'task_detail' task.pk %}">Back to task</a>
+  </p>
+
+  <div class="card p-3 col-lg-8">
+    <h6 class="mb-3">Reopen completed task</h6>
+    <p class="mb-2">
+      <strong>{{ task.display_title }}</strong> — {{ task.client.client_name }} ({{ task.client_id }})
+    </p>
+    <ul class="small text-secondary mb-3">
+      <li>Current status: <strong>{{ task.get_status_display }}</strong></li>
+      <li>Will return to: <strong>{{ reopen_target_label }}</strong></li>
+      <li>Period: {{ period_label }}</li>
+      {% if task.completed_at %}
+        <li>Marked complete: {{ task.completed_at|date:"d M Y, g:i A" }}</li>
+      {% endif %}
+    </ul>
+    <p class="small mb-3">
+      Use this only when a task was closed by mistake. The same task and period are kept (no duplicate recurring task).
+      Assignees and the document checker will be notified.
+    </p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="id_reason">{{ form.reason.label }}</label>
+        {{ form.reason }}
+        {% if form.reason.errors %}
+          <div class="text-danger small">{{ form.reason.errors }}</div>
+        {% endif %}
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-warning" type="submit" onclick="return confirm('Reopen this task? It will return to {{ reopen_target_label }}.');">
+          Reopen task
+        </button>
+        <a class="btn btn-outline-secondary" href="{% url 'task_detail' task.pk %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

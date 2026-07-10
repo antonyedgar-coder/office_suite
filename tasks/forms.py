@@ -987,6 +987,23 @@ class TaskRemarkForm(forms.Form):
     )
 
 
+class TaskReopenForm(forms.Form):
+    reason = forms.CharField(
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Why is this task being reopened? (required)",
+            }
+        ),
+        required=True,
+        label="Reason",
+        min_length=5,
+        max_length=500,
+        error_messages={"min_length": "Enter at least a short reason (5 characters or more)."},
+    )
+
+
 
 
 

@@ -41,6 +41,7 @@ from tasks.services import (
     cancel_task,
     complete_task,
     create_task_from_master,
+    reopen_task,
     task_team_is_editable,
     update_task_team,
     send_back_for_document_correction,
@@ -1561,3 +1562,114 @@ class TaskCsvImportTests(TestCase):
         self.assertEqual(rows[0].errors, [])
         self.assertEqual(rows[1].errors, [])
         self.assertEqual(rows[0].data["period_key"], rows[1].data["period_key"])
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskReopenTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="admin@example.com",
+            password="pass12345",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.user = User.objects.create_user(email="staff@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="verify@example.com", password="pass12345")
+        self.document_checker = User.objects.create_user(email="docs@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="REOPEN GROUP")
+        self.client = Client.objects.create(
+            client_name="REOPEN CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="ABCDE1234F",
+        )
+        tg = TaskGroup.objects.create(name="GST", sort_order=1)
+        self.master = TaskMaster.objects.create(
+            task_group=tg,
+            name="GSTR-3B",
+            is_recurring=False,
+            requires_verifier=True,
+            requires_document_checker=True,
+        )
+
+    def _complete_full_workflow_task(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.admin,
+            period_key="2026-06",
+            due_date=date(2026, 6, 20),
+            auto_created=True,
+        )
+        submit_task(task, self.user)
+        verify_task(task, self.verifier)
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        return task
+
+    def test_reopen_full_workflow_returns_to_verified(self):
+        task = self._complete_full_workflow_task()
+        reopen_task(task, self.admin, reason="Marked complete by mistake")
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
+        self.assertIsNone(task.completed_at)
+        self.assertIsNone(task.completed_by_id)
+        self.assertTrue(task_team_is_editable(task))
+
+    def test_reopen_requires_reason(self):
+        task = self._complete_full_workflow_task()
+        with self.assertRaises(ValidationError):
+            reopen_task(task, self.admin, reason="")
+
+    def test_reopen_only_from_complete(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.admin,
+            period_key="2026-07",
+            due_date=date(2026, 7, 20),
+            auto_created=True,
+        )
+        with self.assertRaises(ValidationError):
+            reopen_task(task, self.admin, reason="Too early")
+
+    def test_reopen_logs_activity(self):
+        from tasks.models import TaskActivity
+
+        task = self._complete_full_workflow_task()
+        reopen_task(task, self.admin, reason="Accidental complete")
+        act = TaskActivity.objects.filter(task=task, activity_type=TaskActivity.TYPE_STATUS).last()
+        self.assertIn("reopened", act.message.lower())
+        self.assertEqual(act.metadata.get("reason"), "Accidental complete")
+
+    def test_reopen_doc_only_returns_to_submitted(self):
+        master = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="DOC", sort_order=2),
+            name="Doc only",
+            is_recurring=False,
+            requires_verifier=False,
+            requires_document_checker=True,
+        )
+        task = create_task_from_master(
+            master=master,
+            client=self.client,
+            assignee_users=[self.user],
+            document_checker=self.document_checker,
+            created_by=self.admin,
+            period_key="2026-08",
+            due_date=date(2026, 8, 20),
+            auto_created=True,
+        )
+        submit_task(task, self.user)
+        complete_task(task, self.document_checker)
+        reopen_task(task, self.admin, reason="Not finished")
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_SUBMITTED)

@@ -619,6 +619,66 @@ def approve_task(task: Task, user, message: str = "") -> Task:
 
 
 @transaction.atomic
+def reopen_task(task: Task, user, *, reason: str) -> Task:
+    """Reopen a completed task for continued work (admin-only permission)."""
+    from .workflow import reopen_target_status
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError("Enter a reason for reopening this task.")
+    if task.status != Task.STATUS_COMPLETE:
+        raise ValidationError("Only completed tasks can be reopened.")
+
+    target = reopen_target_status(task)
+    old = task.status
+    task.status = target
+    task.completed_at = None
+    task.completed_by = None
+    task.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+    _log_activity(
+        task,
+        user,
+        TaskActivity.TYPE_STATUS,
+        message=f"Task reopened: {reason}",
+        old_status=old,
+        new_status=target,
+        metadata={"reopened": True, "reason": reason},
+    )
+
+    if not hasattr(task, "client") or not hasattr(task, "task_master"):
+        task = Task.objects.select_related("client", "task_master", "document_checker").get(pk=task.pk)
+
+    client_suffix = format_task_client_suffix(task)
+    task_link = f"/tasks/{task.pk}/"
+    for a in task.assignments.select_related("user"):
+        notify_user(
+            a.user,
+            f"Task reopened: {task.display_title} — {client_suffix}",
+            kind=TaskNotification.KIND_GENERAL,
+            link=task_link,
+            task=task,
+        )
+    if target == Task.STATUS_VERIFIED and task.document_checker_id:
+        notify_user(
+            task.document_checker,
+            f"Document check required again (reopened): {task.display_title} — {client_suffix}",
+            kind=TaskNotification.KIND_DOCUMENT_CHECK,
+            link=task_link,
+            task=task,
+        )
+    elif target == Task.STATUS_SUBMITTED and task.requires_verifier:
+        from .verifiers import notify_task_verifiers
+
+        notify_task_verifiers(
+            task,
+            message=f"Verification required again (reopened): {task.display_title} — {client_suffix}",
+            kind=TaskNotification.KIND_VERIFY,
+            link=task_link,
+        )
+    return task
+
+
+@transaction.atomic
 def cancel_task(task: Task, user, message: str = "") -> Task:
     """Cancel task and stop recurring enrollment so no further auto-tasks are created."""
     transition_task_status(

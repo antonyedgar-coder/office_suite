@@ -63,6 +63,7 @@ urlpatterns = [
     path("notifications/", views.notification_list, name="notification_list"),
     path("notifications/<int:pk>/read/", views.notification_mark_read, name="notification_mark_read"),
     path("<int:pk>/edit/", views.task_edit, name="task_edit"),
+    path("<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
 ]
 
 if documents_module_enabled():
