@@ -23,9 +23,9 @@ User = get_user_model()
 @dataclass
 class TaskListFilters:
     status: str = ""
-    client_id: str = ""
-    master_id: str = ""
-    assignee_id: str = ""
+    client_ids: tuple[str, ...] = ()
+    master_ids: tuple[str, ...] = ()
+    assignee_ids: tuple[str, ...] = ()
     verifier_id: str = ""
     document_checker_id: str = ""
     created_preset: str = "all_time"
@@ -38,6 +38,19 @@ class TaskListFilters:
     approved_from: str = ""
     approved_to: str = ""
 
+    @property
+    def client_id(self) -> str:
+        """Comma-joined IDs for form hidden fields / templates."""
+        return ",".join(self.client_ids)
+
+    @property
+    def master_id(self) -> str:
+        return ",".join(self.master_ids)
+
+    @property
+    def assignee_id(self) -> str:
+        return ",".join(self.assignee_ids)
+
 
 def _parse_preset_block(request, prefix: str) -> tuple[str, str, str]:
     preset = (request.GET.get(f"{prefix}_preset") or "all_time").strip()
@@ -49,6 +62,19 @@ def _parse_preset_block(request, prefix: str) -> tuple[str, str, str]:
     return preset, raw_from, raw_to
 
 
+def _parse_multi_ids(request, param: str) -> tuple[str, ...]:
+    """Accept repeated GET keys and/or comma-separated values."""
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw in request.GET.getlist(param):
+        for part in str(raw or "").replace(" ", "").split(","):
+            part = part.strip()
+            if part and part not in seen:
+                seen.add(part)
+                values.append(part)
+    return tuple(values)
+
+
 def parse_task_list_filters(request) -> TaskListFilters:
     c_preset, c_from, c_to = _parse_preset_block(request, "created")
     d_preset, d_from, d_to = _parse_preset_block(request, "due")
@@ -56,9 +82,9 @@ def parse_task_list_filters(request) -> TaskListFilters:
     g = request.GET
     return TaskListFilters(
         status=(g.get("status") or "").strip(),
-        client_id=(g.get("client") or "").strip(),
-        master_id=(g.get("master") or "").strip(),
-        assignee_id=(g.get("assignee") or "").strip(),
+        client_ids=_parse_multi_ids(request, "client"),
+        master_ids=_parse_multi_ids(request, "master"),
+        assignee_ids=_parse_multi_ids(request, "assignee"),
         verifier_id=(g.get("verifier") or "").strip(),
         document_checker_id=(g.get("document_checker") or "").strip(),
         created_preset=c_preset,
@@ -102,12 +128,12 @@ def tasks_queryset_personal_for_user(user):
 def apply_task_list_filters(qs, filters: TaskListFilters):
     if filters.status:
         qs = qs.filter(status=filters.status)
-    if filters.client_id:
-        qs = qs.filter(client_id=filters.client_id)
-    if filters.master_id:
-        qs = qs.filter(task_master_id=filters.master_id)
-    if filters.assignee_id:
-        qs = qs.filter(assignments__user_id=filters.assignee_id)
+    if filters.client_ids:
+        qs = qs.filter(client_id__in=filters.client_ids)
+    if filters.master_ids:
+        qs = qs.filter(task_master_id__in=filters.master_ids)
+    if filters.assignee_ids:
+        qs = qs.filter(assignments__user_id__in=filters.assignee_ids)
     if filters.verifier_id:
         qs = qs.filter(verifiers__id=filters.verifier_id)
     if filters.document_checker_id:
@@ -211,12 +237,30 @@ def prepare_task_list_rows(tasks, *, include_assignees: bool = False) -> list[Ta
 
 
 def filter_context(user, filters: TaskListFilters) -> dict:
+    masters = list(TaskMaster.selectable_for_new_tasks())
+    clients = list(approved_clients_for_user(user).order_by("client_name"))
     return {
         "filters": filters,
         "status_choices": Task.STATUS_CHOICES,
         "date_preset_choices": DATE_PRESET_CHOICES,
-        "clients": approved_clients_for_user(user).order_by("client_name"),
-        "masters": TaskMaster.selectable_for_new_tasks(),
+        "clients": clients,
+        "masters": masters,
+        "client_filter_options": [
+            {
+                "id": c.client_id,
+                "label": f"{c.client_name} — {c.pan.upper()}" if c.pan else c.client_name,
+                "search": f"{c.client_name} {c.pan or ''} {c.client_id}".lower(),
+            }
+            for c in clients
+        ],
+        "master_filter_options": [
+            {
+                "id": m.pk,
+                "label": f"{m.task_group.name} — {m.name}",
+                "search": f"{m.task_group.name} {m.name}".lower(),
+            }
+            for m in masters
+        ],
         "staff_users": staff_users_queryset(),
         "staff_user_options": [
             {
@@ -271,12 +315,12 @@ def filters_query_string(filters: TaskListFilters) -> str:
     params = {}
     if filters.status:
         params["status"] = filters.status
-    if filters.client_id:
-        params["client"] = filters.client_id
-    if filters.master_id:
-        params["master"] = filters.master_id
-    if filters.assignee_id:
-        params["assignee"] = filters.assignee_id
+    if filters.client_ids:
+        params["client"] = ",".join(filters.client_ids)
+    if filters.master_ids:
+        params["master"] = ",".join(filters.master_ids)
+    if filters.assignee_ids:
+        params["assignee"] = ",".join(filters.assignee_ids)
     if filters.verifier_id:
         params["verifier"] = filters.verifier_id
     if filters.document_checker_id:

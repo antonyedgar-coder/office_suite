@@ -21,6 +21,39 @@
       border-bottom: 1px solid #e8eaf1;
     }
     .task-list-filters .task-suggest-item:hover { background: #eef2ff; }
+    .task-list-filters .task-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .task-list-filters .task-filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      max-width: 100%;
+      padding: 0.15rem 0.4rem 0.15rem 0.55rem;
+      border-radius: 999px;
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      font-size: 0.75rem;
+      line-height: 1.2;
+      color: #1e3a8a;
+    }
+    .task-list-filters .task-filter-chip-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 14rem;
+    }
+    .task-list-filters .task-filter-chip-remove {
+      border: 0;
+      background: transparent;
+      color: #4338ca;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0 0.1rem;
+      cursor: pointer;
+    }
   </style>
 {% endblock %}
 {% block extra_js %}

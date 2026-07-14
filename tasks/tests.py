@@ -1565,6 +1565,116 @@ class TaskCsvImportTests(TestCase):
 
 
 @modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskListMultiFilterTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="staff@example.com", password="pass12345")
+        self.user2 = User.objects.create_user(email="staff2@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="v@example.com", password="pass12345")
+        self.doc = User.objects.create_user(email="d@example.com", password="pass12345")
+        grp = ClientGroup.objects.create(name="MF GROUP")
+        self.client_a = Client.objects.create(
+            client_name="Client A",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="AAAAA1111A",
+        )
+        self.client_b = Client.objects.create(
+            client_name="Client B",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="BBBBB2222B",
+        )
+        tg = TaskGroup.objects.create(name="GST", sort_order=1)
+        self.master_a = TaskMaster.objects.create(task_group=tg, name="GST Monthly Filing", is_recurring=False)
+        self.master_b = TaskMaster.objects.create(task_group=tg, name="GST Other Filing", is_recurring=False)
+
+    def test_parse_multi_client_master_assignee(self):
+        from django.test import RequestFactory
+        from tasks.listing import parse_task_list_filters
+
+        rf = RequestFactory()
+        req = rf.get(
+            "/tasks/",
+            {
+                "client": f"{self.client_a.client_id},{self.client_b.client_id}",
+                "master": f"{self.master_a.pk},{self.master_b.pk}",
+                "assignee": f"{self.user.pk},{self.user2.pk}",
+            },
+        )
+        filters = parse_task_list_filters(req)
+        self.assertEqual(filters.client_ids, (self.client_a.client_id, self.client_b.client_id))
+        self.assertEqual(filters.master_ids, (str(self.master_a.pk), str(self.master_b.pk)))
+        self.assertEqual(filters.assignee_ids, (str(self.user.pk), str(self.user2.pk)))
+
+    def test_apply_multi_master_filter(self):
+        from tasks.listing import TaskListFilters, apply_task_list_filters, tasks_queryset_for_user
+        from tasks.services import create_task_from_master
+
+        t1 = create_task_from_master(
+            master=self.master_a,
+            client=self.client_a,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-05",
+            due_date=date(2026, 5, 20),
+            auto_created=True,
+        )
+        create_task_from_master(
+            master=self.master_b,
+            client=self.client_b,
+            assignee_users=[self.user2],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-05",
+            due_date=date(2026, 5, 20),
+            auto_created=True,
+        )
+        create_task_from_master(
+            master=self.master_a,
+            client=self.client_b,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-06",
+            due_date=date(2026, 6, 20),
+            auto_created=True,
+        )
+        # third master not selected — add one-off so we prove filter excludes others
+        other = TaskMaster.objects.create(
+            task_group=TaskGroup.objects.create(name="ROC", sort_order=2),
+            name="ROC Filing",
+            is_recurring=False,
+        )
+        create_task_from_master(
+            master=other,
+            client=self.client_a,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-05",
+            due_date=date(2026, 5, 20),
+            auto_created=True,
+        )
+        filters = TaskListFilters(
+            master_ids=(str(self.master_a.pk), str(self.master_b.pk)),
+        )
+        qs = apply_task_list_filters(tasks_queryset_for_user(self.user), filters)
+        master_ids = set(qs.values_list("task_master_id", flat=True))
+        self.assertEqual(master_ids, {self.master_a.pk, self.master_b.pk})
+        self.assertEqual(qs.count(), 3)
+        self.assertTrue(qs.filter(pk=t1.pk).exists())
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
 class TaskReopenTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(

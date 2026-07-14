@@ -1,373 +1,152 @@
 <form method="get" class="row g-2 align-items-end" id="taskListFiltersForm">
-
   <div class="col-12 col-md-6 col-lg-3">
-
     <label class="form-label small text-secondary mb-0">Status</label>
-
     <select name="status" class="form-select form-select-sm">
-
       <option value="">All statuses</option>
-
       {% for val, label in status_choices %}
-
         <option value="{{ val }}" {% if filters.status == val %}selected{% endif %}>{{ label }}</option>
-
       {% endfor %}
-
     </select>
-
   </div>
 
-  <div class="col-12 col-md-6 col-lg-3">
-
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
     <label class="form-label small text-secondary mb-0" for="taskFilterClientSearch">Client</label>
-
     <input
-
       type="text"
-
       class="form-control form-control-sm"
-
       id="taskFilterClientSearch"
-
-      list="taskFilterClientList"
-
-      placeholder="Type name or PAN…"
-
+      placeholder="Type to add clients…"
       autocomplete="off"
-
-      value=""
-
     />
-
+    <div id="taskFilterClientSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+    <div id="taskFilterClientChips" class="task-filter-chips mt-1"></div>
     <input type="hidden" name="client" id="taskFilterClientValue" value="{{ filters.client_id }}" />
-
-    <datalist id="taskFilterClientList"></datalist>
-
-  </div>
-
-  <div class="col-12 col-md-6 col-lg-3">
-
-    <label class="form-label small text-secondary mb-0">Type of task</label>
-
-    <select name="master" class="form-select form-select-sm">
-
-      <option value="">All task types</option>
-
-      {% for m in masters %}
-
-        <option value="{{ m.pk }}" {% if filters.master_id == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.task_group.name }} — {{ m.name }}</option>
-
-      {% endfor %}
-
-    </select>
-
   </div>
 
   <div class="col-12 col-md-6 col-lg-3 field-wrap">
+    <label class="form-label small text-secondary mb-0" for="taskFilterMasterSearch">Type of task</label>
+    <input
+      type="text"
+      class="form-control form-control-sm"
+      id="taskFilterMasterSearch"
+      placeholder="Type to add task types…"
+      autocomplete="off"
+    />
+    <div id="taskFilterMasterSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+    <div id="taskFilterMasterChips" class="task-filter-chips mt-1"></div>
+    <input type="hidden" name="master" id="taskFilterMasterValue" value="{{ filters.master_id }}" />
+  </div>
 
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
     <label class="form-label small text-secondary mb-0" for="taskFilterAssigneeSearch">Users</label>
-
     <input
-
       type="text"
-
       class="form-control form-control-sm"
-
       id="taskFilterAssigneeSearch"
-
-      placeholder="Type to search…"
-
+      placeholder="Type to add users…"
       autocomplete="off"
-
     />
-
     <div id="taskFilterAssigneeSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
-
+    <div id="taskFilterAssigneeChips" class="task-filter-chips mt-1"></div>
     <input type="hidden" name="assignee" id="taskFilterAssigneeValue" value="{{ filters.assignee_id }}" />
-
   </div>
 
   <div class="col-12 col-md-6 col-lg-3 field-wrap">
-
     <label class="form-label small text-secondary mb-0" for="taskFilterVerifierSearch">Verifier</label>
-
     <input
-
       type="text"
-
       class="form-control form-control-sm"
-
       id="taskFilterVerifierSearch"
-
       placeholder="Type to search…"
-
       autocomplete="off"
-
     />
-
     <div id="taskFilterVerifierSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
-
     <input type="hidden" name="verifier" id="taskFilterVerifierValue" value="{{ filters.verifier_id }}" />
-
   </div>
 
   <div class="col-12 col-md-6 col-lg-3 field-wrap">
-
     <label class="form-label small text-secondary mb-0" for="taskFilterDocCheckerSearch">Document checker</label>
-
     <input
-
       type="text"
-
       class="form-control form-control-sm"
-
       id="taskFilterDocCheckerSearch"
-
       placeholder="Type to search…"
-
       autocomplete="off"
-
     />
-
     <div id="taskFilterDocCheckerSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
-
     <input type="hidden" name="document_checker" id="taskFilterDocCheckerValue" value="{{ filters.document_checker_id }}" />
-
   </div>
-
-
 
   {% include "tasks/includes/task_date_range_field.html" with prefix="created" label="Task created" preset=filters.created_preset from_name="created_from" to_name="created_to" from_value=filters.created_from to_value=filters.created_to display_id="taskCreatedRangeDisplay" %}
-
   {% include "tasks/includes/task_date_range_field.html" with prefix="due" label="Due date" preset=filters.due_preset from_name="due_from" to_name="due_to" from_value=filters.due_from to_value=filters.due_to display_id="taskDueRangeDisplay" %}
-
   {% include "tasks/includes/task_date_range_field.html" with prefix="approved" label="Verified date" preset=filters.approved_preset from_name="approved_from" to_name="approved_to" from_value=filters.approved_from to_value=filters.approved_to display_id="taskApprovedRangeDisplay" %}
 
-
-
   <div class="col-12 col-md-auto d-flex flex-wrap gap-2 align-items-center">
-
     <button class="btn btn-outline-secondary btn-sm" type="submit">Apply filters</button>
-
     <a class="btn btn-outline-secondary btn-sm" href="{{ request.path }}">Clear</a>
-
     {% if csv_export_url %}
-
       <a class="btn btn-outline-primary btn-sm" href="{{ csv_export_url }}">Download CSV</a>
-
     {% endif %}
-
     {% if show_new_task and perms.tasks.add_task %}
-
       <a class="btn btn-primary btn-sm" href="{% url 'task_create' %}">New task</a>
-
     {% endif %}
-
   </div>
-
 </form>
 
-
-
+{{ client_filter_options|json_script:"task-filter-clients" }}
+{{ master_filter_options|json_script:"task-filter-masters" }}
 {{ staff_user_options|json_script:"task-filter-staff-users" }}
-
 {% load static %}
-
 <script src="{% static 'js/task_user_single_picker.js' %}"></script>
-
+<script src="{% static 'js/task_filter_multi_picker.js' %}"></script>
 <script>
-
   (function () {
-
-    var clientOptions = [
-
-      {% for c in clients %}
-
-      {
-
-        id: "{{ c.client_id|escapejs }}",
-
-        label: "{% if c.pan %}{{ c.client_name|escapejs }} — {{ c.pan|upper|escapejs }}{% else %}{{ c.client_name|escapejs }}{% endif %}"
-
-      }{% if not forloop.last %},{% endif %}
-
-      {% endfor %}
-
-    ];
-
+    var clientOptions = JSON.parse(document.getElementById("task-filter-clients").textContent || "[]");
+    var masterOptions = JSON.parse(document.getElementById("task-filter-masters").textContent || "[]");
     var staffUserOptions = JSON.parse(document.getElementById("task-filter-staff-users").textContent || "[]");
 
-
-
-    function renderDatalist(listEl, options, query) {
-
-      if (!listEl) return;
-
-      listEl.innerHTML = "";
-
-      var qq = (query || "").toLowerCase().trim();
-
-      var shown = 0;
-
-      for (var i = 0; i < options.length; i++) {
-
-        var o = options[i];
-
-        var t = (o.label || "").toLowerCase();
-
-        if (!qq || t.indexOf(qq) !== -1) {
-
-          var opt = document.createElement("option");
-
-          opt.value = o.label;
-
-          listEl.appendChild(opt);
-
-          shown++;
-
-          if (shown >= 50) break;
-
-        }
-
-      }
-
-    }
-
-
-
-    function bindSearchableFilter(searchId, hiddenId, listId, options) {
-
-      var search = document.getElementById(searchId);
-
-      var hidden = document.getElementById(hiddenId);
-
-      var list = document.getElementById(listId);
-
-      if (!search || !hidden || !list) return;
-
-
-
-      function syncFromHidden() {
-
-        if (!hidden.value) {
-
-          search.value = "";
-
-          return;
-
-        }
-
-        for (var i = 0; i < options.length; i++) {
-
-          if (String(options[i].id) === String(hidden.value)) {
-
-            search.value = options[i].label;
-
-            break;
-
-          }
-
-        }
-
-      }
-
-
-
-      function syncFromLabel() {
-
-        var v = (search.value || "").trim();
-
-        var match = null;
-
-        for (var j = 0; j < options.length; j++) {
-
-          if (options[j].label === v) {
-
-            match = options[j];
-
-            break;
-
-          }
-
-        }
-
-        hidden.value = match ? match.id : "";
-
-      }
-
-
-
-      syncFromHidden();
-
-      renderDatalist(list, options, "");
-
-      search.addEventListener("input", function () {
-
-        hidden.value = "";
-
-        renderDatalist(list, options, search.value);
-
+    if (window.initTaskFilterMultiPicker) {
+      window.initTaskFilterMultiPicker({
+        searchId: "taskFilterClientSearch",
+        suggestId: "taskFilterClientSuggestions",
+        chipsId: "taskFilterClientChips",
+        hiddenId: "taskFilterClientValue",
+        options: clientOptions,
+        minChars: 0,
       });
-
-      search.addEventListener("change", syncFromLabel);
-
-      search.addEventListener("blur", syncFromLabel);
-
+      window.initTaskFilterMultiPicker({
+        searchId: "taskFilterMasterSearch",
+        suggestId: "taskFilterMasterSuggestions",
+        chipsId: "taskFilterMasterChips",
+        hiddenId: "taskFilterMasterValue",
+        options: masterOptions,
+        minChars: 0,
+      });
+      window.initTaskFilterMultiPicker({
+        searchId: "taskFilterAssigneeSearch",
+        suggestId: "taskFilterAssigneeSuggestions",
+        chipsId: "taskFilterAssigneeChips",
+        hiddenId: "taskFilterAssigneeValue",
+        options: staffUserOptions,
+        minChars: 1,
+      });
     }
-
-
-
-    bindSearchableFilter("taskFilterClientSearch", "taskFilterClientValue", "taskFilterClientList", clientOptions);
-
-
 
     if (window.initTaskUserSinglePicker) {
-
       window.initTaskUserSinglePicker({
-
-        searchId: "taskFilterAssigneeSearch",
-
-        suggestId: "taskFilterAssigneeSuggestions",
-
-        hiddenId: "taskFilterAssigneeValue",
-
-        options: staffUserOptions,
-
-        minChars: 1,
-
-      });
-
-      window.initTaskUserSinglePicker({
-
         searchId: "taskFilterVerifierSearch",
-
         suggestId: "taskFilterVerifierSuggestions",
-
         hiddenId: "taskFilterVerifierValue",
-
         options: staffUserOptions,
-
         minChars: 1,
-
       });
-
       window.initTaskUserSinglePicker({
-
         searchId: "taskFilterDocCheckerSearch",
-
         suggestId: "taskFilterDocCheckerSuggestions",
-
         hiddenId: "taskFilterDocCheckerValue",
-
         options: staffUserOptions,
-
         minChars: 1,
-
       });
-
     }
-
   })();
-
 </script>
