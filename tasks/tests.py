@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group
 from django.test import TestCase, modify_settings
+from django.urls import reverse
 
 from core.models import Employee
 from masters.models import Client, ClientActivityLog, ClientGroup
@@ -1783,3 +1784,112 @@ class TaskReopenTests(TestCase):
         reopen_task(task, self.admin, reason="Not finished")
         task.refresh_from_db()
         self.assertEqual(task.status, Task.STATUS_SUBMITTED)
+
+
+class TaskVerifyAfterVerifierChangeTests(TestCase):
+    def setUp(self):
+        self.assignee = User.objects.create_user(email="va@example.com", password="pass12345")
+        self.old_verifier = User.objects.create_user(email="vold@example.com", password="pass12345")
+        self.new_verifier = User.objects.create_user(email="vnew@example.com", password="pass12345")
+        self.doc = User.objects.create_user(email="vd@example.com", password="pass12345")
+        self.admin = User.objects.create_user(
+            email="vadmin@example.com",
+            password="pass12345",
+            is_staff=True,
+            is_superuser=True,
+        )
+        from django.contrib.auth.models import Permission
+
+        verify_perm = Permission.objects.get(codename="verify_task", content_type__app_label="tasks")
+        self.new_verifier.user_permissions.add(verify_perm)
+        self.old_verifier.user_permissions.add(verify_perm)
+        grp = ClientGroup.objects.create(name="VERIFY CHG GROUP")
+        self.client_row = Client.objects.create(
+            client_name="VERIFY CHG CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="ABCDE9999Z",
+        )
+        tg = TaskGroup.objects.create(name="GST", sort_order=1)
+        self.master = TaskMaster.objects.create(
+            task_group=tg,
+            name="GSTR-1",
+            is_recurring=False,
+            requires_verifier=True,
+            requires_document_checker=True,
+        )
+
+    def test_new_verifier_can_verify_after_team_change(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client_row,
+            assignee_users=[self.assignee],
+            verifier=self.old_verifier,
+            document_checker=self.doc,
+            created_by=self.admin,
+            period_key="2026-06",
+            due_date=date(2026, 6, 15),
+            auto_created=True,
+        )
+        submit_task(task, self.assignee)
+        update_task_team(
+            task,
+            assignee_users=[self.assignee],
+            verifier=self.new_verifier,
+            document_checker=self.doc,
+            due_date=task.due_date,
+            priority=task.priority,
+            actor=self.admin,
+        )
+        http = self.client
+        self.assertTrue(http.login(email="vnew@example.com", password="pass12345"))
+        url = reverse("task_verify_approve", args=[task.pk])
+        response = http.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("task_verify_queue"))
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
+        self.assertEqual(task.approved_by_id, self.new_verifier.pk)
+
+    def test_superuser_not_on_m2m_can_verify(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client_row,
+            assignee_users=[self.assignee],
+            verifier=self.old_verifier,
+            document_checker=self.doc,
+            created_by=self.admin,
+            period_key="2026-07",
+            due_date=date(2026, 7, 15),
+            auto_created=True,
+        )
+        submit_task(task, self.assignee)
+        http = self.client
+        self.assertTrue(http.login(email="vadmin@example.com", password="pass12345"))
+        response = http.post(reverse("task_verify_approve", args=[task.pk]))
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_VERIFIED)
+
+    def test_second_verify_click_does_not_404(self):
+        task = create_task_from_master(
+            master=self.master,
+            client=self.client_row,
+            assignee_users=[self.assignee],
+            verifier=self.new_verifier,
+            document_checker=self.doc,
+            created_by=self.admin,
+            period_key="2026-08",
+            due_date=date(2026, 8, 15),
+            auto_created=True,
+        )
+        submit_task(task, self.assignee)
+        http = self.client
+        self.assertTrue(http.login(email="vnew@example.com", password="pass12345"))
+        url = reverse("task_verify_approve", args=[task.pk])
+        self.assertEqual(http.post(url).status_code, 302)
+        response = http.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("task_detail", args=[task.pk]))

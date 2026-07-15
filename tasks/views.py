@@ -1132,11 +1132,26 @@ def task_detail(request, pk: int):
             )
         )
     )
-    can_verify = task.requires_verifier and is_verifier and task.status == Task.STATUS_SUBMITTED
-    can_verify_rework = allows_verifier_rework(task) and is_verifier and task.status == Task.STATUS_SUBMITTED
+    can_act_as_verifier = request.user.is_superuser or request.user.has_perm("tasks.verify_task")
+    can_verify = (
+        task.requires_verifier
+        and is_verifier
+        and can_act_as_verifier
+        and task.status == Task.STATUS_SUBMITTED
+    )
+    can_verify_rework = (
+        allows_verifier_rework(task)
+        and is_verifier
+        and can_act_as_verifier
+        and task.status == Task.STATUS_SUBMITTED
+    )
     can_complete_documents = (
         task.requires_document_checker
         and (is_document_checker or request.user.is_superuser)
+        and (
+            request.user.is_superuser
+            or request.user.has_perm("tasks.check_documents")
+        )
         and task.status in document_check_statuses(task)
     )
     can_send_back_documents = can_complete_documents and allows_document_rework(task)
@@ -1434,15 +1449,23 @@ def task_assignment_approve(request, pk: int):
     return redirect("task_my_list")
 
 
+def _task_for_verify_action(user, pk: int) -> Task:
+    """Load a task the user may verify. Superusers can act without being on the M2M."""
+    from .verifiers import user_is_task_verifier
+
+    task = get_object_or_404(tasks_for_user(user), pk=pk)
+    if not user_is_task_verifier(user, task):
+        raise PermissionDenied
+    return task
+
+
 @require_perm("tasks.verify_task")
 @require_POST
 def task_verify_approve(request, pk: int):
-    task = get_object_or_404(
-        tasks_for_user(request.user).filter(verifiers=request.user),
-        pk=pk,
-    )
+    task = _task_for_verify_action(request.user, pk)
     if task.status != Task.STATUS_SUBMITTED:
-        raise Http404
+        messages.error(request, "This task is not awaiting verification.")
+        return redirect("task_detail", pk=pk)
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""
     from .workflow import verify_completes_task
@@ -1483,21 +1506,25 @@ def task_document_check_queue(request):
     return render(request, "tasks/task_document_check_queue.html", ctx)
 
 
+def _task_for_document_check_action(user, pk: int) -> Task:
+    task = get_object_or_404(
+        tasks_for_user(user).filter(requires_document_checker=True),
+        pk=pk,
+    )
+    if task.document_checker_id != user.pk and not user.is_superuser:
+        raise PermissionDenied
+    return task
+
+
 @require_perm("tasks.check_documents")
 @require_POST
 def task_document_check_complete(request, pk: int):
-    task = get_object_or_404(
-        tasks_for_user(request.user)
-        .filter(
-            document_checker=request.user,
-            requires_document_checker=True,
-        )
-        .filter(
-            Q(status=Task.STATUS_VERIFIED, requires_verifier=True)
-            | Q(status=Task.STATUS_SUBMITTED, requires_verifier=False)
-        ),
-        pk=pk,
-    )
+    from .workflow import document_check_statuses
+
+    task = _task_for_document_check_action(request.user, pk)
+    if task.status not in document_check_statuses(task):
+        messages.error(request, "This task is not awaiting document check.")
+        return redirect("task_detail", pk=pk)
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""
     try:
@@ -1512,15 +1539,10 @@ def task_document_check_complete(request, pk: int):
 @require_perm("tasks.check_documents")
 @require_POST
 def task_document_check_send_back(request, pk: int):
-    task = get_object_or_404(
-        tasks_for_user(request.user).filter(
-            status=Task.STATUS_VERIFIED,
-            requires_document_checker=True,
-            requires_verifier=True,
-            document_checker=request.user,
-        ),
-        pk=pk,
-    )
+    task = _task_for_document_check_action(request.user, pk)
+    if task.status != Task.STATUS_VERIFIED or not task.requires_verifier:
+        messages.error(request, "This task cannot be sent back for document correction.")
+        return redirect("task_detail", pk=pk)
     try:
         send_back_for_document_correction(task, request.user)
     except ValidationError as exc:
@@ -1533,13 +1555,17 @@ def task_document_check_send_back(request, pk: int):
 @require_perm("tasks.verify_task")
 @require_POST
 def task_verify_rework(request, pk: int):
-    task = get_object_or_404(
-        tasks_for_user(request.user).filter(status=Task.STATUS_SUBMITTED, verifiers=request.user),
-        pk=pk,
-    )
+    task = _task_for_verify_action(request.user, pk)
+    if task.status != Task.STATUS_SUBMITTED:
+        messages.error(request, "This task is not awaiting verification.")
+        return redirect("task_detail", pk=pk)
     form = TaskVerifyForm(request.POST)
     message = form.cleaned_data["message"] if form.is_valid() else ""
-    rework_task(task, request.user, message=message)
+    try:
+        rework_task(task, request.user, message=message)
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0] if exc.messages else str(exc))
+        return redirect("task_detail", pk=pk)
     messages.success(request, "Task sent for rework.")
     return redirect("task_verify_queue")
 
