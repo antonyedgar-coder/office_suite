@@ -49,8 +49,17 @@
   <body{% if request.user.is_authenticated %} data-nav-counts-url="{% url 'nav_counts_api' %}"{% endif %}>
 
     <div class="d-flex app-shell" id="app-shell">
+      <script>
+        (function () {
+          try {
+            if (localStorage.getItem("caSuite.sidebarCollapsed") === "1") {
+              document.getElementById("app-shell").classList.add("sidebar-collapsed");
+            }
+          } catch (e) {}
+        })();
+      </script>
 
-      <aside class="sidebar d-none d-md-block p-3 d-flex flex-column">
+      <aside class="sidebar d-none d-md-flex p-3 flex-column" id="app-sidebar" aria-label="Main menu">
 
         <div class="mb-3 flex-shrink-0 sidebar-brand">
 
@@ -71,6 +80,18 @@
           {% include "includes/app_sidebar_footer.html" %}
 
         </nav>
+
+        <button
+          type="button"
+          class="sidebar-collapse-toggle"
+          id="sidebarCollapseToggle"
+          aria-controls="app-sidebar"
+          aria-expanded="true"
+          aria-label="Collapse sidebar"
+          title="Collapse sidebar"
+        >
+          <i class="bi bi-chevron-left" aria-hidden="true"></i>
+        </button>
 
       </aside>
 

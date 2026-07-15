@@ -124,6 +124,21 @@
         var item = btn.closest(".nav-accordion-item");
         var panel = item && item.querySelector(".nav-accordion-panel");
         if (!item || !panel) return;
+
+        var shell = document.getElementById("app-shell");
+        var collapseToggle = document.getElementById("sidebarCollapseToggle");
+        // Icons-only rail hides submenus; expand first and open this section.
+        if (shell && shell.classList.contains("sidebar-collapsed") && collapseToggle) {
+          setSidebarCollapsed(shell, collapseToggle, false);
+          closeAllAccordionItems(root, item);
+          setAccordionOpen(item, true);
+          saved = {};
+          var openSection = item.getAttribute("data-nav-section");
+          if (openSection) saved[openSection] = true;
+          writeNavSections(saved);
+          return;
+        }
+
         var open = item.classList.contains("is-open");
         if (open) {
           setAccordionOpen(item, false);
@@ -142,25 +157,42 @@
     writeNavSections(saved);
   }
 
+  function syncCollapsedNavTitles(shell, collapsed) {
+    if (!shell) return;
+    shell.querySelectorAll(".sidebar .nav-link, .sidebar .nav-accordion-toggle").forEach(function (el) {
+      var span = el.querySelector("span");
+      var label = span ? (span.textContent || "").trim() : "";
+      if (collapsed && label) {
+        el.setAttribute("title", label);
+      } else if (!el.getAttribute("data-keep-title")) {
+        el.removeAttribute("title");
+      }
+    });
+  }
+
+  function setSidebarCollapsed(shell, toggle, collapsed) {
+    shell.classList.toggle("sidebar-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    toggle.setAttribute("title", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    syncCollapsedNavTitles(shell, collapsed);
+    try {
+      localStorage.setItem(STORAGE_COLLAPSED, collapsed ? "1" : "0");
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   function initSidebarCollapse() {
     var shell = document.getElementById("app-shell");
     var toggle = document.getElementById("sidebarCollapseToggle");
     if (!shell || !toggle) return;
 
-    function apply(collapsed) {
-      shell.classList.toggle("sidebar-collapsed", collapsed);
-      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
-      toggle.setAttribute("title", collapsed ? "Expand sidebar" : "Collapse sidebar");
-    }
-
-    var collapsed = localStorage.getItem(STORAGE_COLLAPSED) === "1";
-    apply(collapsed);
+    var collapsed = shell.classList.contains("sidebar-collapsed") || localStorage.getItem(STORAGE_COLLAPSED) === "1";
+    setSidebarCollapsed(shell, toggle, collapsed);
 
     toggle.addEventListener("click", function () {
-      collapsed = !shell.classList.contains("sidebar-collapsed");
-      apply(collapsed);
-      localStorage.setItem(STORAGE_COLLAPSED, collapsed ? "1" : "0");
+      setSidebarCollapsed(shell, toggle, !shell.classList.contains("sidebar-collapsed"));
     });
   }
 
