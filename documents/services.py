@@ -397,6 +397,7 @@ def default_document_type_for_folder(folder: ClientDocumentFolder) -> DocumentTy
     )
 
 
+@transaction.atomic
 def save_client_document(
     *,
     client: Client,

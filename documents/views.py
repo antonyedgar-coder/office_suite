@@ -630,12 +630,16 @@ def client_document_upload(request, client_id: str):
                 import logging
 
                 logging.getLogger(__name__).exception("Client document upload failed")
-                form.add_error(
-                    None,
-                    str(exc)
-                    if settings.DEBUG
-                    else "Upload failed. Cloud storage may be misconfigured — contact support.",
-                )
+                storage = getattr(settings, "DOCUMENT_STORAGE", "local")
+                if settings.DEBUG:
+                    msg = str(exc)
+                elif storage == "spaces" and "storage" in str(exc).lower():
+                    msg = (
+                        "Upload failed. Cloud storage may be misconfigured — contact support."
+                    )
+                else:
+                    msg = "Upload failed. Please try again or contact support."
+                form.add_error(None, msg)
             else:
                 messages.success(request, "File uploaded.")
                 return redirect("document_file_list")
