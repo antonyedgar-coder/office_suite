@@ -20,9 +20,12 @@ from .user_labels import build_short_codes_for_users, staff_users_queryset, user
 User = get_user_model()
 
 
+_VALID_STATUSES = frozenset(code for code, _label in Task.STATUS_CHOICES)
+
+
 @dataclass
 class TaskListFilters:
-    status: str = ""
+    statuses: tuple[str, ...] = ()
     client_ids: tuple[str, ...] = ()
     master_ids: tuple[str, ...] = ()
     assignee_ids: tuple[str, ...] = ()
@@ -37,6 +40,11 @@ class TaskListFilters:
     approved_preset: str = "all_time"
     approved_from: str = ""
     approved_to: str = ""
+
+    @property
+    def status(self) -> str:
+        """Comma-joined status codes for form hidden fields / query strings."""
+        return ",".join(self.statuses)
 
     @property
     def client_id(self) -> str:
@@ -80,8 +88,9 @@ def parse_task_list_filters(request) -> TaskListFilters:
     d_preset, d_from, d_to = _parse_preset_block(request, "due")
     a_preset, a_from, a_to = _parse_preset_block(request, "approved")
     g = request.GET
+    statuses = tuple(s for s in _parse_multi_ids(request, "status") if s in _VALID_STATUSES)
     return TaskListFilters(
-        status=(g.get("status") or "").strip(),
+        statuses=statuses,
         client_ids=_parse_multi_ids(request, "client"),
         master_ids=_parse_multi_ids(request, "master"),
         assignee_ids=_parse_multi_ids(request, "assignee"),
@@ -126,8 +135,8 @@ def tasks_queryset_personal_for_user(user):
 
 
 def apply_task_list_filters(qs, filters: TaskListFilters):
-    if filters.status:
-        qs = qs.filter(status=filters.status)
+    if filters.statuses:
+        qs = qs.filter(status__in=filters.statuses)
     if filters.client_ids:
         qs = qs.filter(client_id__in=filters.client_ids)
     if filters.master_ids:
@@ -245,6 +254,14 @@ def filter_context(user, filters: TaskListFilters) -> dict:
         "date_preset_choices": DATE_PRESET_CHOICES,
         "clients": clients,
         "masters": masters,
+        "status_filter_options": [
+            {
+                "id": code,
+                "label": label,
+                "search": f"{label} {code}".lower(),
+            }
+            for code, label in Task.STATUS_CHOICES
+        ],
         "client_filter_options": [
             {
                 "id": c.client_id,
@@ -313,8 +330,8 @@ def filters_query_string(filters: TaskListFilters) -> str:
     from urllib.parse import urlencode
 
     params = {}
-    if filters.status:
-        params["status"] = filters.status
+    if filters.statuses:
+        params["status"] = ",".join(filters.statuses)
     if filters.client_ids:
         params["client"] = ",".join(filters.client_ids)
     if filters.master_ids:

@@ -1,12 +1,16 @@
 <form method="get" class="row g-2 align-items-end" id="taskListFiltersForm">
-  <div class="col-12 col-md-6 col-lg-3">
-    <label class="form-label small text-secondary mb-0">Status</label>
-    <select name="status" class="form-select form-select-sm">
-      <option value="">All statuses</option>
-      {% for val, label in status_choices %}
-        <option value="{{ val }}" {% if filters.status == val %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
+    <label class="form-label small text-secondary mb-0" for="taskFilterStatusSearch">Status</label>
+    <input
+      type="text"
+      class="form-control form-control-sm"
+      id="taskFilterStatusSearch"
+      placeholder="Type to add statuses…"
+      autocomplete="off"
+    />
+    <div id="taskFilterStatusSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+    <div id="taskFilterStatusChips" class="task-filter-chips mt-1"></div>
+    <input type="hidden" name="status" id="taskFilterStatusValue" value="{{ filters.status }}" />
   </div>
 
   <div class="col-12 col-md-6 col-lg-3 field-wrap">
@@ -93,6 +97,7 @@
   </div>
 </form>
 
+{{ status_filter_options|json_script:"task-filter-statuses" }}
 {{ client_filter_options|json_script:"task-filter-clients" }}
 {{ master_filter_options|json_script:"task-filter-masters" }}
 {{ staff_user_options|json_script:"task-filter-staff-users" }}
@@ -101,11 +106,20 @@
 <script src="{% static 'js/task_filter_multi_picker.js' %}"></script>
 <script>
   (function () {
+    var statusOptions = JSON.parse(document.getElementById("task-filter-statuses").textContent || "[]");
     var clientOptions = JSON.parse(document.getElementById("task-filter-clients").textContent || "[]");
     var masterOptions = JSON.parse(document.getElementById("task-filter-masters").textContent || "[]");
     var staffUserOptions = JSON.parse(document.getElementById("task-filter-staff-users").textContent || "[]");
 
     if (window.initTaskFilterMultiPicker) {
+      window.initTaskFilterMultiPicker({
+        searchId: "taskFilterStatusSearch",
+        suggestId: "taskFilterStatusSuggestions",
+        chipsId: "taskFilterStatusChips",
+        hiddenId: "taskFilterStatusValue",
+        options: statusOptions,
+        minChars: 0,
+      });
       window.initTaskFilterMultiPicker({
         searchId: "taskFilterClientSearch",
         suggestId: "taskFilterClientSuggestions",

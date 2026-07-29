@@ -1604,12 +1604,64 @@ class TaskListMultiFilterTests(TestCase):
                 "client": f"{self.client_a.client_id},{self.client_b.client_id}",
                 "master": f"{self.master_a.pk},{self.master_b.pk}",
                 "assignee": f"{self.user.pk},{self.user2.pk}",
+                "status": f"{Task.STATUS_SUBMITTED},{Task.STATUS_VERIFIED}",
             },
         )
         filters = parse_task_list_filters(req)
         self.assertEqual(filters.client_ids, (self.client_a.client_id, self.client_b.client_id))
         self.assertEqual(filters.master_ids, (str(self.master_a.pk), str(self.master_b.pk)))
         self.assertEqual(filters.assignee_ids, (str(self.user.pk), str(self.user2.pk)))
+        self.assertEqual(filters.statuses, (Task.STATUS_SUBMITTED, Task.STATUS_VERIFIED))
+        self.assertEqual(filters.status, f"{Task.STATUS_SUBMITTED},{Task.STATUS_VERIFIED}")
+
+    def test_apply_multi_status_filter(self):
+        from tasks.listing import TaskListFilters, apply_task_list_filters, tasks_queryset_for_user
+        from tasks.services import create_task_from_master, submit_task, verify_task
+
+        t_assigned = create_task_from_master(
+            master=self.master_a,
+            client=self.client_a,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-05",
+            due_date=date(2026, 5, 20),
+            auto_created=True,
+        )
+        t_submitted = create_task_from_master(
+            master=self.master_a,
+            client=self.client_b,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-06",
+            due_date=date(2026, 6, 20),
+            auto_created=True,
+        )
+        submit_task(t_submitted, self.user)
+        t_verified = create_task_from_master(
+            master=self.master_b,
+            client=self.client_a,
+            assignee_users=[self.user2],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-05",
+            due_date=date(2026, 5, 20),
+            auto_created=True,
+        )
+        submit_task(t_verified, self.user2)
+        verify_task(t_verified, self.verifier)
+
+        filters = TaskListFilters(
+            statuses=(Task.STATUS_SUBMITTED, Task.STATUS_VERIFIED),
+        )
+        qs = apply_task_list_filters(tasks_queryset_for_user(self.user), filters)
+        ids = set(qs.values_list("pk", flat=True))
+        self.assertEqual(ids, {t_submitted.pk, t_verified.pk})
+        self.assertNotIn(t_assigned.pk, ids)
 
     def test_apply_multi_master_filter(self):
         from tasks.listing import TaskListFilters, apply_task_list_filters, tasks_queryset_for_user
