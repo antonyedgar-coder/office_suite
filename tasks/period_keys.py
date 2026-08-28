@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from dirkyc.fy import fy_start_year
 
-# Earliest FY in New Task period pickers (value = FY start year, label = e.g. 2024-25).
-TASK_FIRST_FY_START_YEAR = 2024
+# Earliest FY in New Task period pickers (value = FY start year, label = e.g. 2022-23).
+TASK_FIRST_FY_START_YEAR = 2022
 # How many FYs ahead of the current FY to show in To FY / period pickers (rolls on each 1 Apr).
 TASK_FY_CHOICES_YEARS_AHEAD = 4
 

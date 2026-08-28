@@ -594,11 +594,13 @@ class PeriodKeyTests(TestCase):
         self.assertEqual(build_period_key("monthly", month=5, fy_start=2026), "2026-05")
         self.assertEqual(build_period_key("monthly", month=1, fy_start=2026), "2027-01")
 
-    def test_fy_choices_start_at_2024(self):
+    def test_fy_choices_start_at_2022(self):
         from tasks.period_keys import task_fy_choices
 
         labels = [label for _, label in task_fy_choices(today=date(2026, 5, 1))]
-        self.assertEqual(labels[0], "2024-25")
+        self.assertEqual(labels[0], "2022-23")
+        self.assertIn("2023-24", labels)
+        self.assertIn("2024-25", labels)
         self.assertIn("2026-27", labels)
         self.assertEqual(labels[-1], "2030-31")
 
