@@ -972,6 +972,75 @@ class TaskEditForm(forms.Form):
         return cleaned
 
 
+class TaskBillingForm(forms.Form):
+    is_billable = forms.BooleanField(
+        required=False,
+        label="Billable",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_is_billable"}),
+    )
+    fees_amount = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=12,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "id": "id_fees_amount", "step": "0.01", "min": "0"}),
+    )
+    bill_raised = forms.BooleanField(
+        required=False,
+        label="Bill raised",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_bill_raised"}),
+    )
+    bill_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date", "id": "id_bill_date"}),
+    )
+    bill_remarks = forms.CharField(
+        required=False,
+        max_length=255,
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "id": "id_bill_remarks", "maxlength": "255"}
+        ),
+    )
+
+    def __init__(self, *args, task=None, **kwargs):
+        self._task = task
+        super().__init__(*args, **kwargs)
+        if task is not None and not self.is_bound:
+            self.fields["is_billable"].initial = task.is_billable
+            self.fields["fees_amount"].initial = task.fees_amount
+            self.fields["bill_raised"].initial = task.bill_raised
+            self.fields["bill_date"].initial = task.bill_date
+            self.fields["bill_remarks"].initial = task.bill_remarks
+        complete = bool(task and task.status == Task.STATUS_COMPLETE)
+        if not complete:
+            self.fields["bill_raised"].disabled = True
+            self.fields["bill_date"].disabled = True
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("is_billable"):
+            cleaned["fees_amount"] = None
+            cleaned["bill_raised"] = False
+            cleaned["bill_date"] = None
+            cleaned["bill_remarks"] = ""
+            return cleaned
+        task = self._task
+        if not task or task.status != Task.STATUS_COMPLETE:
+            cleaned["bill_raised"] = False
+            cleaned["bill_date"] = None
+            cleaned["bill_remarks"] = task.bill_remarks if task else ""
+            return cleaned
+        raised = bool(cleaned.get("bill_raised"))
+        if raised:
+            if not task or task.status != Task.STATUS_COMPLETE:
+                self.add_error("bill_raised", "Mark the task complete before recording that the bill is raised.")
+            if not cleaned.get("bill_date"):
+                self.add_error("bill_date", "Enter the date of the bill.")
+        else:
+            cleaned["bill_date"] = None
+        return cleaned
+
+
 class TaskRemarkForm(forms.Form):
     message = forms.CharField(
         widget=forms.Textarea(

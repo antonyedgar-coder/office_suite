@@ -254,8 +254,12 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
 
+# Recurring tasks daily create: GitHub Actions POSTs to /tasks/internal/create-recurring-tasks/
+# Set the SAME random string on App Platform env CRON_SECRET and GitHub secret CRON_SECRET.
+CRON_SECRET = os.getenv("CRON_SECRET", "")
+
 # DSC expiry in-app alerts — run `send_dsc_expiry_notifications` daily at this time (IST; see TIME_ZONE).
-# DigitalOcean App Platform cron uses UTC: 08:00 IST = 02:30 UTC → `30 2 * * *`
+# DigitalOcean App Platform: cron `0 8 * * *` with time_zone Asia/Kolkata (or UTC `30 2 * * *`).
 # Recipients: users with "view Client DSC" permission (User management / groups), branch-scoped.
 DSC_EXPIRY_NOTIFY_DAYS_BEFORE = int(os.getenv("DSC_EXPIRY_NOTIFY_DAYS_BEFORE", "30"))
 DSC_EXPIRY_NOTIFY_RUN_TIME = os.getenv("DSC_EXPIRY_NOTIFY_RUN_TIME", "08:00")

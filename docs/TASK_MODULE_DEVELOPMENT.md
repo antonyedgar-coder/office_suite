@@ -24,20 +24,44 @@ Keep `ENABLE_TASK_MODULE=0` on App Platform until UAT is complete. Run migration
 
 ## Daily recurring job
 
+The first task for a client only **starts the schedule**. Later periods are created when this runs (once per IST day):
+
 ```bash
 python manage.py create_recurring_tasks
 ```
 
-Schedule via cron or your platform scheduler (e.g. once per day, Asia/Kolkata).
+This App Platform account **does not accept `jobs:` in the App Spec** (`unknown field "jobs"`) and has no Job resource type. Do **not** add `jobs:` to the spec.
+
+Automation is **GitHub Actions** calling:
+
+`POST https://office.antonyandco.com/tasks/internal/create-recurring-tasks/`
+
+### Turn it on
+
+1. Remove any `jobs:` block from the App Spec so the spec saves again.
+2. Generate a long random string. Add App Platform env **`CRON_SECRET`** (same as other env vars, RUN_TIME is enough).
+3. GitHub repo → **Settings → Secrets and variables → Actions** → secret **`CRON_SECRET`** (same string).
+4. Deploy this code to `main`.
+5. GitHub → **Actions → Create recurring tasks → Run workflow** to test. Response should include `"created"` / `"skipped"`.
+
+The workflow runs daily at **00:05 IST**. It does not backfill missed days.
 
 ## Permissions
 
 Assign via **User Management** → groups:
 
 - Task groups / task masters: view, add, change
-- Tasks: view, add, assign, change, verify, delete
+- Tasks: view, add, assign, change, verify, delete, reopen, manage task billing (Accounts)
 
 Users in the Django group named **Admin** (plus superusers) receive in-app alerts when recurring task creation fails (e.g. inactive assignee).
+
+### Task billing (Accounts)
+
+- Only users with **Can manage task billing (Accounts)** can set billable, fees, bill raised, bill date, and remarks.
+- **Bill raised** requires the task to be complete. Fees stay editable after the bill is raised.
+- Recurring auto-create copies **billable + fees** from the latest non-cancelled task for the same client and master (not bill-raised).
+- These amounts are a snapshot on the task. They are **not** posted to MIS Fees.
+- Sidebar **Task billing** lists complete billable work: unbilled, bill raised, or all.
 
 ## Local smoke test
 

@@ -1,0 +1,27 @@
+name: Create recurring tasks
+
+# 00:05 Asia/Kolkata = 18:35 UTC the previous calendar day.
+on:
+  schedule:
+    - cron: "35 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  create-recurring-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger production create_recurring_tasks
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_URL: ${{ vars.CRON_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "Set GitHub Actions secret CRON_SECRET (same value as App Platform CRON_SECRET)."
+            exit 1
+          fi
+          URL="${CRON_URL:-https://office.antonyandco.com/tasks/internal/create-recurring-tasks/}"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            "$URL"

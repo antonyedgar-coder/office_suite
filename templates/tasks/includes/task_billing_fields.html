@@ -1,0 +1,44 @@
+<div class="mb-3 border rounded p-3" id="taskBillingFields">
+  <h6 class="mb-2">Billing (Accounts)</h6>
+  <div class="form-check mb-2">
+    {{ form.is_billable }}
+    <label class="form-check-label" for="id_is_billable">Billable task</label>
+  </div>
+  <div id="taskFeesWrap"{% if not form.is_billable.value %} style="display:none"{% endif %}>
+    <label class="form-label" for="id_fees_amount">Fees amount (optional)</label>
+    {{ form.fees_amount }}
+    {% if form.fees_amount.errors %}<div class="text-danger small">{{ form.fees_amount.errors }}</div>{% endif %}
+  </div>
+  {% if task.status == "complete" %}
+    <div class="form-check mt-3 mb-2">
+      {{ form.bill_raised }}
+      <label class="form-check-label" for="id_bill_raised">Bill raised</label>
+    </div>
+    <div id="taskBillRaisedWrap"{% if not form.bill_raised.value %} style="display:none"{% endif %}>
+      <label class="form-label" for="id_bill_date">Date of the bill</label>
+      {{ form.bill_date }}
+      {% if form.bill_date.errors %}<div class="text-danger small">{{ form.bill_date.errors }}</div>{% endif %}
+      <label class="form-label mt-2" for="id_bill_remarks">Remarks</label>
+      {{ form.bill_remarks }}
+      {% if form.bill_remarks.errors %}<div class="text-danger small">{{ form.bill_remarks.errors }}</div>{% endif %}
+    </div>
+  {% else %}
+    <p class="small text-secondary mb-0 mt-2">Bill raised can be ticked only after this task is complete.</p>
+  {% endif %}
+  {% if form.bill_raised.errors %}<div class="text-danger small">{{ form.bill_raised.errors }}</div>{% endif %}
+</div>
+<script>
+  (function () {
+    var billable = document.getElementById("id_is_billable");
+    var feesWrap = document.getElementById("taskFeesWrap");
+    var raised = document.getElementById("id_bill_raised");
+    var raisedWrap = document.getElementById("taskBillRaisedWrap");
+    function sync() {
+      if (feesWrap && billable) feesWrap.style.display = billable.checked ? "block" : "none";
+      if (raisedWrap && raised) raisedWrap.style.display = raised.checked ? "block" : "none";
+    }
+    if (billable) billable.addEventListener("change", sync);
+    if (raised) raised.addEventListener("change", sync);
+    sync();
+  })();
+</script>

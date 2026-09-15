@@ -115,6 +115,79 @@ def resolve_task_billing(*, is_billable=None, fees_amount=None):
     return billable, fees
 
 
+def user_can_manage_task_billing(user) -> bool:
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    return user.is_superuser or user.has_perm("tasks.manage_task_billing")
+
+
+def billing_from_previous_task(client, master) -> tuple[bool, object]:
+    """Copy billable + fees from the latest prior task for this client and master."""
+    prev = (
+        Task.objects.filter(client=client, task_master=master)
+        .exclude(status=Task.STATUS_CANCELLED)
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+    if prev is None:
+        return False, None
+    return bool(prev.is_billable), prev.fees_amount
+
+
+@transaction.atomic
+def update_task_billing(
+    task: Task,
+    *,
+    actor,
+    is_billable: bool,
+    fees_amount=None,
+    bill_raised: bool = False,
+    bill_date=None,
+    bill_remarks: str = "",
+) -> Task:
+    billable, fees = resolve_task_billing(is_billable=is_billable, fees_amount=fees_amount)
+    remarks = (bill_remarks or "").strip()[:255]
+
+    if not billable:
+        bill_raised = False
+        bill_date = None
+        remarks = ""
+    elif bill_raised:
+        if task.status != Task.STATUS_COMPLETE:
+            raise ValidationError("Bill can be marked raised only after the task is complete.")
+        if not bill_date:
+            raise ValidationError("Enter the date of the bill.")
+    else:
+        bill_date = None
+
+    task.is_billable = billable
+    task.fees_amount = fees
+    task.bill_raised = bool(bill_raised)
+    task.bill_date = bill_date
+    task.bill_remarks = remarks
+    task.save(
+        update_fields=[
+            "is_billable",
+            "fees_amount",
+            "bill_raised",
+            "bill_date",
+            "bill_remarks",
+            "updated_at",
+        ]
+    )
+    parts = [f"Billable={'Yes' if billable else 'No'}."]
+    if billable and fees is not None:
+        parts.append(f"Fees={fees}.")
+    if billable:
+        parts.append("Bill raised." if task.bill_raised else "Bill not raised.")
+        if task.bill_date:
+            parts.append(f"Bill date={task.bill_date.isoformat()}.")
+        if remarks:
+            parts.append(f"Remarks: {remarks}")
+    _log_activity(task, actor, TaskActivity.TYPE_ASSIGNED, message=" ".join(parts))
+    return task
+
+
 def _normalize_verifiers(*, verifiers=None, verifier=None, required: bool = True):
     if verifiers is not None:
         users = list(verifiers)
@@ -634,7 +707,18 @@ def reopen_task(task: Task, user, *, reason: str) -> Task:
     task.status = target
     task.completed_at = None
     task.completed_by = None
-    task.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+    task.bill_raised = False
+    task.bill_date = None
+    task.save(
+        update_fields=[
+            "status",
+            "completed_at",
+            "completed_by",
+            "bill_raised",
+            "bill_date",
+            "updated_at",
+        ]
+    )
     _log_activity(
         task,
         user,
@@ -941,6 +1025,35 @@ def enrollment_is_paused(enrollment: TaskRecurrenceEnrollment, today=None) -> bo
     return False
 
 
+def run_create_recurring_tasks(today=None) -> dict:
+    """Create recurring tasks for all active enrollments whose create date is ``today``."""
+    today = today or timezone.localdate()
+    created = 0
+    skipped = 0
+    errors = 0
+    error_details: list[str] = []
+    for enrollment in TaskRecurrenceEnrollment.objects.filter(is_active=True).select_related(
+        "client", "task_master"
+    ).prefetch_related("assignees", "verifiers"):
+        try:
+            task = try_create_recurring_for_enrollment(enrollment, today)
+        except Exception as exc:
+            errors += 1
+            error_details.append(f"Enrollment {enrollment.pk}: {exc}")
+            continue
+        if task:
+            created += 1
+        else:
+            skipped += 1
+    return {
+        "date": today.isoformat(),
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+        "error_details": error_details,
+    }
+
+
 def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, today=None) -> Task | None:
     today = today or timezone.localdate()
     master = enrollment.task_master
@@ -974,6 +1087,7 @@ def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, to
         return None
 
     _, due_date = compute_create_due_dates(master, period_key, enrollment.started_at)
+    is_billable, fees_amount = billing_from_previous_task(enrollment.client, master)
     return create_task_from_master(
         master=master,
         client=enrollment.client,
@@ -985,4 +1099,6 @@ def try_create_recurring_for_enrollment(enrollment: TaskRecurrenceEnrollment, to
         enrollment=enrollment,
         auto_created=True,
         due_date=due_date,
+        is_billable=is_billable,
+        fees_amount=fees_amount,
     )

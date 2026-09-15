@@ -5,6 +5,11 @@ from core.feature_flags import documents_module_enabled
 from . import views
 
 urlpatterns = [
+    path(
+        "internal/create-recurring-tasks/",
+        views.task_cron_create_recurring,
+        name="task_cron_create_recurring",
+    ),
     path("dashboard/", views.task_dashboard, name="task_dashboard"),
     path("groups/", views.task_group_list, name="task_group_list"),
     path("groups/bulk-upload/", views.task_group_bulk_import, name="task_group_bulk_import"),
@@ -30,6 +35,8 @@ urlpatterns = [
     path("export.csv", views.task_list_csv, name="task_list_csv"),
     path("report/export.csv", views.task_report_csv, name="task_report_csv"),
     path("report/", views.task_report, name="task_report"),
+    path("billing/export.csv", views.task_billing_report_csv, name="task_billing_report_csv"),
+    path("billing/", views.task_billing_report, name="task_billing_report"),
     path("", views.task_list, name="task_list"),
     path("my/export.csv", views.task_my_list_csv, name="task_my_list_csv"),
     path("my/", views.task_my_list, name="task_my_list"),

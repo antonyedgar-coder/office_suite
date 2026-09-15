@@ -58,6 +58,9 @@ def task_list_csv_response(
             "Billable",
             "Fees",
             "Currency",
+            "Bill raised",
+            "Bill date",
+            "Bill remarks",
         ]
     )
 
@@ -90,6 +93,9 @@ def task_list_csv_response(
                 "Yes" if t.is_billable else "No",
                 str(t.fees_amount) if t.fees_amount is not None else "",
                 t.currency,
+                "Yes" if t.bill_raised else "No",
+                t.bill_date.strftime("%d-%b-%Y") if t.bill_date else "",
+                t.bill_remarks or "",
             ]
         )
         writer.writerow(csv_row)

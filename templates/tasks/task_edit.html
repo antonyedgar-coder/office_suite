@@ -101,6 +101,10 @@
         </div>
       </div>
 
+      {% if can_manage_billing and billing_form %}
+        {% include "tasks/includes/task_billing_fields.html" with form=billing_form task=task %}
+      {% endif %}
+
       {% if task.enrollment_id %}
         <p class="form-text">This task is on a recurring schedule. User, verifier, and document checker changes apply to this task and update the schedule for future periods.</p>
       {% endif %}

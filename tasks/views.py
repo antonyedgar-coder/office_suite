@@ -1,11 +1,13 @@
 import csv
+import hmac
 import json
+import os
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -13,6 +15,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from core.branch_access import approved_clients_for_user
@@ -21,6 +24,7 @@ from core.decorators import require_perm
 from core.embed_popup import allow_embed_popup_frame
 
 from .forms import (
+    TaskBillingForm,
     TaskCreateForm,
     TaskEditForm,
     TaskGroupForm,
@@ -80,17 +84,49 @@ from .services import (
     cancel_task,
     delete_task,
     reopen_task,
+    run_create_recurring_tasks,
     send_back_for_document_correction,
     submit_task,
     task_team_is_editable,
+    update_task_billing,
     update_task_team,
     user_can_approve_task_assignment,
+    user_can_manage_task_billing,
     verify_task,
 )
 
 
 def tasks_for_user(user):
     return tasks_queryset_for_user(user)
+
+
+def _cron_secret_from_request(request) -> str:
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return (request.headers.get("X-Cron-Secret") or "").strip()
+
+
+@csrf_exempt
+@require_POST
+def task_cron_create_recurring(request):
+    """Daily recurring create. Auth: Bearer / X-Cron-Secret matching CRON_SECRET."""
+    expected = (os.getenv("CRON_SECRET") or "").strip()
+    if not expected:
+        raise Http404
+    provided = _cron_secret_from_request(request)
+    if not provided or not hmac.compare_digest(provided, expected):
+        return JsonResponse({"detail": "Forbidden"}, status=403)
+    result = run_create_recurring_tasks()
+    return JsonResponse(
+        {
+            "ok": True,
+            "date": result["date"],
+            "created": result["created"],
+            "skipped": result["skipped"],
+            "errors": result["errors"],
+        }
+    )
 
 
 def task_detail_queryset(user):
@@ -677,6 +713,87 @@ def task_report_csv(request):
     )
 
 
+def _task_billing_report_qs(user, bucket: str):
+    qs = tasks_for_user(user).filter(status=Task.STATUS_COMPLETE, is_billable=True)
+    if bucket == "raised":
+        qs = qs.filter(bill_raised=True)
+    elif bucket == "all":
+        pass
+    else:
+        qs = qs.filter(bill_raised=False)
+        bucket = "unbilled"
+    return qs, bucket
+
+
+@require_perm("tasks.manage_task_billing")
+def task_billing_report(request):
+    bucket = (request.GET.get("bucket") or "unbilled").strip()
+    qs, bucket = _task_billing_report_qs(request.user, bucket)
+    filters = parse_task_list_filters(request)
+    rows = prepare_task_list_rows(
+        get_filtered_tasks(request.user, filters, base_qs=qs),
+        include_assignees=True,
+    )
+    ctx = filter_context(request.user, filters)
+    titles = {
+        "unbilled": "Complete — bill not raised",
+        "raised": "Complete — bill raised",
+        "all": "Complete — all billable",
+    }
+    ctx.update(
+        {
+            "task_rows": rows,
+            "list_title": titles.get(bucket, titles["unbilled"]),
+            "billing_bucket": bucket,
+            "csv_export_url": reverse("task_billing_report_csv")
+            + (("?" + request.GET.urlencode()) if request.GET else ""),
+        }
+    )
+    return render(request, "tasks/task_billing_report.html", ctx)
+
+
+@require_perm("tasks.manage_task_billing")
+def task_billing_report_csv(request):
+    bucket = (request.GET.get("bucket") or "unbilled").strip()
+    qs, bucket = _task_billing_report_qs(request.user, bucket)
+    filters = parse_task_list_filters(request)
+    tasks = get_filtered_tasks(request.user, filters, base_qs=qs, limit=100_000)
+    rows = prepare_task_list_rows(tasks, include_assignees=True)
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="task-billing.csv"'
+    response.write("\ufeff")
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Client",
+            "Client ID",
+            "Task",
+            "Period",
+            "Completed",
+            "Fees",
+            "Bill raised",
+            "Bill date",
+            "Remarks",
+        ]
+    )
+    for row in rows:
+        t = row.task
+        writer.writerow(
+            [
+                t.client.client_name,
+                t.client_id,
+                t.display_title,
+                row.period.period,
+                t.completed_at.strftime("%d-%b-%Y") if t.completed_at else "",
+                str(t.fees_amount) if t.fees_amount is not None else "",
+                "Yes" if t.bill_raised else "No",
+                t.bill_date.strftime("%d-%b-%Y") if t.bill_date else "",
+                t.bill_remarks or "",
+            ]
+        )
+    return response
+
+
 @require_perm("tasks.add_task")
 def task_create(request):
     if request.method == "POST":
@@ -696,6 +813,7 @@ def task_create(request):
                 document_checker=document_checker,
                 created_by=request.user,
             )
+            can_bill = user_can_manage_task_billing(request.user)
             task = create_task_from_master(
                 master=master,
                 client=client,
@@ -707,8 +825,8 @@ def task_create(request):
                 period_type=form.cleaned_data.get("period_type") or "",
                 enrollment=enrollment,
                 due_date=due_date,
-                is_billable=form.cleaned_data.get("is_billable"),
-                fees_amount=form.cleaned_data.get("fees_amount"),
+                is_billable=form.cleaned_data.get("is_billable") if can_bill else False,
+                fees_amount=form.cleaned_data.get("fees_amount") if can_bill else None,
                 description=form.cleaned_data.get("description") or "",
             )
             if form.cleaned_data.get("priority"):
@@ -777,6 +895,7 @@ def task_create(request):
         "masters_meta_json": masters_meta,
         "can_add_task_master": request.user.is_superuser
         or request.user.has_perm("tasks.add_taskmaster"),
+        "can_manage_billing": user_can_manage_task_billing(request.user),
         "task_groups_json": task_groups,
     }
     ctx.update(master_request_link_context(request, MasterRequest.TYPE_NEW_TASK))
@@ -1019,10 +1138,14 @@ def task_edit(request, pk: int):
     task = get_object_or_404(task_detail_queryset(request.user), pk=pk)
     if not can_edit_task_team(request.user, task):
         raise PermissionDenied
+    can_bill = user_can_manage_task_billing(request.user)
 
     if request.method == "POST":
         form = TaskEditForm(request.POST, task=task, user=request.user)
-        if form.is_valid():
+        billing_form = TaskBillingForm(request.POST, task=task) if can_bill else None
+        team_ok = form.is_valid()
+        bill_ok = billing_form.is_valid() if billing_form is not None else True
+        if team_ok and bill_ok:
             try:
                 update_task_team(
                     task,
@@ -1034,6 +1157,16 @@ def task_edit(request, pk: int):
                     description=form.cleaned_data.get("description") or "",
                     actor=request.user,
                 )
+                if billing_form is not None:
+                    update_task_billing(
+                        task,
+                        actor=request.user,
+                        is_billable=billing_form.cleaned_data.get("is_billable"),
+                        fees_amount=billing_form.cleaned_data.get("fees_amount"),
+                        bill_raised=billing_form.cleaned_data.get("bill_raised"),
+                        bill_date=billing_form.cleaned_data.get("bill_date"),
+                        bill_remarks=billing_form.cleaned_data.get("bill_remarks") or "",
+                    )
             except ValidationError as exc:
                 messages.error(request, exc.messages[0] if exc.messages else str(exc))
             else:
@@ -1041,6 +1174,7 @@ def task_edit(request, pk: int):
                 return redirect("task_detail", pk=task.pk)
     else:
         form = TaskEditForm(task=task, user=request.user)
+        billing_form = TaskBillingForm(task=task) if can_bill else None
 
     from .user_labels import staff_users_queryset, user_display_label
 
@@ -1074,6 +1208,8 @@ def task_edit(request, pk: int):
             "initial_verifiers_json": initial_verifiers,
             "period_frequency": period_cols.frequency,
             "period_label": period_cols.period,
+            "billing_form": billing_form,
+            "can_manage_billing": can_bill,
         },
     )
 
@@ -1090,6 +1226,7 @@ def task_detail(request, pk: int):
     can_view_task = (
         request.user.is_superuser
         or request.user.has_perm("tasks.view_task")
+        or request.user.has_perm("tasks.manage_task_billing")
         or is_verifier
         or is_document_checker
         or is_creator
@@ -1183,6 +1320,8 @@ def task_detail(request, pk: int):
     )
     can_edit = can_edit_task_team(request.user, task)
     can_reopen = can_reopen_task(request.user, task)
+    can_manage_billing = user_can_manage_task_billing(request.user)
+    billing_form = TaskBillingForm(task=task) if can_manage_billing else None
     checklist_items = list(task.checklist_items.all())
 
     if request.method == "POST":
@@ -1250,7 +1389,26 @@ def task_detail(request, pk: int):
                 else:
                     messages.success(request, "Task submitted for document check.")
             return redirect("task_detail", pk=pk)
-        if action == "remark":
+        if action == "save_billing" and can_manage_billing:
+            billing_form = TaskBillingForm(request.POST, task=task)
+            if billing_form.is_valid():
+                try:
+                    update_task_billing(
+                        task,
+                        actor=request.user,
+                        is_billable=billing_form.cleaned_data.get("is_billable"),
+                        fees_amount=billing_form.cleaned_data.get("fees_amount"),
+                        bill_raised=billing_form.cleaned_data.get("bill_raised"),
+                        bill_date=billing_form.cleaned_data.get("bill_date"),
+                        bill_remarks=billing_form.cleaned_data.get("bill_remarks") or "",
+                    )
+                except ValidationError as exc:
+                    messages.error(request, exc.messages[0] if exc.messages else str(exc))
+                else:
+                    messages.success(request, "Billing updated.")
+                    return redirect("task_detail", pk=pk)
+            remark_form = TaskRemarkForm()
+        elif action == "remark":
             remark_form = TaskRemarkForm(request.POST)
             if remark_form.is_valid():
                 from .services import _log_activity
@@ -1361,6 +1519,8 @@ def task_detail(request, pk: int):
             "can_delete": can_delete,
             "can_edit": can_edit,
             "can_reopen": can_reopen,
+            "can_manage_billing": can_manage_billing,
+            "billing_form": billing_form,
             "workflow_label": workflow_label(task),
             "assignment_pending": task.status == Task.STATUS_PENDING_ASSIGNMENT,
             **task_doc_ctx,

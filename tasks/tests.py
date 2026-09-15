@@ -44,7 +44,10 @@ from tasks.services import (
     create_task_from_master,
     reopen_task,
     task_team_is_editable,
+    update_task_billing,
     update_task_team,
+    billing_from_previous_task,
+    user_can_manage_task_billing,
     send_back_for_document_correction,
     submit_task,
     try_create_recurring_for_enrollment,
@@ -1784,6 +1787,8 @@ class TaskReopenTests(TestCase):
         self.assertEqual(task.status, Task.STATUS_VERIFIED)
         self.assertIsNone(task.completed_at)
         self.assertIsNone(task.completed_by_id)
+        self.assertFalse(task.bill_raised)
+        self.assertIsNone(task.bill_date)
         self.assertTrue(task_team_is_editable(task))
 
     def test_reopen_requires_reason(self):
@@ -1947,3 +1952,189 @@ class TaskVerifyAfterVerifierChangeTests(TestCase):
         response = http.post(url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("task_detail", args=[task.pk]))
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class RecurringCronEndpointTests(TestCase):
+    def test_missing_secret_is_404(self):
+        import os
+
+        os.environ.pop("CRON_SECRET", None)
+        response = self.client.post(reverse("task_cron_create_recurring"))
+        self.assertEqual(response.status_code, 404)
+
+    def test_secret_auth(self):
+        import os
+
+        os.environ["CRON_SECRET"] = "expected-secret"
+        try:
+            denied = self.client.post(
+                reverse("task_cron_create_recurring"),
+                HTTP_AUTHORIZATION="Bearer wrong",
+            )
+            self.assertEqual(denied.status_code, 403)
+            ok = self.client.post(
+                reverse("task_cron_create_recurring"),
+                HTTP_AUTHORIZATION="Bearer expected-secret",
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertTrue(ok.json().get("ok"))
+        finally:
+            os.environ.pop("CRON_SECRET", None)
+
+
+@modify_settings(INSTALLED_APPS={"append": "tasks.apps.TasksConfig"})
+class TaskBillingTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import Permission
+
+        self.admin = User.objects.create_user(
+            email="bill-admin@example.com",
+            password="pass12345",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.accounts = User.objects.create_user(
+            email="accounts@example.com",
+            password="pass12345",
+        )
+        self.staff = User.objects.create_user(email="bill-staff@example.com", password="pass12345")
+        perm = Permission.objects.get(
+            codename="manage_task_billing", content_type__app_label="tasks"
+        )
+        view_perm = Permission.objects.get(codename="view_task", content_type__app_label="tasks")
+        self.accounts.user_permissions.add(perm, view_perm)
+        self.user = User.objects.create_user(email="bill-user@example.com", password="pass12345")
+        self.verifier = User.objects.create_user(email="bill-verify@example.com", password="pass12345")
+        self.document_checker = User.objects.create_user(
+            email="bill-docs@example.com", password="pass12345"
+        )
+        grp = ClientGroup.objects.create(name="BILL GROUP")
+        self.client_row = Client.objects.create(
+            client_name="BILL CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="ABCDE8888F",
+        )
+        tg = TaskGroup.objects.create(name="GST BILL", sort_order=1)
+        self.master = TaskMaster.objects.create(
+            task_group=tg,
+            name="GSTR-1 billing",
+            is_recurring=False,
+            requires_verifier=True,
+            requires_document_checker=True,
+        )
+
+    def _create(self, *, period_key="2026-04", is_billable=True, fees_amount=Decimal("100.00")):
+        return create_task_from_master(
+            master=self.master,
+            client=self.client_row,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.document_checker,
+            created_by=self.admin,
+            period_key=period_key,
+            due_date=date(2026, 4, 20),
+            is_billable=is_billable,
+            fees_amount=fees_amount,
+            auto_created=True,
+        )
+
+    def _complete(self, task):
+        submit_task(task, self.user)
+        verify_task(task, self.verifier)
+        complete_task(task, self.document_checker)
+        task.refresh_from_db()
+        return task
+
+    def test_bill_raised_requires_complete(self):
+        task = self._create()
+        with self.assertRaises(ValidationError):
+            update_task_billing(
+                task,
+                actor=self.admin,
+                is_billable=True,
+                fees_amount=Decimal("100.00"),
+                bill_raised=True,
+                bill_date=date(2026, 5, 1),
+            )
+
+    def test_fees_editable_after_bill_raised(self):
+        task = self._complete(self._create())
+        update_task_billing(
+            task,
+            actor=self.admin,
+            is_billable=True,
+            fees_amount=Decimal("100.00"),
+            bill_raised=True,
+            bill_date=date(2026, 5, 1),
+            bill_remarks="Inv-1",
+        )
+        update_task_billing(
+            task,
+            actor=self.admin,
+            is_billable=True,
+            fees_amount=Decimal("175.50"),
+            bill_raised=True,
+            bill_date=date(2026, 5, 1),
+            bill_remarks="Inv-1",
+        )
+        task.refresh_from_db()
+        self.assertEqual(task.fees_amount, Decimal("175.50"))
+        self.assertTrue(task.bill_raised)
+
+    def test_inherit_billable_and_fees_not_bill_raised(self):
+        first = self._complete(self._create(fees_amount=Decimal("250.00")))
+        update_task_billing(
+            first,
+            actor=self.admin,
+            is_billable=True,
+            fees_amount=Decimal("250.00"),
+            bill_raised=True,
+            bill_date=date(2026, 5, 2),
+            bill_remarks="Do not copy",
+        )
+        billable, fees = billing_from_previous_task(self.client_row, self.master)
+        self.assertTrue(billable)
+        self.assertEqual(fees, Decimal("250.00"))
+
+        self.master.is_recurring = True
+        self.master.frequency = TaskMaster.FREQ_MONTHLY
+        self.master.recurrence_config = {
+            "month_anchor": "same_month",
+            "create_day": 1,
+            "due_day": 15,
+        }
+        self.master.save()
+        enrollment = TaskRecurrenceEnrollment.objects.create(
+            client=self.client_row,
+            task_master=self.master,
+            document_checker=self.document_checker,
+            started_at=date(2026, 4, 1),
+            created_by=self.admin,
+            is_active=True,
+        )
+        enrollment.assignees.add(self.user)
+        enrollment.verifiers.add(self.verifier)
+        first.enrollment = enrollment
+        first.save(update_fields=["enrollment"])
+
+        nxt = try_create_recurring_for_enrollment(enrollment, date(2026, 5, 1))
+        self.assertIsNotNone(nxt)
+        self.assertTrue(nxt.is_billable)
+        self.assertEqual(nxt.fees_amount, Decimal("250.00"))
+        self.assertFalse(nxt.bill_raised)
+        self.assertIsNone(nxt.bill_date)
+        self.assertEqual(nxt.bill_remarks, "")
+
+    def test_accounts_only_billing_report(self):
+        self.assertFalse(user_can_manage_task_billing(self.staff))
+        self.assertTrue(user_can_manage_task_billing(self.accounts))
+        self._complete(self._create())
+        self.assertTrue(self.client.login(email="accounts@example.com", password="pass12345"))
+        ok = self.client.get(reverse("task_billing_report_csv"))
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn(b"BILL CLIENT", ok.content)
+

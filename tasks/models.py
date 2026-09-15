@@ -304,6 +304,12 @@ class Task(models.Model):
         blank=True,
         help_text="Billable fee frozen on this task instance.",
     )
+    bill_raised = models.BooleanField(
+        default=False,
+        help_text="Accounts: invoice/bill has been raised for this completed billable task.",
+    )
+    bill_date = models.DateField(null=True, blank=True)
+    bill_remarks = models.CharField(max_length=255, blank=True)
     currency = models.CharField(max_length=8, default=TaskMaster.CURRENCY_INR)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -315,6 +321,7 @@ class Task(models.Model):
             ("verify_task", "Can verify task"),
             ("check_documents", "Can check task documents"),
             ("reopen_task", "Can reopen completed task"),
+            ("manage_task_billing", "Can manage task billing (Accounts)"),
         ]
         constraints = [
             models.UniqueConstraint(

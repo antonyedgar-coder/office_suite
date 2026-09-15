@@ -1,4 +1,7 @@
 <form method="get" class="row g-2 align-items-end" id="taskListFiltersForm">
+  {% if billing_bucket %}
+    <input type="hidden" name="bucket" value="{{ billing_bucket }}" />
+  {% endif %}
   <div class="col-12 col-md-6 col-lg-3 field-wrap">
     <label class="form-label small text-secondary mb-0" for="taskFilterStatusSearch">Status</label>
     <input

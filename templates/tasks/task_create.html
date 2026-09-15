@@ -152,6 +152,7 @@
         </div>
       </div>
 
+      {% if can_manage_billing %}
       <div class="mb-3 border rounded p-3">
         <div class="form-check mb-2">
           {{ form.is_billable }}
@@ -163,6 +164,7 @@
           {% if form.fees_amount.errors %}<div class="text-danger small">{{ form.fees_amount.errors }}</div>{% endif %}
         </div>
       </div>
+      {% endif %}
 
       <div class="row">
         <div class="col-md-6 mb-3" id="taskDueDateWrap">
