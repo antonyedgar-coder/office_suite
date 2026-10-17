@@ -764,6 +764,48 @@ def sync_client_account(client) -> Account | None:
     return acc
 
 
+def backfill_approved_client_ledgers(*, dry_run: bool = False) -> dict:
+    """One-time: create Sundry Debtor ledgers for approved Client Master rows.
+
+    Unapproved clients are skipped. Opening balance stays at zero.
+    Already-linked ledgers are refreshed from Client Master (name, GSTIN, PAN, address).
+    """
+    from masters.models import Client
+
+    approved = Client.objects.filter(approval_status=Client.APPROVED).order_by("client_name")
+    skipped_unapproved = Client.objects.exclude(approval_status=Client.APPROVED).count()
+    created = 0
+    updated = 0
+    errors: list[str] = []
+    if not dry_run:
+        ensure_sundry_debtors_group()
+    for client in approved.iterator():
+        existing = Account.objects.filter(client=client).first()
+        if dry_run:
+            if existing is None:
+                created += 1
+            else:
+                updated += 1
+            continue
+        try:
+            was_new = existing is None
+            sync_client_account(client)
+            if was_new:
+                created += 1
+            else:
+                updated += 1
+        except ValidationError as exc:
+            errors.append(f"{client.client_id}: {exc}")
+    return {
+        "approved": approved.count(),
+        "created": created,
+        "updated": updated,
+        "skipped_unapproved": skipped_unapproved,
+        "errors": errors,
+        "dry_run": dry_run,
+    }
+
+
 def _validate_lines(lines: list[dict]) -> list[dict]:
     cleaned = []
     debit_t = Decimal("0.00")

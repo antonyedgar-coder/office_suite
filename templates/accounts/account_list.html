@@ -5,10 +5,15 @@
   {% include "accounts/_chart_tabs.html" %}
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     <h1 class="h5 mb-0">Account Ledger</h1>
-    {% if perms.accounts.add_account %}
+    {% if perms.accounts.add_account or request.user.is_superuser %}
       <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-primary btn-sm" href="{% url 'accounts_account_bulk_import' %}">Bulk upload (CSV)</a>
-        <a class="btn btn-primary btn-sm" href="{% url 'accounts_account_create' %}">Add</a>
+        {% if request.user.is_superuser %}
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_sync_client_ledgers' %}">Create ledgers from Client Master</a>
+        {% endif %}
+        {% if perms.accounts.add_account %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'accounts_account_bulk_import' %}">Bulk upload (CSV)</a>
+          <a class="btn btn-primary btn-sm" href="{% url 'accounts_account_create' %}">Add</a>
+        {% endif %}
       </div>
     {% endif %}
   </div>

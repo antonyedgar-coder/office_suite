@@ -2392,3 +2392,55 @@ class ResetTestDataAccountsTests(TestCase):
         self.assertEqual(InvoiceNumberSeq.objects.count(), 0)
         self.assertEqual(Account.objects.count(), 0)
 
+
+class ClientLedgerBackfillTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="backfill-admin@example.com",
+            password="pass12345",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.group = ClientGroup.objects.create(name="BACKFILL GROUP")
+
+    def _make_client(self, name, *, approved=True, pan="AAAAA1111A"):
+        return Client.objects.create(
+            client_name=name,
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=self.group,
+            approval_status=Client.APPROVED if approved else Client.PENDING,
+            pan=pan,
+        )
+
+    def test_backfill_creates_only_approved_with_zero_opening(self):
+        from accounts.services import SYSTEM_GROUP_DEBTORS, backfill_approved_client_ledgers
+
+        approved = self._make_client("BACKFILL APPROVED", pan="AAAAA1111B")
+        pending = self._make_client("BACKFILL PENDING", approved=False, pan="AAAAA1111C")
+        Account.objects.filter(client=approved).delete()
+        Account.objects.filter(client=pending).delete()
+
+        preview = backfill_approved_client_ledgers(dry_run=True)
+        self.assertGreaterEqual(preview["created"], 1)
+        self.assertGreaterEqual(preview["skipped_unapproved"], 1)
+        self.assertFalse(Account.objects.filter(client=approved).exists())
+
+        result = backfill_approved_client_ledgers(dry_run=False)
+        self.assertGreaterEqual(result["created"], 1)
+        ledger = Account.objects.get(client=approved)
+        self.assertEqual(ledger.opening_balance, Decimal("0.00"))
+        self.assertEqual(ledger.group.system_key, SYSTEM_GROUP_DEBTORS)
+        self.assertFalse(Account.objects.filter(client=pending).exists())
+
+    def test_superuser_post_creates_ledgers(self):
+        approved = self._make_client("BACKFILL POST CLIENT", pan="AAAAA1111D")
+        Account.objects.filter(client=approved).delete()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts_sync_client_ledgers"),
+            {"confirm": "1"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Account.objects.filter(client=approved).exists())
+

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .feature_flags import documents_module_enabled, task_module_enabled
+from .feature_flags import accounts_module_enabled, documents_module_enabled, task_module_enabled
 
 
 @dataclass(frozen=True)
@@ -161,6 +161,20 @@ def _documents_setup_cards(user) -> tuple[SettingsCard, ...]:
     return cards
 
 
+def _accounts_setup_cards(user) -> tuple[SettingsCard, ...]:
+    if not accounts_module_enabled() or not user.is_superuser:
+        return ()
+    return (
+        SettingsCard(
+            title="Client Master → ledgers",
+            description="One-time: create Sundry Debtor ledgers for approved clients that do not have one yet.",
+            url_name="accounts_sync_client_ledgers",
+            icon="bi-journal-plus",
+            icon_bg="settings-icon-teal",
+        ),
+    )
+
+
 def _billing_setup_cards(user) -> tuple[SettingsCard, ...]:
     cards: list[SettingsCard] = []
     if user.is_superuser or user.has_perm("masters.view_expensecategory"):
@@ -207,6 +221,9 @@ def build_settings_sections(user) -> list[SettingsSection]:
     doc_cards = _documents_setup_cards(user)
     if doc_cards:
         sections.append(SettingsSection(title="Documents", cards=doc_cards))
+    accounts_cards = _accounts_setup_cards(user)
+    if accounts_cards:
+        sections.append(SettingsSection(title="Accounts", cards=accounts_cards))
     billing_cards = _billing_setup_cards(user)
     if billing_cards:
         sections.append(SettingsSection(title="Billing", cards=billing_cards))

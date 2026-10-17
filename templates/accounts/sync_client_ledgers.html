@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Client Master → ledgers — CA Office Suite{% endblock %}
+{% block page_title %}Create ledgers from Client Master{% endblock %}
+
+{% block content %}
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-1">One-time backfill</div>
+    <div class="text-secondary small">
+      Creates an Account Ledger under <strong>Sundry Debtors</strong> for each <strong>approved</strong>
+      Client Master record that does not already have one. Opening balance stays blank (zero).
+      Unapproved clients are left until they are approved.
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="fw-semibold mb-2">Current counts</div>
+    <div class="row g-2 small mb-3">
+      <div class="col-6 col-md-3">
+        <span class="text-secondary">Approved clients</span>
+        <div class="mono fw-semibold">{{ approved_total }}</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <span class="text-secondary">Need a ledger</span>
+        <div class="mono fw-semibold">{{ approved_pending }}</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <span class="text-secondary">Already linked</span>
+        <div class="mono fw-semibold">{{ already_linked }}</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <span class="text-secondary">Unapproved (skipped)</span>
+        <div class="mono fw-semibold">{{ skipped_unapproved }}</div>
+      </div>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="confirm" value="1" />
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Create ledgers for approved clients that do not have one yet?');">
+          Create missing ledgers
+        </button>
+        <a class="btn btn-outline-secondary" href="{% url 'accounts_account_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

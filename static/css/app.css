@@ -1055,3 +1055,82 @@ body {
 .tb-indent-3 { padding-left: 4rem; }
 .tb-row-parent { background: #e9ecef; }
 .tb-row-account_group { background: #f3f4f6; }
+
+.dual-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.dual-list-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dual-list-caption {
+  font-size: var(--app-font-size-label);
+  font-weight: 600;
+  color: var(--app-label-color);
+  margin-bottom: 0.35rem;
+}
+
+.dual-list-box {
+  min-height: 16rem;
+  height: 18rem;
+}
+
+.dual-list-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  overflow: hidden;
+  background: #fff;
+}
+
+.dual-list-btn {
+  width: 2.75rem;
+  height: 2.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--app-border);
+  background: #fff;
+  color: var(--app-primary);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.dual-list-btn:last-child {
+  border-bottom: 0;
+}
+
+.dual-list-btn:hover,
+.dual-list-btn:focus-visible {
+  background: #e0f2fe;
+  color: var(--app-primary-hover);
+}
+
+@media (max-width: 767.98px) {
+  .dual-list {
+    flex-direction: column;
+  }
+
+  .dual-list-actions {
+    flex-direction: row;
+    align-self: center;
+  }
+
+  .dual-list-btn {
+    border-bottom: 0;
+    border-right: 1px solid var(--app-border);
+  }
+
+  .dual-list-btn:last-child {
+    border-right: 0;
+  }
+}

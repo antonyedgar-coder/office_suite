@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.models import Group, Permission
 
 from .permission_utils import manageable_permissions
+from .widgets import DualListSelectMultiple
 
 
 class GroupAccessForm(forms.ModelForm):
@@ -9,8 +10,8 @@ class GroupAccessForm(forms.ModelForm):
         queryset=Permission.objects.none(),
         required=False,
         label="Permissions",
-        help_text="Users in this group receive all selected permissions (in addition to any permissions assigned directly to the user).",
-        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": "16"}),
+        help_text="Move activities into Allowed so everyone in this group can do them. Users can also have extra permissions assigned directly.",
+        widget=DualListSelectMultiple(assigned_label="Allowed"),
     )
 
     class Meta:

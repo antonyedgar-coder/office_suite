@@ -2,6 +2,7 @@ from decimal import Decimal
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import DecimalField, Q, Sum, Value
@@ -101,6 +102,7 @@ from .services import (
     profit_and_loss,
     sales_invoice_document,
     seed_chart_of_accounts,
+    backfill_approved_client_ledgers,
     sundry_debtors_ledgers,
     TB_FORMAT_TB,
     TB_REPORT_GROUP,
@@ -1592,5 +1594,38 @@ def report_billwise_outstanding(request):
             "date_to": as_on,
             "excel_url": f"{reverse('accounts_billwise_outstanding')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_billwise_outstanding')}?{query}&export=pdf",
+        },
+    )
+
+
+@login_required
+def sync_client_ledgers(request):
+    """Superuser one-time: create Sundry Debtor ledgers for approved Client Master rows."""
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    from masters.models import Client
+
+    preview = backfill_approved_client_ledgers(dry_run=True)
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        result = backfill_approved_client_ledgers(dry_run=False)
+        created = result["created"]
+        updated = result["updated"]
+        skipped = result["skipped_unapproved"]
+        messages.success(
+            request,
+            f"Created {created} ledger(s). Already linked {updated}. Skipped unapproved {skipped}.",
+        )
+        for row in result["errors"]:
+            messages.warning(request, row)
+        return redirect("accounts_account_list")
+    return render(
+        request,
+        "accounts/sync_client_ledgers.html",
+        {
+            "preview": preview,
+            "approved_pending": preview["created"],
+            "already_linked": preview["updated"],
+            "skipped_unapproved": preview["skipped_unapproved"],
+            "approved_total": Client.objects.filter(approval_status=Client.APPROVED).count(),
         },
     )

@@ -23,6 +23,11 @@ urlpatterns = [
     ),
     path("groups/<int:pk>/", views.group_edit, name="accounts_group_edit"),
     path("groups/<int:pk>/delete/", views.group_delete, name="accounts_group_delete"),
+    path(
+        "ledgers/sync-clients/",
+        views.sync_client_ledgers,
+        name="accounts_sync_client_ledgers",
+    ),
     path("ledgers/", views.account_list, name="accounts_account_list"),
     path("ledgers/new/", views.account_create, name="accounts_account_create"),
     path("ledgers/bulk-upload/", views.account_bulk_import, name="accounts_account_bulk_import"),

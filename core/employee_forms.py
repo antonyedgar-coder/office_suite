@@ -6,6 +6,7 @@ from masters.models import Client
 
 from .models import Employee
 from .permission_utils import manageable_permissions
+from .widgets import DualListSelectMultiple
 
 User = get_user_model()
 
@@ -56,7 +57,7 @@ class EmployeeCreateForm(forms.ModelForm):
         required=False,
         label="Direct permissions",
         help_text=f"Extra permissions for this user only (on top of groups). {_DSC_PERMISSION_HELP}",
-        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": "10"}),
+        widget=DualListSelectMultiple(assigned_label="Allowed"),
     )
 
     class Meta:
@@ -190,7 +191,7 @@ class EmployeeEditForm(forms.ModelForm):
         queryset=Permission.objects.none(),
         required=False,
         label="Direct permissions",
-        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": "10"}),
+        widget=DualListSelectMultiple(assigned_label="Allowed"),
     )
     new_password = forms.CharField(
         required=False,

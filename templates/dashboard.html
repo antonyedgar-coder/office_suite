@@ -47,6 +47,9 @@
           {% if request.user.is_superuser %}
             <a class="btn btn-outline-danger btn-sm" href="{% url 'reset_test_data' %}">Reset test data</a>
           {% endif %}
+          {% if enable_accounts_module and request.user.is_superuser %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_sync_client_ledgers' %}">Client Master → ledgers</a>
+          {% endif %}
           {% if show_task_dashboard %}
             {% if perms.tasks.view_task or request.user.is_superuser %}
               <a class="btn btn-outline-primary btn-sm" href="{% url 'task_list' %}">All tasks</a>
