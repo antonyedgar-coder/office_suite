@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Trial Balance — CA Office Suite{% endblock %}
+{% block page_title %}Trial Balance{% endblock %}
+{% block extra_head %}
+  <style>
+    .tb-indent-0 { padding-left: 0.5rem !important; }
+    .tb-indent-1 { padding-left: 1.5rem !important; }
+    .tb-indent-2 { padding-left: 2.75rem !important; }
+    .tb-indent-3 { padding-left: 4rem !important; }
+    .tb-row-parent { background: #e9ecef; }
+    .tb-row-account_group { background: #f3f4f6; }
+    .tb-row-ledger td { background: transparent; }
+    .tb-report th, .tb-report .mono { white-space: nowrap; }
+  </style>
+{% endblock %}
+{% block content %}
+  <form method="get" class="row g-2 mb-3 align-items-end">
+    <div class="col-6 col-md-2">
+      <label class="form-label" for="{{ form.date_from.id_for_label }}">From date</label>
+      {{ form.date_from }}
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label" for="{{ form.date_to.id_for_label }}">To date</label>
+      {{ form.date_to }}
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="{{ form.tb_report.id_for_label }}">TB Report</label>
+      {{ form.tb_report }}
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="{{ form.report_format.id_for_label }}">Report Format</label>
+      {{ form.report_format }}
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
+    </div>
+    <div class="col-auto">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Export
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{{ excel_url }}">Excel</a></li>
+          <li><a class="dropdown-item" href="{{ pdf_url }}">PDF</a></li>
+        </ul>
+      </div>
+    </div>
+  </form>
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+  {% endif %}
+  <p class="text-secondary small mb-2">{{ date_from }} to {{ date_to }}</p>
+  <div class="card p-3">
+    <div class="table-responsive">
+    <table class="table table-sm mb-0 tb-report">
+      <thead>
+        <tr>
+          <th>Particulars</th>
+          {% if data.show_group_column %}<th>Group</th>{% endif %}
+          {% if data.show_opening %}
+            <th class="text-end">Opening Debit</th>
+            <th class="text-end">Opening Credit</th>
+          {% endif %}
+          {% if data.show_transactions %}
+            <th class="text-end">Debit</th>
+            <th class="text-end">Credit</th>
+          {% endif %}
+          <th class="text-end">{% if data.show_opening %}Closing Debit{% else %}Debit{% endif %}</th>
+          <th class="text-end">{% if data.show_opening %}Closing Credit{% else %}Credit{% endif %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr class="tb-row-{{ row.kind }}{% if row.is_header %} fw-semibold{% endif %}">
+            <td class="tb-indent-{{ row.indent }}">{{ row.name }}</td>
+            {% if data.show_group_column %}
+              <td>{% if row.group %}{{ row.group.name }}{% endif %}</td>
+            {% endif %}
+            {% include "accounts/_tb_amount_cells.html" %}
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="{{ empty_colspan }}" class="text-secondary">No balances.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+        <tfoot>
+          <tr class="fw-semibold">
+            <td{% if data.show_group_column %} colspan="2"{% endif %}>Total</td>
+            {% include "accounts/_tb_amount_cells.html" with row=totals %}
+          </tr>
+        </tfoot>
+      {% endif %}
+    </table>
+    </div>
+  </div>
+{% endblock %}

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from core.feature_flags import documents_module_enabled, task_module_enabled
+from core.feature_flags import accounts_module_enabled, documents_module_enabled, task_module_enabled
 
 User = get_user_model()
 
@@ -23,6 +23,7 @@ class WipeOptions:
     task_instances: bool = False
     task_configuration: bool = False
     documents: bool = False
+    accounts: bool = False
     activity_log: bool = False
     delete_users: bool = False
     users_keep_ids: set[int] = field(default_factory=set)
@@ -115,6 +116,29 @@ def count_local_data() -> dict[str, int]:
                 "task_document_mappings": 0,
             }
         )
+
+    if accounts_module_enabled():
+        from accounts.models import Account, AccountGroup, InvoiceNumberSeq, ReceiptAllocation, Voucher
+
+        counts.update(
+            {
+                "accounts_vouchers": Voucher.objects.count(),
+                "accounts_ledgers": Account.objects.count(),
+                "accounts_groups": AccountGroup.objects.filter(parent__isnull=False).count(),
+                "accounts_allocations": ReceiptAllocation.objects.count(),
+                "accounts_sequences": InvoiceNumberSeq.objects.count(),
+            }
+        )
+    else:
+        counts.update(
+            {
+                "accounts_vouchers": 0,
+                "accounts_ledgers": 0,
+                "accounts_groups": 0,
+                "accounts_allocations": 0,
+                "accounts_sequences": 0,
+            }
+        )
     return counts
 
 
@@ -174,6 +198,24 @@ def _delete_documents_module() -> dict[str, int]:
     return out
 
 
+def _delete_accounts_module() -> dict[str, int]:
+    """Vouchers, allocations, number series, ledgers, and user-created groups. Keeps the four Main Heads."""
+    if not accounts_module_enabled():
+        return {}
+    from accounts.models import Account, AccountGroup, InvoiceNumberSeq, ReceiptAllocation, Voucher
+
+    out: dict[str, int] = {}
+    out["accounts_allocations"] = ReceiptAllocation.objects.all().delete()[0]
+    out["accounts_vouchers"] = Voucher.objects.all().delete()[0]
+    out["accounts_sequences"] = InvoiceNumberSeq.objects.all().delete()[0]
+    out["accounts_ledgers"] = Account.objects.all().delete()[0]
+    out["accounts_groups"] = AccountGroup.objects.filter(parent__parent__isnull=False).delete()[0]
+    out["accounts_parent_groups"] = AccountGroup.objects.filter(
+        parent__isnull=False, parent__parent__isnull=True
+    ).delete()[0]
+    return out
+
+
 @transaction.atomic
 def wipe_local_data(options: WipeOptions) -> dict[str, int]:
     """
@@ -186,8 +228,12 @@ def wipe_local_data(options: WipeOptions) -> dict[str, int]:
         options.dir3kyc = True
         options.tasks = True
         options.documents = True
+        options.accounts = True
 
     deleted: dict[str, int] = {}
+
+    if options.accounts:
+        deleted.update(_delete_accounts_module())
 
     if options.documents:
         deleted.update(_delete_documents_module())
@@ -261,7 +307,7 @@ def wipe_local_data(options: WipeOptions) -> dict[str, int]:
 
 
 def wipe_all_local_data(*, keep_user_ids: set[int]) -> dict[str, int]:
-    """Convenience: wipe tasks, clients, groups, MIS, KYC, mappings, activity log, other users."""
+    """Convenience: wipe tasks, clients, groups, MIS, KYC, mappings, accounts, activity log, other users."""
     return wipe_local_data(
         WipeOptions(
             mis=True,
@@ -271,6 +317,7 @@ def wipe_all_local_data(*, keep_user_ids: set[int]) -> dict[str, int]:
             client_groups=True,
             tasks=True,
             documents=True,
+            accounts=True,
             activity_log=True,
             delete_users=True,
             users_keep_ids=keep_user_ids,

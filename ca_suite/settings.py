@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
-from core.feature_flags import documents_module_enabled, task_module_enabled
+from core.feature_flags import accounts_module_enabled, documents_module_enabled, task_module_enabled
 
 load_dotenv()
 
@@ -43,6 +43,9 @@ if task_module_enabled():
 if documents_module_enabled():
     INSTALLED_APPS.append("documents.apps.DocumentsConfig")
 
+if accounts_module_enabled():
+    INSTALLED_APPS.append("accounts.apps.AccountsConfig")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -71,6 +74,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.enable_task_module",
                 "core.context_processors.enable_documents_module",
+                "core.context_processors.enable_accounts_module",
                 "core.context_processors.topbar_user",
                 "core.context_processors.task_nav_counts",
                 "core.context_processors.dsc_nav_counts",

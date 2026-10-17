@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "create" %}New account ledger{% else %}Edit account ledger{% endif %} — CA Office Suite{% endblock %}
+{% block page_title %}{% if mode == "create" %}New account ledger{% else %}Edit account ledger{% endif %}{% endblock %}
+{% block extra_head %}
+  {{ form.secondary_options|json_script:"secondary-group-options" }}
+{% endblock %}
+{% block content %}
+  <form method="post" class="card p-3 col-lg-7">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="mb-3"><label class="form-label">Account name</label>{{ form.name }}{{ form.name.errors }}</div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="{{ form.primary_group.id_for_label }}">Primary group</label>
+        {{ form.primary_group }}{{ form.primary_group.errors }}
+        <div class="form-text">Primary group under a main head.</div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="{{ form.secondary_group.id_for_label }}">Account group</label>
+        {{ form.secondary_group }}{{ form.secondary_group.errors }}
+        <div class="form-text">Optional account group. Leave blank to keep the account under the primary group only.</div>
+      </div>
+    </div>
+    <div class="mb-3"><label class="form-label">Address</label>{{ form.address }}</div>
+    <div class="row">
+      <div class="col-md-4 mb-3"><label class="form-label">GST No</label>{{ form.gstin }}</div>
+      <div class="col-md-4 mb-3"><label class="form-label">HSN / SAC</label>{{ form.hsn_code }}</div>
+      <div class="col-md-4 mb-3" id="gst-rate-wrap">
+        <label class="form-label">GST rate %</label>{{ form.gst_rate }}
+      </div>
+    </div>
+    <div class="form-check mb-3">
+      {{ form.is_pure_agent }}
+      <label class="form-check-label" for="{{ form.is_pure_agent.id_for_label }}">Pure agent</label>
+      <div class="form-text">Use for reimbursements recovered at actuals (ROC, GST challan, etc.). No GST is charged on this account, even on a GST invoice.</div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3"><label class="form-label">PAN No</label>{{ form.pan }}</div>
+      <div class="col-md-6 mb-3"><label class="form-label">Opening balance</label>{{ form.opening_balance }}
+        <div class="form-text">Debit if the group is Assets or Expenses; credit if Liabilities or Income.</div>
+      </div>
+    </div>
+    <div class="form-check mb-3">{{ form.is_active }} <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label></div>
+    <button class="btn btn-primary">Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'accounts_account_list' %}">Cancel</a>
+  </form>
+  <script>
+    (function () {
+      var box = document.getElementById("id_is_pure_agent");
+      var wrap = document.getElementById("gst-rate-wrap");
+      var rate = document.getElementById("id_gst_rate");
+      function sync() {
+        var on = box && box.checked;
+        if (wrap) wrap.style.display = on ? "none" : "";
+        if (on && rate) rate.value = "";
+      }
+      if (box) box.addEventListener("change", sync);
+      sync();
+      var primary = document.getElementById("id_primary_group");
+      var secondary = document.getElementById("id_secondary_group");
+      var optsEl = document.getElementById("secondary-group-options");
+      var options = [];
+      try { options = optsEl ? JSON.parse(optsEl.textContent || "[]") : []; } catch (e) { options = []; }
+      function filterSecondary() {
+        if (!secondary || !primary) return;
+        var parentId = primary.value;
+        var current = secondary.value;
+        secondary.innerHTML = "";
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "None — under primary group";
+        secondary.appendChild(empty);
+        options.forEach(function (opt) {
+          if (String(opt.parent) !== String(parentId)) return;
+          var el = document.createElement("option");
+          el.value = String(opt.id);
+          el.textContent = opt.label;
+          if (String(opt.id) === String(current)) el.selected = true;
+          secondary.appendChild(el);
+        });
+      }
+      if (primary) primary.addEventListener("change", filterSecondary);
+      filterSecondary();
+    })();
+  </script>
+{% endblock %}

@@ -200,6 +200,7 @@ def reset_test_data(request):
                 client_groups=True,
                 tasks=True,
                 documents=True,
+                accounts=True,
                 activity_log=True,
                 delete_users=True,
                 users_keep_ids={request.user.pk},
@@ -221,6 +222,7 @@ def reset_test_data(request):
                     request.POST.get("delete_task_configuration") == "1" and not delete_tasks_full
                 ),
                 documents=request.POST.get("delete_documents") == "1" or delete_clients,
+                accounts=request.POST.get("delete_accounts") == "1" or delete_clients,
                 activity_log=request.POST.get("delete_activity_log") == "1",
                 delete_users=request.POST.get("delete_users") == "1",
                 users_keep_ids={request.user.pk},
@@ -237,6 +239,7 @@ def reset_test_data(request):
                 options.task_instances,
                 options.task_configuration,
                 options.documents,
+                options.accounts,
                 options.activity_log,
                 options.delete_users,
             ]

@@ -14,7 +14,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Delete local test data (clients, tasks, MIS, users, etc.) in a safe order."
+    help = "Delete local test data (clients, tasks, MIS, accounts books, users, etc.) in a safe order."
 
     def add_arguments(self, parser):
         parser.add_argument(

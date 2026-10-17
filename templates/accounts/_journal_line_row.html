@@ -1,0 +1,22 @@
+<tr class="js-journal-row">
+  <td class="journal-account">
+    {{ f.account }}
+    {% if f.bill_alloc %}{{ f.bill_alloc }}{% endif %}
+    {% if f.account.errors %}<div class="text-danger small">{{ f.account.errors }}</div>{% endif %}
+  </td>
+  <td class="journal-amt">{{ f.debit }}</td>
+  <td class="journal-amt">{{ f.credit }}</td>
+  <td class="journal-add">
+    <button type="button" class="btn btn-sm btn-outline-primary js-add-journal-row" title="Add row" aria-label="Add row">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+    </button>
+    {{ f.id }}
+  </td>
+</tr>
+{% if billwise_mode %}
+<tr class="js-billwise-wrap">
+  <td colspan="4" class="pt-0 pb-3 text-start">
+    <div class="js-billwise-box border rounded p-2 bg-light d-none"></div>
+  </td>
+</tr>
+{% endif %}

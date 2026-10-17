@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if kind == 'main' %}Main head{% elif kind == 'parent' %}Primary group{% else %}Account group{% endif %}
+  — CA Office Suite
+{% endblock %}
+{% block page_title %}
+  {% if mode == 'create' %}
+    {% if kind == 'main' %}New main head{% elif kind == 'parent' %}New primary group{% else %}New account group{% endif %}
+  {% else %}
+    {% if kind == 'main' %}Edit main head{% elif kind == 'parent' %}Edit primary group{% else %}Edit account group{% endif %}
+  {% endif %}
+{% endblock %}
+{% block extra_head %}
+<style>
+  .field-wrap { position: relative; }
+  .task-suggest-list {
+    position: absolute;
+    z-index: 20;
+    max-height: 220px;
+    overflow-y: auto;
+    width: 100%;
+    display: none;
+    background: #fff;
+  }
+  .task-suggest-list.show { display: block; }
+  .task-suggest-item {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e8eaf1;
+  }
+  .task-suggest-item:hover { background: #eef2ff; }
+</style>
+{% endblock %}
+{% block content %}
+  <form method="post" class="card p-3 col-lg-6">
+    {% csrf_token %}
+    <input type="hidden" name="kind" value="{{ kind }}" />
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+    {% if kind == 'main' %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Main head name</label>
+        {{ form.name }}
+        {{ form.name.errors }}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.main_head.id_for_label }}">Type</label>
+        {{ form.main_head }}
+        {{ form.main_head.errors }}
+      </div>
+    {% elif kind == 'parent' %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Primary group name</label>
+        {{ form.name }}
+        {{ form.name.errors }}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.parent.id_for_label }}">Main head</label>
+        {{ form.parent }}
+        {{ form.parent.errors }}
+      </div>
+    {% else %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Account group name</label>
+        {{ form.name }}
+        {{ form.name.errors }}
+      </div>
+      <div class="mb-3 field-wrap">
+        <label class="form-label" for="parentGroupSearch">Primary group</label>
+        {{ form.parent }}
+        <input class="form-control" id="parentGroupSearch" placeholder="Type to filter primary groups…" autocomplete="off" />
+        <div id="parentGroupSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+        {{ form.parent.errors }}
+      </div>
+    {% endif %}
+
+    <div class="form-check mb-3">{{ form.is_active }} <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label></div>
+    <button class="btn btn-primary">Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'accounts_group_list' %}?tab={{ kind }}">Cancel</a>
+  </form>
+  {% if kind == 'account' %}
+    {{ parent_options|json_script:"parent-group-options" }}
+    {% load static %}
+    <script src="{% static 'js/task_user_single_picker.js' %}"></script>
+    <script>
+      (function () {
+        var options = JSON.parse(document.getElementById("parent-group-options").textContent || "[]");
+        if (window.initTaskUserSinglePicker) {
+          window.initTaskUserSinglePicker({
+            searchId: "parentGroupSearch",
+            suggestId: "parentGroupSuggestions",
+            hiddenId: "id_parent",
+            options: options,
+            minChars: 0,
+          });
+        }
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

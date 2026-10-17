@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — CA Office Suite{% endblock %}
+{% block page_title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  {% include "accounts/_voucher_type_tabs.html" %}
+  <p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.date }} · {{ obj.series }}</p>
+  {% if obj.narration %}<p>{{ obj.narration }}</p>{% endif %}
+  {% with tasks=obj.tasks.all %}
+    {% if tasks %}
+      <p>Linked tasks:
+        {% for t in tasks %}
+          <a href="{% url 'task_detail' t.pk %}">{{ t.display_title }}</a>{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+      </p>
+    {% endif %}
+  {% endwith %}
+  <div class="card p-3">
+    <table class="table table-sm">
+      <thead><tr><th>Account</th><th>HSN / SAC</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
+      <tbody>
+        {% for line in obj.lines.all %}
+          <tr>
+            <td>{{ line.account.name }}{% if line.is_pure_agent %} <span class="badge text-bg-light">Pure agent</span>{% endif %}</td>
+            <td class="mono">{{ line.hsn_code|default:"—" }}</td>
+            <td class="text-end mono">{% if line.debit %}{{ line.debit }}{% endif %}</td>
+            <td class="text-end mono">{% if line.credit %}{{ line.credit }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if obj.voucher_type == "receipt" or obj.voucher_type == "credit_note" or obj.voucher_type == "debit_note" %}
+    {% if obj.receipt_allocations.all %}
+    <h2 class="h6 mt-4">Bill-wise</h2>
+    <div class="card p-3">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Account</th><th>Against</th><th class="text-end">Amount</th></tr></thead>
+        <tbody>
+          {% for alloc in obj.receipt_allocations.all %}
+            <tr>
+              <td>{{ alloc.party.name }}</td>
+              <td>{% if alloc.is_advance %}Advance{% elif alloc.is_opening %}Opening balance{% else %}{{ alloc.against.number }}{% endif %}</td>
+              <td class="text-end mono">{{ alloc.amount }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  {% endif %}
+  <p class="mt-3">
+    {% if obj.voucher_type == "sales" %}
+      <a class="btn btn-primary btn-sm" href="{% url 'accounts_sales_invoice_print' obj.pk %}">Print / export invoice</a>
+    {% endif %}
+    {% if back_to_ledger %}
+      <a class="btn btn-outline-secondary btn-sm" href="{{ back_to_ledger }}">Back to ledger</a>
+    {% endif %}
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_list' %}?type={{ vtype }}">Back to {{ obj.get_voucher_type_display }}</a>
+    {% if perms.accounts.post_voucher %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_edit' obj.pk %}">Edit</a>
+      <form method="post" action="{% url 'accounts_voucher_delete' obj.pk %}" class="d-inline" onsubmit="return confirm('Delete voucher {{ obj.number|escapejs }}?');">
+        {% csrf_token %}
+        {% if back_to_ledger %}<input type="hidden" name="next" value="{{ back_to_ledger }}">{% endif %}
+        <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+      </form>
+    {% endif %}
+  </p>
+{% endblock %}

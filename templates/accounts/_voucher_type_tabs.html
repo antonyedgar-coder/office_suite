@@ -1,0 +1,48 @@
+{% if voucher_tabs %}
+  <style>
+    .voucher-type-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      width: 100%;
+      gap: 0.35rem;
+      padding: 0.45rem;
+      background: transparent;
+      border: 0;
+      border-radius: 10px;
+    }
+    .voucher-type-tabs .nav-item {
+      flex: 1 1 5.75rem;
+      display: flex;
+      justify-content: center;
+    }
+    .voucher-type-tabs .nav-link {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      text-align: center;
+      white-space: nowrap;
+      overflow: visible;
+      padding: 0.45rem 0.35rem;
+      font-size: 0.85rem;
+      color: #1f2937 !important;
+      background: #e5e7eb !important;
+      border: 1px solid #d1d5db !important;
+      border-radius: 8px;
+    }
+    .voucher-type-tabs .nav-link:hover { background: #f3f4f6 !important; }
+    .voucher-type-tabs .nav-link.active {
+      font-weight: 600;
+      background: #d1d5db !important;
+      border-color: #9ca3af !important;
+      color: #111827 !important;
+    }
+  </style>
+  <ul class="nav nav-tabs nav-justified voucher-type-tabs mb-3">
+    {% for key, label in voucher_tabs %}
+      <li class="nav-item">
+        <a class="nav-link {% if vtype == key %}active{% endif %}" href="{% url 'accounts_voucher_list' %}?type={{ key }}">{{ label }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}

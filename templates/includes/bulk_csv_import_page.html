@@ -18,7 +18,7 @@
       <input class="form-control" type="file" name="csv_file" accept=".csv" required />
       <div class="d-flex gap-2">
         <button class="btn btn-primary" type="submit">Upload &amp; preview</button>
-        <a class="btn btn-outline-secondary" href="{% url cancel_url_name %}">Cancel</a>
+        <a class="btn btn-outline-secondary" href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url cancel_url_name %}{% endif %}">Cancel</a>
       </div>
     </form>
   </div>

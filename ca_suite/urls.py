@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.urls import path, include
 
 from core import views as core_views
-from core.feature_flags import documents_module_enabled, task_module_enabled
+from core.feature_flags import accounts_module_enabled, documents_module_enabled, task_module_enabled
 
 
 handler403 = core_views.permission_denied_view  # noqa: E501
@@ -26,6 +26,9 @@ if task_module_enabled():
 
 if documents_module_enabled():
     urlpatterns.insert(-1, path("documents/", include("documents.urls")))
+
+if accounts_module_enabled():
+    urlpatterns.insert(-1, path("accounts/", include("accounts.urls")))
 
 
 def _build_business_rules_docx_on_reload() -> None:

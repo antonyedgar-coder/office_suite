@@ -38,7 +38,7 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
-    list_display = ("company_name", "updated_at")
+    list_display = ("company_name", "gstin", "updated_at")
 
     def has_add_permission(self, request):
         return not SiteSettings.objects.exists()

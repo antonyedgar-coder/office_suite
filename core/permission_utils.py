@@ -2,7 +2,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
-from core.feature_flags import documents_module_enabled, task_module_enabled
+from core.feature_flags import accounts_module_enabled, documents_module_enabled, task_module_enabled
 
 
 def _managed_models() -> tuple[tuple[str, str], ...]:
@@ -36,6 +36,14 @@ def _managed_models() -> tuple[tuple[str, str], ...]:
             [
                 ("documents", "clientdocument"),
                 ("documents", "documentfoldertemplate"),
+            ]
+        )
+    if accounts_module_enabled():
+        models.extend(
+            [
+                ("accounts", "accountgroup"),
+                ("accounts", "account"),
+                ("accounts", "voucher"),
             ]
         )
     return tuple(models)

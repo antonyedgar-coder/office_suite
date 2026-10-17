@@ -7,7 +7,7 @@
     <div class="fw-semibold mb-1">Danger zone</div>
     <div class="text-secondary small">
       Clear <strong>local test data</strong> before cloud deploy. Use
-      <strong>Delete everything (keep my login)</strong> to wipe clients, MIS, tasks, users, and related rows in a safe order.
+      <strong>Delete everything (keep my login)</strong> to wipe clients, MIS, tasks, accounts books, users, and related rows in a safe order.
     </div>
   </div>
 
@@ -36,6 +36,11 @@
         <div class="col-6 col-md-4"><span class="text-secondary">File type templates</span><div class="mono fw-semibold">{{ counts.document_type_templates }}</div></div>
         <div class="col-6 col-md-4"><span class="text-secondary">Task→file links</span><div class="mono fw-semibold">{{ counts.task_document_mappings }}</div></div>
       {% endif %}
+      {% if enable_accounts_module %}
+        <div class="col-6 col-md-4"><span class="text-secondary">Accounts vouchers</span><div class="mono fw-semibold">{{ counts.accounts_vouchers }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Accounts ledgers</span><div class="mono fw-semibold">{{ counts.accounts_ledgers }}</div></div>
+        <div class="col-6 col-md-4"><span class="text-secondary">Accounts groups</span><div class="mono fw-semibold">{{ counts.accounts_groups }}</div></div>
+      {% endif %}
     </div>
 
     <form method="post" class="row g-3" id="resetForm">
@@ -49,7 +54,7 @@
             Delete everything (keep my login only)
           </label>
           <div class="form-text">
-            Clients, client groups, MIS, director mapping, DIR-3 KYC, tasks (if enabled), documents (if enabled), activity log, and all other users.
+            Clients, client groups, MIS, director mapping, DIR-3 KYC, tasks (if enabled), documents (if enabled), accounts books (if enabled), activity log, and all other users.
           </div>
         </div>
       </div>
@@ -90,6 +95,14 @@
             </label>
           </div>
         {% endif %}
+        {% if enable_accounts_module %}
+          <div class="form-check">
+            <input class="form-check-input reset-opt" type="checkbox" id="delAccounts" name="delete_accounts" value="1" />
+            <label class="form-check-label" for="delAccounts">
+              Accounts books (vouchers, allocations, invoice numbers, ledgers, and account groups — keeps Main Heads)
+            </label>
+          </div>
+        {% endif %}
         <div class="form-check">
           <input class="form-check-input reset-opt" type="checkbox" id="delGroups" name="delete_client_groups" value="1" />
           <label class="form-check-label" for="delGroups">Client groups</label>
@@ -109,7 +122,7 @@
             <strong>Client Master (ALL clients)</strong>
           </label>
           <div class="form-text text-danger">
-            Also wipes MIS, director mapping, DIR-3 KYC, tasks, and documents (uploads + templates) automatically to avoid dependency errors.
+            Also wipes MIS, director mapping, DIR-3 KYC, tasks, documents, and accounts books automatically to avoid dependency errors.
           </div>
         </div>
       </div>

@@ -13,4 +13,4 @@ def get_site_settings() -> SiteSettings:
     except (OperationalError, ProgrammingError):
         # Fail-safe for live: if migrations aren't applied yet,
         # don't take down the whole site just to render branding.
-        return SiteSettings(company_name="", logo=None)
+        return SiteSettings(company_name="", gstin="", address="", logo=None)

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ list_title }} — CA Office Suite{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block content %}
+  {% include "accounts/_register_tabs.html" %}
+  <form method="get" class="row g-2 mb-3 align-items-end">
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_to.id_for_label }}">As on</label>
+      {{ form.date_to }}
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
+    </div>
+    <div class="col-auto">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Export
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{{ excel_url }}">Excel</a></li>
+          <li><a class="dropdown-item" href="{{ pdf_url }}">PDF</a></li>
+        </ul>
+      </div>
+    </div>
+  </form>
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="h5 mb-0">{{ list_title }}</h1>
+    {% if as_on %}<div class="text-secondary small">As on {{ as_on|date:"d-m-Y" }}</div>{% endif %}
+  </div>
+  {% for section in data.sections %}
+    <h6 class="mb-2">{{ section.name }}</h6>
+    <div class="card p-3 mb-3">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Sl.no</th>
+              <th>Date</th>
+              <th>Invoice No</th>
+              <th class="text-end">Total Outstanding</th>
+              <th>Due For</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in section.rows %}
+              <tr>
+                <td>{{ row.sl_no }}</td>
+                <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% else %}—{% endif %}</td>
+                <td>
+                  {% if row.voucher_id %}
+                    <a href="{% url 'accounts_voucher_detail' row.voucher_id %}">{{ row.number }}</a>
+                  {% else %}
+                    {{ row.number }}
+                  {% endif %}
+                </td>
+                <td class="text-end mono">{{ row.outstanding }}</td>
+                <td>{{ row.due_for }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fw-bold">
+              <td colspan="3">Total</td>
+              <td class="text-end mono">{{ section.total }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card p-3">
+      <p class="text-secondary mb-0">No outstanding bills for Sundry Debtors as on this date.</p>
+    </div>
+  {% endfor %}
+  {% if data.sections %}
+    <div class="fw-bold text-end">Grand total <span class="mono">{{ data.grand_total }}</span></div>
+  {% endif %}
+{% endblock %}

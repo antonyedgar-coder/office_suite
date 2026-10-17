@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ invoice.number }} — {{ invoice.title }}{% endblock %}
+{% block page_title %}{{ invoice.title }}{% endblock %}
+{% block extra_head %}
+<style>
+  .invoice-toolbar { margin-bottom: 1rem; }
+  .invoice-sheet {
+    max-width: 210mm;
+    margin: 0 auto;
+    background: #fff;
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+  .invoice-heading {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: center;
+    margin: 0 0 1.25rem;
+  }
+  .invoice-firm { font-size: 1.25rem; font-weight: 700; }
+  .invoice-meta td { padding: 0.15rem 0.5rem 0.15rem 0; vertical-align: top; }
+  .invoice-sheet table.invoice-lines th,
+  .invoice-sheet table.invoice-lines td { padding: 0.4rem 0.5rem; }
+  .invoice-words { font-size: 0.92rem; }
+  .invoice-note { font-size: 0.8rem; color: #5c6478; }
+  @media print {
+    .no-print, .sidebar, .topbar, aside, .sidebar-collapse-toggle, .offcanvas, .btn { display: none !important; }
+    .app-shell, .content, .container { display: block !important; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
+    .invoice-sheet { max-width: none; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+  <div class="invoice-toolbar no-print d-flex flex-wrap gap-2">
+    <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">Print / Save PDF</button>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_detail' obj.pk %}">Back</a>
+  </div>
+  <div class="invoice-sheet">
+    <h1 class="invoice-heading">{{ invoice.title }}</h1>
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        {% if invoice.logo_url %}
+          <img src="{{ invoice.logo_url }}" alt="" style="max-height:48px" class="mb-2" />
+        {% endif %}
+        <div class="invoice-firm">{{ invoice.company_name|default:"—" }}</div>
+        {% if invoice.company_address %}<div>{{ invoice.company_address }}</div>{% endif %}
+        {% if invoice.company_gstin %}<div>GSTIN: <span class="mono">{{ invoice.company_gstin }}</span></div>{% endif %}
+      </div>
+      <div class="text-end">
+        <table class="invoice-meta ms-auto">
+          <tr><td class="text-secondary">Invoice no.</td><td class="mono">{{ invoice.number }}</td></tr>
+          <tr><td class="text-secondary">Date</td><td>{{ invoice.date }}</td></tr>
+          {% if invoice.is_gst and invoice.place_of_supply %}
+            <tr><td class="text-secondary">Place of supply</td><td>{{ invoice.place_of_supply }}</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+    <div class="mb-3">
+      <div class="text-secondary small">Bill to</div>
+      <div class="fw-semibold">{{ invoice.buyer_name|default:"—" }}</div>
+      {% if invoice.buyer_address %}<div>{{ invoice.buyer_address }}</div>{% endif %}
+      {% if invoice.buyer_gstin %}<div>GSTIN: <span class="mono">{{ invoice.buyer_gstin }}</span></div>{% endif %}
+    </div>
+    <table class="table table-sm invoice-lines">
+      <thead>
+        <tr>
+          <th style="width:3rem">#</th>
+          <th>Particulars</th>
+          <th style="width:8rem">HSN / SAC</th>
+          <th class="text-end" style="width:9rem">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in invoice.items %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>
+              {{ item.description }}
+              {% if item.is_pure_agent %}<div class="small text-secondary">Recovered at actuals — Rule 33. No GST.</div>{% endif %}
+            </td>
+            <td class="mono">{{ item.hsn|default:"—" }}</td>
+            <td class="text-end mono">{{ item.amount_display }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-secondary">No line items.</td></tr>
+        {% endfor %}
+        <tr>
+          <td colspan="3" class="text-end">Total</td>
+          <td class="text-end mono">{{ invoice.taxable_total_display }}</td>
+        </tr>
+        {% for tax in invoice.tax_rows %}
+          <tr>
+            <td colspan="3" class="text-end">{{ tax.label }}</td>
+            <td class="text-end mono">{{ tax.amount_display }}</td>
+          </tr>
+        {% endfor %}
+        <tr>
+          <th colspan="3" class="text-end">Grand total</th>
+          <th class="text-end mono">{{ invoice.grand_total_display }}</th>
+        </tr>
+      </tbody>
+    </table>
+    <p class="invoice-words mb-2"><strong>Amount in words:</strong> {{ invoice.amount_in_words }}</p>
+    {% if invoice.narration %}<p class="mb-2"><strong>Narration:</strong> {{ invoice.narration }}</p>{% endif %}
+    {% if invoice.tasks %}
+      <p class="invoice-note mb-2">Task:
+        {% for t in invoice.tasks %}{{ t.display_title }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </p>
+    {% endif %}
+    <p class="invoice-note mb-0">This is a computer-generated invoice.</p>
+  </div>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% if register_tabs %}
+  <style>
+    .register-type-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      width: 100%;
+      gap: 0.35rem;
+      padding: 0.45rem;
+      background: transparent;
+      border: 0;
+      border-radius: 10px;
+    }
+    .register-type-tabs .nav-item {
+      flex: 1 1 7rem;
+      display: flex;
+      justify-content: center;
+    }
+    .register-type-tabs .nav-link {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      text-align: center;
+      white-space: nowrap;
+      overflow: visible;
+      padding: 0.45rem 0.35rem;
+      font-size: 0.85rem;
+      color: #1f2937 !important;
+      background: #e5e7eb !important;
+      border: 1px solid #d1d5db !important;
+      border-radius: 8px;
+    }
+    .register-type-tabs .nav-link:hover { background: #f3f4f6 !important; }
+    .register-type-tabs .nav-link.active {
+      font-weight: 600;
+      background: #d1d5db !important;
+      border-color: #9ca3af !important;
+      color: #111827 !important;
+    }
+  </style>
+  <ul class="nav nav-tabs nav-justified register-type-tabs mb-3">
+    {% for key, label in register_tabs %}
+      <li class="nav-item">
+        <a class="nav-link {% if report_kind == key %}active{% endif %}" href="{% url 'accounts_register' %}?type={{ key }}{% if key == 'sales' %}&invoice={{ invoice_kind|default:'gst' }}{% endif %}{% if date_from %}&date_from={{ date_from|date:'Y-m-d' }}{% endif %}{% if date_to %}&date_to={{ date_to|date:'Y-m-d' }}{% endif %}">{{ label }}</a>
+      </li>
+    {% endfor %}
+      <li class="nav-item">
+        <a class="nav-link {% if report_kind == 'outstanding' %}active{% endif %}" href="{% url 'accounts_billwise_outstanding' %}{% if date_to %}?date_to={{ date_to|date:'Y-m-d' }}{% endif %}">Bill wise outstanding</a>
+      </li>
+  </ul>
+{% endif %}

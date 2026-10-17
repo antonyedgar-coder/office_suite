@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ list_title }} — CA Office Suite{% endblock %}
+{% block page_title %}Vouchers{% endblock %}
+{% block content %}
+  {% include "accounts/_voucher_type_tabs.html" %}
+
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="h5 mb-0">{{ list_title }}</h1>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ pdf_url }}">Export PDF</a>
+      {% if perms.accounts.post_voucher %}
+        <a class="btn btn-primary btn-sm" href="{% url 'accounts_voucher_create' %}?type={{ vtype }}">Add</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Voucher No</th>
+            <th>Narration</th>
+            <th class="text-end">Amount</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in rows %}
+            <tr>
+              <td>{{ v.date|date:"d-m-Y" }}</td>
+              <td><a href="{% url 'accounts_voucher_detail' v.pk %}">{{ v.number }}</a></td>
+              <td>{{ v.narration|default:"—" }}</td>
+              <td class="text-end mono">{{ v.amount }}</td>
+              <td class="text-nowrap text-end">
+                {% if perms.accounts.post_voucher %}
+                  <a href="{% url 'accounts_voucher_edit' v.pk %}">Edit</a>
+                  ·
+                  <form method="post" action="{% url 'accounts_voucher_delete' v.pk %}" class="d-inline" onsubmit="return confirm('Delete voucher {{ v.number|escapejs }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-link btn-sm p-0 align-baseline text-danger">Delete</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

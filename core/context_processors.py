@@ -1,4 +1,4 @@
-from core.feature_flags import documents_module_enabled, task_module_enabled
+from core.feature_flags import accounts_module_enabled, documents_module_enabled, task_module_enabled
 from core.settings_hub import user_may_open_settings
 from core.site_settings import get_site_settings
 from core.user_display import user_display_name
@@ -10,6 +10,10 @@ def enable_task_module(request):
 
 def enable_documents_module(request):
     return {"enable_documents_module": documents_module_enabled()}
+
+
+def enable_accounts_module(request):
+    return {"enable_accounts_module": accounts_module_enabled()}
 
 
 def master_request_nav_counts(request):

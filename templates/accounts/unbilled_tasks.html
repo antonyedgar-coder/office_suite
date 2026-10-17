@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Bill not raised — CA Office Suite{% endblock %}
+{% block page_title %}Task completed — bill not raised{% endblock %}
+{% block content %}
+  {% include "includes/page_header.html" with title="Task completed — bill not raised" subtitle="Select tasks and create one sales invoice per task. GST vs non-GST uses separate number series." %}
+  <form id="unbilled-search-form" method="get" class="d-none"></form>
+  <form method="post">
+    {% csrf_token %}
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label" for="unbilled-search">Search</label>
+        <input
+          class="form-control"
+          id="unbilled-search"
+          form="unbilled-search-form"
+          name="q"
+          value="{{ q }}"
+          placeholder="Client or task"
+        />
+      </div>
+      <div class="col-md-3"><label class="form-label" for="{{ form.invoice_date.id_for_label }}">Invoice date</label>{{ form.invoice_date }}</div>
+      <div class="col-md-3"><label class="form-label" for="{{ form.with_gst.id_for_label }}">Series</label>{{ form.with_gst }}</div>
+      <div class="col-md-3 d-flex gap-2">
+        <button class="btn btn-outline-secondary" type="submit" form="unbilled-search-form">Search</button>
+        <button class="btn btn-primary" type="submit">Create invoice</button>
+      </div>
+    </div>
+    <div class="card p-3">
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Client</th>
+              <th>Task</th>
+              <th>Period</th>
+              <th class="text-end">Fees</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in tasks %}
+              <tr>
+                <td><input type="checkbox" name="task_id" value="{{ t.pk }}" /></td>
+                <td>{{ t.client.client_name }}</td>
+                <td><a href="{% url 'task_detail' t.pk %}">{{ t.display_title }}</a></td>
+                <td>{{ t.period_key }}</td>
+                <td class="text-end mono">{{ t.fees_amount }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-secondary">No completed billable tasks waiting for an invoice.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </form>
+{% endblock %}

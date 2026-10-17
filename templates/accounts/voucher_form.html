@@ -1,0 +1,1212 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{% if obj %}Edit {{ obj.number }}{% else %}Add {{ list_title }}{% endif %} — CA Office Suite{% endblock %}
+{% block page_title %}{% if obj %}Edit {{ obj.number }}{% else %}Add {{ list_title }}{% endif %}{% endblock %}
+{% block extra_head %}
+  {% if invoice_mode or compact_entry or contra_mode or journal_mode %}
+    {{ account_meta|json_script:"account-meta" }}
+    {{ party_options|json_script:"party-options" }}
+    {{ line_account_options|json_script:"line-account-options" }}
+    {{ company_gstin|default:""|json_script:"company-gstin" }}
+    <style>
+      .field-wrap { position: relative; }
+      .task-suggest-list {
+        position: absolute;
+        z-index: 20;
+        max-height: 220px;
+        overflow-y: auto;
+        width: 100%;
+        display: none;
+        background: #fff;
+      }
+      .task-suggest-list.show { display: block; }
+      .task-suggest-item {
+        cursor: pointer;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #e8eaf1;
+      }
+      .task-suggest-item:hover { background: #eef2ff; }
+      .invoice-header-row { flex-wrap: nowrap; }
+      .invoice-date-col { flex: 0 0 25%; max-width: 12rem; }
+      .invoice-buyer-col { flex: 1 1 auto; min-width: 12rem; }
+      .invoice-gst-col { flex: 0 0 16rem; min-width: 14rem; }
+      .invoice-tax-tabs { display: inline-flex; width: auto; }
+      .invoice-tax-tabs .nav-link { min-width: 7.5rem; text-align: center; cursor: pointer; }
+      .invoice-lines-overflow { overflow: visible !important; }
+      .invoice-account-float {
+        position: fixed;
+        z-index: 1080;
+        max-height: 220px;
+        overflow-y: auto;
+        display: none;
+        background: #fff;
+      }
+      .invoice-account-float.show { display: block; }
+      .receipt-form-frame {
+        max-width: 75%;
+      }
+      .receipt-form-frame .invoice-header-row { gap: 0.75rem; }
+      .receipt-form-frame .invoice-date-col { flex: 0 0 25%; max-width: 9.75rem; }
+      .receipt-form-frame .invoice-buyer-col { flex: 1 1 0; min-width: 0; }
+      .receipt-form-frame .contra-party-col { flex: 1 1 0; min-width: 0; }
+      .receipt-form-frame .contra-amount-col { flex: 0 0 9.75rem; }
+      .receipt-form-frame .form-label { font-size: 0.875rem; }
+      .receipt-form-frame #invoice-lines-table th:nth-child(2) { width: 9.75rem; }
+      .receipt-form-frame .js-invoice-amount { max-width: 9.75rem; margin-left: auto; }
+      .receipt-form-frame .js-advance-amt { max-width: 9.75rem; }
+      .receipt-form-frame.contra-frame #voucher-form {
+        background: #e8eaed;
+        border: 1px solid #d0d4da;
+        color: #212529;
+      }
+      .receipt-form-frame.contra-frame .form-label,
+      .receipt-form-frame.contra-frame .small {
+        color: #343a40;
+      }
+      .receipt-form-frame.contra-frame .text-secondary {
+        color: #5c636a !important;
+      }
+      .contra-block-title {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+      .contra-line-head,
+      .contra-line-row,
+      .contra-total-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .contra-line-head {
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+      }
+      .contra-line-row { margin-bottom: 0.5rem; }
+      .contra-line-account { flex: 1 1 0; min-width: 0; }
+      .contra-line-amount { flex: 0 0 9.75rem; }
+      .contra-line-amount .js-invoice-amount { max-width: none; margin-left: 0; width: 100%; }
+      .contra-line-add { flex: 0 0 2.5rem; }
+      .contra-line-head span:first-child,
+      .contra-total-row span:first-child { flex: 1 1 0; }
+      .contra-line-head span:nth-child(2),
+      .contra-total-row span:nth-child(2) { flex: 0 0 9.75rem; }
+      .contra-line-head span:last-child,
+      .contra-total-row span:last-child { flex: 0 0 2.5rem; }
+      .contra-total-row { font-weight: 600; margin-top: 0.25rem; }
+      .journal-form-frame { max-width: 75%; }
+      .journal-form-frame .table-responsive { overflow: visible; }
+      .journal-form-frame .journal-date-col { flex: 0 0 25%; max-width: 9.75rem; }
+      .journal-form-frame .form-label { font-size: 0.875rem; }
+      .journal-form-frame .journal-lines th,
+      .journal-form-frame .journal-lines td {
+        text-align: center;
+        vertical-align: middle;
+      }
+      .journal-form-frame .journal-lines .form-select,
+      .journal-form-frame .journal-lines .form-control {
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .journal-form-frame .journal-lines .journal-account {
+        width: auto;
+      }
+      .journal-form-frame .journal-lines .journal-amt {
+        width: 9.75rem;
+        max-width: 9.75rem;
+      }
+      .journal-form-frame .journal-lines .journal-amt .form-control {
+        max-width: 9.75rem;
+        width: 100%;
+      }
+      .journal-form-frame .journal-lines .journal-add {
+        width: 2.5rem;
+      }
+      @media (max-width: 992px) {
+        .receipt-form-frame { max-width: 100%; }
+        .journal-form-frame { max-width: 100%; }
+      }
+    </style>
+  {% endif %}
+{% endblock %}
+{% block content %}
+  {% include "accounts/_voucher_type_tabs.html" %}
+  {% if obj %}<p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.number }}</p>{% endif %}
+  <div{% if compact_entry or contra_mode %} class="receipt-form-frame{% if contra_mode %} contra-frame{% endif %}"{% elif journal_mode %} class="journal-form-frame"{% endif %}>
+  <form method="post" class="card p-3" action="{% if obj %}{% url 'accounts_voucher_edit' obj.pk %}{% else %}{% url 'accounts_voucher_create' %}?type={{ vtype }}{% endif %}" id="voucher-form" data-vtype="{{ vtype }}" data-outstanding-url="{{ outstanding_url }}">
+    {% csrf_token %}
+    {{ form.voucher_type }}
+    {% if linked_task %}
+      <input type="hidden" name="task_id" value="{{ linked_task.pk }}" />
+      <p class="alert alert-info">This invoice will be linked to task <strong>{{ linked_task.display_title }}</strong> ({{ linked_task.client.client_name }}). The task will be marked bill raised.</p>
+    {% endif %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    {% if party_form and party_form.non_field_errors %}<div class="alert alert-danger">{{ party_form.non_field_errors }}</div>{% endif %}
+    {% if contra_recv_formset and contra_recv_formset.non_form_errors %}<div class="alert alert-danger">{{ contra_recv_formset.non_form_errors }}</div>{% endif %}
+    {% if contra_pay_formset and contra_pay_formset.non_form_errors %}<div class="alert alert-danger">{{ contra_pay_formset.non_form_errors }}</div>{% endif %}
+
+    {% if invoice_mode or compact_entry %}
+      {{ party_form.party }}
+      <div class="d-flex align-items-end gap-3 mb-3 invoice-header-row">
+        <div class="invoice-date-col">
+          <label class="form-label" for="{{ form.date.id_for_label }}">Date</label>
+          {{ form.date }}
+        </div>
+        <div class="invoice-buyer-col field-wrap">
+          <label class="form-label" for="partySearch">{{ party_form.party.label }}</label>
+          <input class="form-control" id="partySearch" placeholder="Type to filter…" autocomplete="off" />
+          <div id="partySuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+          {{ party_form.party.errors }}
+        </div>
+        {% if invoice_mode %}
+        <div class="invoice-gst-col" id="party-gst-wrap">
+          <label class="form-label">GST No of the {{ party_form.party.label }}</label>
+          <div class="form-control bg-light" id="party-gstin">—</div>
+        </div>
+        {% endif %}
+      </div>
+      {% if invoice_mode %}
+      <div class="mb-3">
+        <label class="form-label">Address</label>
+        <div class="form-control bg-light" id="party-address">—</div>
+      </div>
+      {% endif %}
+      {% if party_form.tax_kind %}
+        {{ party_form.tax_kind }}
+        <div class="mb-3">
+          <label class="form-label">Invoice type</label>
+          <ul class="nav nav-tabs invoice-tax-tabs mb-0" role="tablist">
+            <li class="nav-item">
+              <button type="button" class="nav-link js-tax-tab" data-tax="gst" role="tab">GST</button>
+            </li>
+            <li class="nav-item">
+              <button type="button" class="nav-link js-tax-tab" data-tax="ngst" role="tab">NON GST</button>
+            </li>
+          </ul>
+          {{ party_form.tax_kind.errors }}
+        </div>
+      {% endif %}
+
+      {{ item_formset.management_form }}
+      {% if vtype == 'sales' %}
+        <p class="small text-secondary mb-1">Company GST No <span class="mono">{{ company_gstin|default:"—" }}</span>{% if company_address %} · {{ company_address }}{% endif %}</p>
+        <p class="small text-secondary">Each account amount is credited. GST uses that account’s rate. Same first two GSTIN digits as the company GST No → CGST and SGST at half the rate. Different digits → IGST. Pure agent lines have no GST. The buyer is debited for amount plus GST.</p>
+      {% elif vtype == 'receipt' %}
+        <p class="small text-secondary">The mode of receipt is debited for the total. Each account amount is credited. After you select an account, opening balance and outstanding bills are shown so you can knock off the receipt. If there are none, enter the amount as advance.</p>
+      {% elif vtype == 'payment' %}
+        <p class="small text-secondary">The mode of payment is credited for the total. Each account amount is debited. Cash and cash equivalent ledgers are only used as the mode of payment.</p>
+      {% else %}
+        <p class="small text-secondary">Each account amount is debited. The supplier is credited for the total.</p>
+      {% endif %}
+      <div class="table-responsive invoice-lines-overflow">
+        <table class="table table-sm align-middle" id="invoice-lines-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              {% if vtype == 'sales' %}<th style="width:8rem">HSN / SAC</th>{% endif %}
+              <th class="text-end" style="width:{% if compact_entry %}9.75rem{% else %}10rem{% endif %}">Amount</th>
+              {% if vtype == 'sales' %}
+                <th class="text-end js-gst-col" style="width:5.5rem">GST %</th>
+                <th class="text-end js-gst-col" style="width:5.5rem">CGST %</th>
+                <th class="text-end js-gst-col" style="width:7rem">CGST</th>
+                <th class="text-end js-gst-col" style="width:5.5rem">SGST %</th>
+                <th class="text-end js-gst-col" style="width:7rem">SGST</th>
+                <th class="text-end js-gst-col" style="width:5.5rem">IGST %</th>
+                <th class="text-end js-gst-col" style="width:7rem">IGST</th>
+              {% endif %}
+              <th style="width:3rem"></th>
+            </tr>
+          </thead>
+          <tbody id="invoice-lines-body">
+            {% for f in item_formset.forms %}
+              {% include "accounts/_invoice_item_row.html" with f=f vtype=vtype %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <template id="invoice-empty-row">
+        {% include "accounts/_invoice_item_row.html" with f=item_formset.empty_form vtype=vtype %}
+      </template>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.narration.id_for_label }}">Narration</label>
+        {{ form.narration }}
+      </div>
+    {% elif contra_mode %}
+      <p class="small text-secondary">Use cash and cash equivalent ledgers only. Receipt accounts are debited and payer accounts are credited. Totals must match, and the same ledger cannot appear on both sides.</p>
+      <div class="d-flex align-items-end gap-3 mb-3 invoice-header-row">
+        <div class="invoice-date-col">
+          <label class="form-label" for="{{ form.date.id_for_label }}">Date</label>
+          {{ form.date }}
+        </div>
+      </div>
+      {% include "accounts/_contra_lines_table.html" with formset=contra_recv_formset prefix="recv" heading="Receipt" vtype=vtype %}
+      {% include "accounts/_contra_lines_table.html" with formset=contra_pay_formset prefix="pay" heading="Payer" vtype=vtype %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.narration.id_for_label }}">Narration</label>
+        {{ form.narration }}
+      </div>
+    {% elif journal_mode %}
+      <p class="small text-secondary">Debit and credit must match. If you select a Sundry Debtors or Sundry Creditors ledger, outstanding bills are shown so you can knock off the balance.</p>
+      <div class="d-flex align-items-end gap-3 mb-3 invoice-header-row">
+        <div class="journal-date-col">
+          <label class="form-label" for="{{ form.date.id_for_label }}">Date</label>
+          {{ form.date }}
+        </div>
+      </div>
+      {{ formset.management_form }}
+      <div class="table-responsive">
+        <table class="table table-sm journal-lines" id="journal-lines-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th class="journal-amt">Debit</th>
+              <th class="journal-amt">Credit</th>
+              <th class="journal-add"></th>
+            </tr>
+          </thead>
+          <tbody id="journal-lines-body">
+            {% for f in formset.forms %}
+              {% include "accounts/_journal_line_row.html" with f=f billwise_mode=billwise_mode %}
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Total</th>
+              <th class="journal-amt mono" id="journal-debit-total">0.00</th>
+              <th class="journal-amt mono" id="journal-credit-total">0.00</th>
+              <th></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <template id="journal-empty-row">
+        {% include "accounts/_journal_line_row.html" with f=formset.empty_form billwise_mode=billwise_mode %}
+      </template>
+      <p class="small text-danger d-none mb-2" id="journal-balance-hint">Save is available when debit and credit totals are the same.</p>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.narration.id_for_label }}">Narration</label>
+        {{ form.narration }}
+      </div>
+    {% else %}
+      <div class="row">
+        <div class="col-md-6 mb-3"><label class="form-label">Date</label>{{ form.date }}</div>
+        <div class="col-md-6 mb-3"><label class="form-label">Narration</label>{{ form.narration }}</div>
+      </div>
+      {{ formset.management_form }}
+      <p class="small text-secondary">Debit and credit must match.</p>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead><tr><th>Account</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th></th></tr></thead>
+          <tbody>
+            {% for f in formset.forms %}
+              <tr>
+                <td>{{ f.account }}{% if f.account.errors %}<div class="text-danger small">{{ f.account.errors }}</div>{% endif %}</td>
+                <td>{{ f.debit }}</td>
+                <td>{{ f.credit }}</td>
+                <td>{% if f.DELETE %}{{ f.DELETE }}{% endif %}{{ f.id }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    <button class="btn btn-primary" id="voucher-save"{% if journal_mode %} disabled{% endif %}>Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'accounts_voucher_list' %}?type={{ vtype }}">Cancel</a>
+  </form>
+  </div>
+  {% if invoice_mode or compact_entry %}
+  <script src="{% static 'js/task_user_single_picker.js' %}"></script>
+  <script>
+    (function () {
+      var metaEl = document.getElementById("account-meta");
+      var meta = metaEl ? JSON.parse(metaEl.textContent) : {};
+      var form = document.getElementById("voucher-form");
+      if (!form) return;
+      function taxKindInput() {
+        return form.querySelector('[name="tax_kind"]');
+      }
+      function gstSelected() {
+        var el = taxKindInput();
+        return el ? el.value === "gst" : false;
+      }
+      function syncTaxTabs() {
+        var el = taxKindInput();
+        var val = el ? el.value : "ngst";
+        form.querySelectorAll(".js-tax-tab").forEach(function (btn) {
+          btn.classList.toggle("active", btn.getAttribute("data-tax") === val);
+        });
+      }
+
+      function money(n) {
+        return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+      }
+      function gstState(value) {
+        var g = String(value || "").replace(/\s/g, "").toUpperCase();
+        var code = g.slice(0, 2);
+        return /^\d{2}$/.test(code) ? code : "";
+      }
+      function companyGstin() {
+        var el = document.getElementById("company-gstin");
+        if (!el) return "";
+        try { return JSON.parse(el.textContent || '""'); } catch (e) { return ""; }
+      }
+      function buyerGstin() {
+        var el = document.getElementById("party-gstin");
+        var t = el ? (el.textContent || "").trim() : "";
+        return t === "—" ? "" : t;
+      }
+      function isIntraState() {
+        var office = gstState(companyGstin());
+        var buyer = gstState(buyerGstin());
+        if (!office) return true;
+        if (!buyer) return true;
+        return office === buyer;
+      }
+
+      function fillParty() {
+        var hidden = document.getElementById("id_party");
+        var info = hidden && hidden.value && meta[hidden.value] ? meta[hidden.value] : null;
+        var addr = document.getElementById("party-address");
+        var gstWrap = document.getElementById("party-gst-wrap");
+        var gstin = document.getElementById("party-gstin");
+        if (addr) addr.textContent = (info && info.address) ? info.address : "—";
+        if (gstin) gstin.textContent = (info && info.gstin) ? info.gstin : "—";
+        if (gstWrap) gstWrap.hidden = false;
+        refreshAll();
+      }
+
+      function refreshRow(row) {
+        var acc = row.querySelector(".js-invoice-account");
+        var info = acc && meta[acc.value] ? meta[acc.value] : { hsn: "", rate: "", pure: false };
+        var hsn = row.querySelector(".js-invoice-hsn");
+        var rateEl = row.querySelector(".js-invoice-rate");
+        var amountEl = row.querySelector(".js-invoice-amount");
+        if (hsn) hsn.value = info.hsn || "";
+        var useGst = gstSelected();
+        var pure = !!info.pure;
+        var rate = useGst && !pure && info.rate ? Number(info.rate) : 0;
+        var amount = Number(amountEl && amountEl.value ? amountEl.value : 0);
+        var gstAmt = useGst && !pure ? Number(money(amount * rate / 100)) : 0;
+        if (rateEl) rateEl.value = !useGst ? "" : (pure ? "Pure agent" : (info.rate || "0"));
+        var intra = isIntraState();
+        var half = rate ? money(rate / 2) : "";
+        var cgstAmt = intra ? Number(money(gstAmt / 2)) : 0;
+        var sgstAmt = intra ? Number(money(gstAmt - cgstAmt)) : 0;
+        var igstAmt = intra ? 0 : gstAmt;
+        function fill(sel, value) {
+          var el = row.querySelector(sel);
+          if (el) el.value = value;
+        }
+        if (!useGst || !rate) {
+          fill(".js-invoice-cgst-rate", "");
+          fill(".js-invoice-sgst-rate", "");
+          fill(".js-invoice-igst-rate", "");
+          fill(".js-invoice-cgst", "");
+          fill(".js-invoice-sgst", "");
+          fill(".js-invoice-igst", "");
+          return;
+        }
+        if (pure) {
+          fill(".js-invoice-cgst-rate", "");
+          fill(".js-invoice-sgst-rate", "");
+          fill(".js-invoice-igst-rate", "");
+          fill(".js-invoice-cgst", money(0));
+          fill(".js-invoice-sgst", money(0));
+          fill(".js-invoice-igst", money(0));
+          return;
+        }
+        if (intra) {
+          fill(".js-invoice-cgst-rate", half);
+          fill(".js-invoice-sgst-rate", half);
+          fill(".js-invoice-igst-rate", "");
+          fill(".js-invoice-cgst", money(cgstAmt));
+          fill(".js-invoice-sgst", money(sgstAmt));
+          fill(".js-invoice-igst", "");
+        } else {
+          fill(".js-invoice-cgst-rate", "");
+          fill(".js-invoice-sgst-rate", "");
+          fill(".js-invoice-igst-rate", String(info.rate || rate));
+          fill(".js-invoice-cgst", "");
+          fill(".js-invoice-sgst", "");
+          fill(".js-invoice-igst", money(igstAmt));
+        }
+      }
+
+      function refreshAll() {
+        var showGst = gstSelected();
+        form.querySelectorAll(".js-gst-col").forEach(function (el) {
+          el.style.display = showGst ? "" : "none";
+        });
+        form.querySelectorAll(".js-invoice-row").forEach(refreshRow);
+      }
+
+      function showPlusOnLastRow() {
+        var body = document.getElementById("invoice-lines-body");
+        if (!body) return;
+        var rows = body.querySelectorAll(".js-invoice-row");
+        rows.forEach(function (row, i) {
+          var btn = row.querySelector(".js-add-invoice-row");
+          if (btn) btn.classList.toggle("invisible", i !== rows.length - 1);
+        });
+      }
+
+      function addRow() {
+        var total = form.querySelector('[name="form-TOTAL_FORMS"]');
+        var tpl = document.getElementById("invoice-empty-row");
+        var body = document.getElementById("invoice-lines-body");
+        if (!total || !tpl || !body) return;
+        var i = parseInt(total.value, 10) || 0;
+        var html = tpl.innerHTML.replace(/__prefix__/g, String(i));
+        body.insertAdjacentHTML("beforeend", html);
+        total.value = String(i + 1);
+        refreshAll();
+        showPlusOnLastRow();
+      }
+
+      var isReceipt = form.getAttribute("data-vtype") === "receipt";
+      var outstandingTpl = form.getAttribute("data-outstanding-url") || "";
+      function billwiseBox(row) {
+        var wrap = row.nextElementSibling;
+        if (!wrap || !wrap.classList.contains("js-billwise-wrap")) return null;
+        return wrap.querySelector(".js-billwise-box");
+      }
+      function moneyNum(n) {
+        return Math.round((Number(n) || 0) * 100) / 100;
+      }
+      function writeAlloc(row, data) {
+        var el = row.querySelector(".js-bill-alloc");
+        if (el) el.value = JSON.stringify(data || {});
+      }
+      function fifoKnock(bills, amount) {
+        var left = moneyNum(amount);
+        return (bills || []).map(function (b) {
+          var os = moneyNum(b.outstanding);
+          var take = Math.min(left, os);
+          left = moneyNum(left - take);
+          return { id: b.id, amount: take, leftover: left, outstanding: os };
+        });
+      }
+      function leftoverAfter(bills, amount) {
+        var knocks = fifoKnock(bills, amount);
+        if (!knocks.length) return moneyNum(amount);
+        return knocks[knocks.length - 1].leftover;
+      }
+      function syncAllocJson(row) {
+        var box = billwiseBox(row);
+        if (!box || box.classList.contains("d-none")) {
+          writeAlloc(row, {});
+          return;
+        }
+        var asAdv = box.querySelector(".js-as-advance");
+        var bills = [];
+        box.querySelectorAll(".js-knock-amt").forEach(function (inp) {
+          var rawId = inp.getAttribute("data-bill-id");
+          var id = rawId === "opening" ? "opening" : parseInt(rawId, 10);
+          bills.push({ id: id, amount: moneyNum(inp.value).toFixed(2) });
+        });
+        var adv = box.querySelector(".js-advance-amt");
+        writeAlloc(row, {
+          as_advance: !!(asAdv && asAdv.checked),
+          bills: bills,
+          advance: moneyNum(adv && adv.value).toFixed(2)
+        });
+      }
+      function renderBillwise(row, bills, keepManual) {
+        var box = billwiseBox(row);
+        if (!box) return;
+        var amountEl = row.querySelector(".js-invoice-amount");
+        var amount = moneyNum(amountEl && amountEl.value);
+        var prevAdv = box.querySelector(".js-as-advance");
+        var asAdvance = prevAdv ? prevAdv.checked : !bills.length;
+        if (!bills.length) asAdvance = true;
+        var prevKnock = {};
+        if (keepManual) {
+          box.querySelectorAll(".js-knock-amt").forEach(function (inp) {
+            prevKnock[inp.getAttribute("data-bill-id")] = moneyNum(inp.value);
+          });
+        }
+        box.classList.remove("d-none");
+        var accName = (row.querySelector(".js-invoice-account") || {}).name || "adv";
+        var html = "";
+        if (!bills.length) {
+          html += "<p class=\"mb-2\">No outstanding bills. Show this receipt as <strong>advance</strong>.</p>";
+        } else {
+          html += "<p class=\"mb-2\">Opening balance and outstanding bills — knock off the receipt against each row.</p>";
+          html += "<div class=\"table-responsive\"><table class=\"table table-sm mb-2 bg-white\"><thead><tr><th>Bill</th><th>Date</th><th class=\"text-end\">Outstanding</th><th class=\"text-end\">Knock off</th></tr></thead><tbody>";
+          var fifo = fifoKnock(bills, asAdvance ? 0 : amount);
+          bills.forEach(function (b, i) {
+            var val = 0;
+            if (!asAdvance) {
+              val = keepManual && prevKnock[String(b.id)] != null ? prevKnock[String(b.id)] : fifo[i].amount;
+            }
+            html += "<tr><td class=\"mono\">" + b.number + "</td><td>" + (b.date || "—") + "</td><td class=\"text-end mono\">" + moneyNum(b.outstanding).toFixed(2) + "</td><td><input class=\"form-control form-control-sm text-end js-knock-amt\" data-bill-id=\"" + b.id + "\" data-outstanding=\"" + moneyNum(b.outstanding).toFixed(2) + "\" value=\"" + moneyNum(val).toFixed(2) + "\" step=\"0.01\" min=\"0\" type=\"number\"" + (asAdvance ? " disabled" : "") + " /></td></tr>";
+          });
+          html += "</tbody></table></div>";
+        }
+        html += "<div class=\"form-check mb-2\"><input class=\"form-check-input js-as-advance\" type=\"checkbox\" id=\"asadv-" + accName + "\"" + (asAdvance ? " checked" : "") + " /><label class=\"form-check-label\" for=\"asadv-" + accName + "\">Enter as advance</label></div>";
+        var advVal = asAdvance || !bills.length ? amount : leftoverAfter(bills, amount);
+        if (keepManual && !asAdvance) {
+          var knocked = 0;
+          Object.keys(prevKnock).forEach(function (k) { knocked += moneyNum(prevKnock[k]); });
+          advVal = Math.max(0, moneyNum(amount - knocked));
+        }
+        html += "<div class=\"d-flex align-items-center gap-2 flex-wrap\"><label class=\"mb-0\" for=\"advamt-" + accName + "\">Advance amount</label><input id=\"advamt-" + accName + "\" class=\"form-control form-control-sm text-end js-advance-amt\" type=\"number\" step=\"0.01\" min=\"0\" value=\"" + moneyNum(advVal).toFixed(2) + "\" /></div>";
+        box.innerHTML = html;
+        box._bills = bills;
+        syncAllocJson(row);
+      }
+      function loadBillwise(row) {
+        if (!isReceipt) return;
+        var hidden = row.querySelector(".js-invoice-account");
+        var box = billwiseBox(row);
+        if (!box) return;
+        if (!hidden || !hidden.value) {
+          box.classList.add("d-none");
+          box.innerHTML = "";
+          writeAlloc(row, {});
+          return;
+        }
+        var url = outstandingTpl.replace("/0/", "/" + hidden.value + "/").replace("/0?", "/" + hidden.value + "?");
+        fetch(url, { headers: { Accept: "application/json" } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) { renderBillwise(row, data.bills || []); })
+          .catch(function () { renderBillwise(row, []); });
+      }
+      function applyKnockCap(inp) {
+        var max = moneyNum(inp.getAttribute("data-outstanding"));
+        var val = moneyNum(inp.value);
+        if (val > max) inp.value = max.toFixed(2);
+        if (val < 0) inp.value = "0.00";
+        var row = inp.closest("tr") && inp.closest(".js-billwise-wrap") && inp.closest(".js-billwise-wrap").previousElementSibling;
+        if (!row || !row.classList.contains("js-invoice-row")) {
+          var wrap = inp.closest(".js-billwise-wrap");
+          row = wrap ? wrap.previousElementSibling : null;
+        }
+        if (!row) return;
+        var box = billwiseBox(row);
+        var amountEl = row.querySelector(".js-invoice-amount");
+        var amount = moneyNum(amountEl && amountEl.value);
+        var knocked = 0;
+        box.querySelectorAll(".js-knock-amt").forEach(function (el) { knocked += moneyNum(el.value); });
+        if (knocked > amount && amountEl) {
+          amountEl.value = knocked.toFixed(2);
+          amount = knocked;
+        }
+        var adv = box.querySelector(".js-advance-amt");
+        if (adv) adv.value = Math.max(0, moneyNum(amount - knocked)).toFixed(2);
+        syncAllocJson(row);
+      }
+
+      form.addEventListener("change", function (e) {
+        if (e.target.name === "tax_kind" || e.target.classList.contains("js-invoice-account") || e.target.id === "id_party") {
+          if (e.target.id === "id_party") fillParty();
+          refreshAll();
+          if (e.target.classList.contains("js-invoice-account")) {
+            var row = e.target.closest(".js-invoice-row");
+            if (row) loadBillwise(row);
+          }
+        }
+        if (e.target.classList.contains("js-as-advance")) {
+          var wrap = e.target.closest(".js-billwise-wrap");
+          var row = wrap ? wrap.previousElementSibling : null;
+          if (row) renderBillwise(row, (billwiseBox(row) && billwiseBox(row)._bills) || [], false);
+        }
+      });
+      form.addEventListener("input", function (e) {
+        if (e.target.classList.contains("js-invoice-amount")) {
+          var row = e.target.closest(".js-invoice-row");
+          if (row) refreshRow(row);
+          if (row && isReceipt) {
+            var box = billwiseBox(row);
+            if (box && box._bills) renderBillwise(row, box._bills, false);
+          }
+        }
+        if (e.target.classList.contains("js-knock-amt")) applyKnockCap(e.target);
+        if (e.target.classList.contains("js-advance-amt")) {
+          var wrap = e.target.closest(".js-billwise-wrap");
+          var row = wrap ? wrap.previousElementSibling : null;
+          if (!row) return;
+          var box = billwiseBox(row);
+          var asAdv = box && box.querySelector(".js-as-advance");
+          var amountEl = row.querySelector(".js-invoice-amount");
+          if (asAdv && asAdv.checked && amountEl) {
+            amountEl.value = moneyNum(e.target.value).toFixed(2);
+          } else if (amountEl) {
+            var knocked = 0;
+            box.querySelectorAll(".js-knock-amt").forEach(function (el) { knocked += moneyNum(el.value); });
+            amountEl.value = moneyNum(knocked + moneyNum(e.target.value)).toFixed(2);
+          }
+          syncAllocJson(row);
+        }
+        if (e.target.classList.contains("js-invoice-account-search")) {
+          var row = e.target.closest(".js-invoice-row");
+          var hidden = row ? row.querySelector(".js-invoice-account") : null;
+          if (hidden) hidden.value = "";
+          if (row) loadBillwise(row);
+          showAccountSuggestions(e.target);
+        }
+      });
+      form.addEventListener("click", function (e) {
+        var taxBtn = e.target.closest(".js-tax-tab");
+        if (taxBtn) {
+          e.preventDefault();
+          var el = taxKindInput();
+          if (el) {
+            el.value = taxBtn.getAttribute("data-tax");
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          syncTaxTabs();
+          refreshAll();
+          return;
+        }
+        var btn = e.target.closest(".js-add-invoice-row");
+        if (btn) {
+          e.preventDefault();
+          addRow();
+        }
+      });
+
+      var partyOpts = JSON.parse(document.getElementById("party-options").textContent || "[]");
+      var lineAccountOpts = [];
+      try {
+        var lineAccountEl = document.getElementById("line-account-options");
+        lineAccountOpts = lineAccountEl ? JSON.parse(lineAccountEl.textContent || "[]") : [];
+      } catch (e) { lineAccountOpts = []; }
+      if (!lineAccountOpts.length) {
+        Object.keys(meta).forEach(function (id) {
+          lineAccountOpts.push({ id: id, label: (meta[id] && meta[id].name) || id, search: (meta[id] && meta[id].name) || "" });
+        });
+      }
+      var accountFloat = document.createElement("div");
+      accountFloat.className = "task-suggest-list invoice-account-float border rounded shadow-sm";
+      document.body.appendChild(accountFloat);
+      var accountSearchEl = null;
+      function hideAccountSuggestions() {
+        accountFloat.classList.remove("show");
+        accountFloat.innerHTML = "";
+        accountSearchEl = null;
+      }
+      function matchLineAccounts(query) {
+        var qq = (query || "").trim().toLowerCase();
+        var out = [];
+        for (var i = 0; i < lineAccountOpts.length; i++) {
+          var o = lineAccountOpts[i];
+          var label = (o.label || "").toLowerCase();
+          var search = (o.search || label).toLowerCase();
+          if (!qq || label.indexOf(qq) !== -1 || search.indexOf(qq) !== -1) {
+            out.push(o);
+            if (out.length >= 40) break;
+          }
+        }
+        return out;
+      }
+      function placeAccountFloat(anchor) {
+        var r = anchor.getBoundingClientRect();
+        accountFloat.style.left = r.left + "px";
+        accountFloat.style.top = (r.bottom + 2) + "px";
+        accountFloat.style.width = Math.max(r.width, 240) + "px";
+      }
+      function showAccountSuggestions(searchEl) {
+        accountSearchEl = searchEl;
+        var matches = matchLineAccounts(searchEl.value);
+        accountFloat.innerHTML = "";
+        if (!matches.length) {
+          hideAccountSuggestions();
+          accountSearchEl = searchEl;
+          return;
+        }
+        placeAccountFloat(searchEl);
+        matches.forEach(function (o) {
+          var item = document.createElement("div");
+          item.className = "task-suggest-item";
+          item.textContent = o.label;
+          item.addEventListener("mousedown", function (e) {
+            e.preventDefault();
+            var row = searchEl.closest(".js-invoice-row");
+            var hidden = row ? row.querySelector(".js-invoice-account") : null;
+            if (hidden) {
+              hidden.value = String(o.id);
+              hidden.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            searchEl.value = o.label;
+            hideAccountSuggestions();
+            if (row) refreshRow(row);
+          });
+          accountFloat.appendChild(item);
+        });
+        accountFloat.classList.add("show");
+      }
+      function syncAccountSearchLabel(searchEl) {
+        var row = searchEl.closest(".js-invoice-row");
+        var hidden = row ? row.querySelector(".js-invoice-account") : null;
+        if (!hidden || !hidden.value) return;
+        for (var i = 0; i < lineAccountOpts.length; i++) {
+          if (String(lineAccountOpts[i].id) === String(hidden.value)) {
+            searchEl.value = lineAccountOpts[i].label;
+            return;
+          }
+        }
+      }
+      form.addEventListener("focusin", function (e) {
+        if (e.target.classList.contains("js-invoice-account-search")) {
+          syncAccountSearchLabel(e.target);
+          showAccountSuggestions(e.target);
+        }
+      });
+      form.addEventListener("focusout", function (e) {
+        if (!e.target.classList.contains("js-invoice-account-search")) return;
+        setTimeout(function () {
+          var row = e.target.closest(".js-invoice-row");
+          var hidden = row ? row.querySelector(".js-invoice-account") : null;
+          var typed = (e.target.value || "").trim();
+          var match = null;
+          for (var i = 0; i < lineAccountOpts.length; i++) {
+            if (lineAccountOpts[i].label === typed) { match = lineAccountOpts[i]; break; }
+          }
+          if (hidden) {
+            hidden.value = match ? String(match.id) : "";
+            if (match) hidden.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          if (!match) e.target.value = "";
+          hideAccountSuggestions();
+          if (row) refreshRow(row);
+        }, 180);
+      });
+      window.addEventListener("resize", function () {
+        if (accountSearchEl && accountFloat.classList.contains("show")) placeAccountFloat(accountSearchEl);
+      });
+      if (window.initTaskUserSinglePicker) {
+        window.initTaskUserSinglePicker({
+          searchId: "partySearch",
+          suggestId: "partySuggestions",
+          hiddenId: "id_party",
+          options: partyOpts,
+          minChars: 0,
+          onSelect: fillParty,
+        });
+      }
+      fillParty();
+      syncTaxTabs();
+      refreshAll();
+      showPlusOnLastRow();
+      form.querySelectorAll(".js-invoice-account-search").forEach(syncAccountSearchLabel);
+      if (isReceipt) {
+        form.querySelectorAll(".js-invoice-row").forEach(function (row) {
+          var hidden = row.querySelector(".js-invoice-account");
+          if (hidden && hidden.value) loadBillwise(row);
+        });
+      }
+    })();
+  </script>
+  {% endif %}
+  {% if contra_mode %}
+  <script>
+    (function () {
+      var form = document.getElementById("voucher-form");
+      if (!form) return;
+      var lineAccountOpts = [];
+      try {
+        var lineAccountEl = document.getElementById("line-account-options");
+        lineAccountOpts = lineAccountEl ? JSON.parse(lineAccountEl.textContent || "[]") : [];
+      } catch (e) { lineAccountOpts = []; }
+      var accountFloat = document.createElement("div");
+      accountFloat.className = "task-suggest-list invoice-account-float border rounded shadow-sm";
+      document.body.appendChild(accountFloat);
+      var accountSearchEl = null;
+      function money(n) {
+        return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+      }
+      function hideAccountSuggestions() {
+        accountFloat.classList.remove("show");
+        accountFloat.innerHTML = "";
+        accountSearchEl = null;
+      }
+      function matchLineAccounts(query) {
+        var qq = (query || "").trim().toLowerCase();
+        var out = [];
+        for (var i = 0; i < lineAccountOpts.length; i++) {
+          var o = lineAccountOpts[i];
+          var label = (o.label || "").toLowerCase();
+          var search = (o.search || label).toLowerCase();
+          if (!qq || label.indexOf(qq) !== -1 || search.indexOf(qq) !== -1) {
+            out.push(o);
+            if (out.length >= 40) break;
+          }
+        }
+        return out;
+      }
+      function placeAccountFloat(anchor) {
+        var r = anchor.getBoundingClientRect();
+        accountFloat.style.left = r.left + "px";
+        accountFloat.style.top = (r.bottom + 2) + "px";
+        accountFloat.style.width = Math.max(r.width, 240) + "px";
+      }
+      function showAccountSuggestions(searchEl) {
+        accountSearchEl = searchEl;
+        var matches = matchLineAccounts(searchEl.value);
+        accountFloat.innerHTML = "";
+        if (!matches.length) {
+          hideAccountSuggestions();
+          accountSearchEl = searchEl;
+          return;
+        }
+        placeAccountFloat(searchEl);
+        matches.forEach(function (o) {
+          var item = document.createElement("div");
+          item.className = "task-suggest-item";
+          item.textContent = o.label;
+          item.addEventListener("mousedown", function (e) {
+            e.preventDefault();
+            var row = searchEl.closest(".js-invoice-row");
+            var hidden = row ? row.querySelector(".js-invoice-account") : null;
+            if (hidden) {
+              hidden.value = String(o.id);
+              hidden.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            searchEl.value = o.label;
+            hideAccountSuggestions();
+          });
+          accountFloat.appendChild(item);
+        });
+        accountFloat.classList.add("show");
+      }
+      function syncAccountSearchLabel(searchEl) {
+        var row = searchEl.closest(".js-invoice-row");
+        var hidden = row ? row.querySelector(".js-invoice-account") : null;
+        if (!hidden || !hidden.value) return;
+        for (var i = 0; i < lineAccountOpts.length; i++) {
+          if (String(lineAccountOpts[i].id) === String(hidden.value)) {
+            searchEl.value = lineAccountOpts[i].label;
+            return;
+          }
+        }
+      }
+      function showPlusOnLastRow(body) {
+        if (!body) return;
+        var rows = body.querySelectorAll(".js-invoice-row");
+        rows.forEach(function (row, i) {
+          var btn = row.querySelector(".js-add-invoice-row");
+          if (btn) btn.classList.toggle("invisible", i !== rows.length - 1);
+        });
+      }
+      function refreshTotals() {
+        form.querySelectorAll(".js-contra-block").forEach(function (block) {
+          var prefix = block.getAttribute("data-prefix");
+          var total = 0;
+          block.querySelectorAll(".js-invoice-amount").forEach(function (el) {
+            total += Number(el.value) || 0;
+          });
+          var out = document.getElementById(prefix + "-total");
+          if (out) out.textContent = money(total);
+        });
+      }
+      function addRow(block) {
+        var prefix = block.getAttribute("data-prefix");
+        var total = form.querySelector('[name="' + prefix + '-TOTAL_FORMS"]');
+        var tpl = document.getElementById(prefix + "-empty-row");
+        var body = document.getElementById(prefix + "-lines-body");
+        if (!total || !tpl || !body) return;
+        var i = parseInt(total.value, 10) || 0;
+        body.insertAdjacentHTML("beforeend", tpl.innerHTML.replace(/__prefix__/g, String(i)));
+        total.value = String(i + 1);
+        showPlusOnLastRow(body);
+        refreshTotals();
+      }
+      form.addEventListener("click", function (e) {
+        var btn = e.target.closest(".js-add-invoice-row");
+        if (!btn) return;
+        e.preventDefault();
+        var block = btn.closest(".js-contra-block");
+        if (block) addRow(block);
+      });
+      form.addEventListener("input", function (e) {
+        if (e.target.classList.contains("js-invoice-amount")) refreshTotals();
+        if (e.target.classList.contains("js-invoice-account-search")) {
+          var row = e.target.closest(".js-invoice-row");
+          var hidden = row ? row.querySelector(".js-invoice-account") : null;
+          if (hidden) hidden.value = "";
+          showAccountSuggestions(e.target);
+        }
+      });
+      form.addEventListener("focusin", function (e) {
+        if (e.target.classList.contains("js-invoice-account-search")) {
+          syncAccountSearchLabel(e.target);
+          showAccountSuggestions(e.target);
+        }
+      });
+      form.addEventListener("focusout", function (e) {
+        if (!e.target.classList.contains("js-invoice-account-search")) return;
+        setTimeout(function () {
+          var row = e.target.closest(".js-invoice-row");
+          var hidden = row ? row.querySelector(".js-invoice-account") : null;
+          var typed = (e.target.value || "").trim();
+          var match = null;
+          for (var i = 0; i < lineAccountOpts.length; i++) {
+            if (lineAccountOpts[i].label === typed) { match = lineAccountOpts[i]; break; }
+          }
+          if (hidden) hidden.value = match ? String(match.id) : "";
+          if (!match) e.target.value = "";
+          hideAccountSuggestions();
+        }, 180);
+      });
+      window.addEventListener("resize", function () {
+        if (accountSearchEl && accountFloat.classList.contains("show")) placeAccountFloat(accountSearchEl);
+      });
+      form.querySelectorAll(".js-contra-block").forEach(function (block) {
+        showPlusOnLastRow(document.getElementById(block.getAttribute("data-prefix") + "-lines-body"));
+      });
+      form.querySelectorAll(".js-invoice-account-search").forEach(syncAccountSearchLabel);
+      refreshTotals();
+    })();
+  </script>
+  {% endif %}
+  {% if journal_mode %}
+  <script>
+    (function () {
+      var form = document.getElementById("voucher-form");
+      if (!form) return;
+      function money(n) {
+        return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+      }
+      function showPlusOnLastRow() {
+        var body = document.getElementById("journal-lines-body");
+        if (!body) return;
+        var rows = body.querySelectorAll(".js-journal-row");
+        rows.forEach(function (row, i) {
+          var btn = row.querySelector(".js-add-journal-row");
+          if (btn) btn.classList.toggle("invisible", i !== rows.length - 1);
+        });
+      }
+      function refreshJournalTotals() {
+        var debit = 0;
+        var credit = 0;
+        form.querySelectorAll(".js-jv-debit").forEach(function (el) {
+          debit += Number(el.value) || 0;
+        });
+        form.querySelectorAll(".js-jv-credit").forEach(function (el) {
+          credit += Number(el.value) || 0;
+        });
+        var dEl = document.getElementById("journal-debit-total");
+        var cEl = document.getElementById("journal-credit-total");
+        if (dEl) dEl.textContent = money(debit);
+        if (cEl) cEl.textContent = money(credit);
+        var save = document.getElementById("voucher-save");
+        var hint = document.getElementById("journal-balance-hint");
+        var ok = Math.round(debit * 100) === Math.round(credit * 100) && debit > 0;
+        if (save) save.disabled = !ok;
+        if (hint) hint.classList.toggle("d-none", ok);
+      }
+      var isBillwise = form.getAttribute("data-vtype") === "journal" || form.getAttribute("data-vtype") === "credit_note" || form.getAttribute("data-vtype") === "debit_note";
+      var outstandingTpl = form.getAttribute("data-outstanding-url") || "";
+      function moneyNum(n) {
+        return Math.round((Number(n) || 0) * 100) / 100;
+      }
+      function billwiseBox(row) {
+        var wrap = row.nextElementSibling;
+        if (!wrap || !wrap.classList.contains("js-billwise-wrap")) return null;
+        return wrap.querySelector(".js-billwise-box");
+      }
+      function lineAmount(row) {
+        var debit = row.querySelector(".js-jv-debit");
+        var credit = row.querySelector(".js-jv-credit");
+        return moneyNum((debit && debit.value) || 0) + moneyNum((credit && credit.value) || 0);
+      }
+      function writeAlloc(row, data) {
+        var el = row.querySelector(".js-bill-alloc");
+        if (el) el.value = JSON.stringify(data || {});
+      }
+      function fifoKnock(bills, amount) {
+        var left = moneyNum(amount);
+        return (bills || []).map(function (b) {
+          var os = moneyNum(b.outstanding);
+          var take = Math.min(left, os);
+          left = moneyNum(left - take);
+          return { id: b.id, amount: take, leftover: left, outstanding: os };
+        });
+      }
+      function leftoverAfter(bills, amount) {
+        var knocks = fifoKnock(bills, amount);
+        if (!knocks.length) return moneyNum(amount);
+        return knocks[knocks.length - 1].leftover;
+      }
+      function syncAllocJson(row) {
+        var box = billwiseBox(row);
+        if (!box || box.classList.contains("d-none")) {
+          writeAlloc(row, {});
+          return;
+        }
+        var asAdv = box.querySelector(".js-as-advance");
+        var bills = [];
+        box.querySelectorAll(".js-knock-amt").forEach(function (inp) {
+          var rawId = inp.getAttribute("data-bill-id");
+          var id = rawId === "opening" ? "opening" : parseInt(rawId, 10);
+          bills.push({ id: id, amount: moneyNum(inp.value).toFixed(2) });
+        });
+        var adv = box.querySelector(".js-advance-amt");
+        writeAlloc(row, {
+          as_advance: !!(asAdv && asAdv.checked),
+          bills: bills,
+          advance: moneyNum(adv && adv.value).toFixed(2)
+        });
+      }
+      function renderBillwise(row, bills, keepManual) {
+        var box = billwiseBox(row);
+        if (!box) return;
+        var amount = lineAmount(row);
+        var prevAdv = box.querySelector(".js-as-advance");
+        var asAdvance = prevAdv ? prevAdv.checked : !bills.length;
+        if (!bills.length) asAdvance = true;
+        var prevKnock = {};
+        if (keepManual) {
+          box.querySelectorAll(".js-knock-amt").forEach(function (inp) {
+            prevKnock[inp.getAttribute("data-bill-id")] = moneyNum(inp.value);
+          });
+        }
+        box.classList.remove("d-none");
+        var accName = (row.querySelector(".js-jv-account") || {}).name || "adv";
+        var html = "";
+        if (!bills.length) {
+          html += "<p class=\"mb-2\">No outstanding bills. Show this amount as <strong>unallocated</strong>.</p>";
+        } else {
+          html += "<p class=\"mb-2\">Outstanding bills — knock off this amount against each row.</p>";
+          html += "<div class=\"table-responsive\"><table class=\"table table-sm mb-2 bg-white\"><thead><tr><th>Bill</th><th>Date</th><th class=\"text-end\">Outstanding</th><th class=\"text-end\">Knock off</th></tr></thead><tbody>";
+          var fifo = fifoKnock(bills, asAdvance ? 0 : amount);
+          bills.forEach(function (b, i) {
+            var val = 0;
+            if (!asAdvance) {
+              val = keepManual && prevKnock[String(b.id)] != null ? prevKnock[String(b.id)] : fifo[i].amount;
+            }
+            html += "<tr><td class=\"mono\">" + b.number + "</td><td>" + (b.date || "—") + "</td><td class=\"text-end mono\">" + moneyNum(b.outstanding).toFixed(2) + "</td><td><input class=\"form-control form-control-sm text-end js-knock-amt\" data-bill-id=\"" + b.id + "\" data-outstanding=\"" + moneyNum(b.outstanding).toFixed(2) + "\" value=\"" + moneyNum(val).toFixed(2) + "\" step=\"0.01\" min=\"0\" type=\"number\"" + (asAdvance ? " disabled" : "") + " /></td></tr>";
+          });
+          html += "</tbody></table></div>";
+        }
+        html += "<div class=\"form-check mb-2\"><input class=\"form-check-input js-as-advance\" type=\"checkbox\" id=\"asadv-" + accName + "\"" + (asAdvance ? " checked" : "") + " /><label class=\"form-check-label\" for=\"asadv-" + accName + "\">Do not knock off bills</label></div>";
+        var advVal = asAdvance || !bills.length ? amount : leftoverAfter(bills, amount);
+        if (keepManual && !asAdvance) {
+          var knocked = 0;
+          Object.keys(prevKnock).forEach(function (k) { knocked += moneyNum(prevKnock[k]); });
+          advVal = Math.max(0, moneyNum(amount - knocked));
+        }
+        html += "<div class=\"d-flex align-items-center gap-2 flex-wrap\"><label class=\"mb-0\" for=\"advamt-" + accName + "\">Unallocated amount</label><input id=\"advamt-" + accName + "\" class=\"form-control form-control-sm text-end js-advance-amt\" type=\"number\" step=\"0.01\" min=\"0\" value=\"" + moneyNum(advVal).toFixed(2) + "\" /></div>";
+        box.innerHTML = html;
+        box._bills = bills;
+        syncAllocJson(row);
+      }
+      function loadBillwise(row) {
+        if (!isBillwise) return;
+        var sel = row.querySelector(".js-jv-account");
+        var box = billwiseBox(row);
+        if (!box) return;
+        if (!sel || !sel.value) {
+          box.classList.add("d-none");
+          box.innerHTML = "";
+          writeAlloc(row, {});
+          return;
+        }
+        var url = outstandingTpl.replace("/0/", "/" + sel.value + "/").replace("/0?", "/" + sel.value + "?");
+        if (url.indexOf("?") === -1) url += "?for=note";
+        else url += "&for=note";
+        fetch(url, { headers: { Accept: "application/json" } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data.party_kind) {
+              box.classList.add("d-none");
+              box.innerHTML = "";
+              writeAlloc(row, {});
+              return;
+            }
+            renderBillwise(row, data.bills || []);
+          })
+          .catch(function () { renderBillwise(row, []); });
+      }
+      function applyKnockCap(inp) {
+        var max = moneyNum(inp.getAttribute("data-outstanding"));
+        var val = moneyNum(inp.value);
+        if (val > max) inp.value = max.toFixed(2);
+        if (val < 0) inp.value = "0.00";
+        var wrap = inp.closest(".js-billwise-wrap");
+        var row = wrap ? wrap.previousElementSibling : null;
+        if (!row) return;
+        var box = billwiseBox(row);
+        var amount = lineAmount(row);
+        var knocked = 0;
+        box.querySelectorAll(".js-knock-amt").forEach(function (el) { knocked += moneyNum(el.value); });
+        var debit = row.querySelector(".js-jv-debit");
+        var credit = row.querySelector(".js-jv-credit");
+        if (knocked > amount) {
+          var extra = moneyNum(knocked - amount);
+          if (credit && moneyNum(credit.value) > 0) credit.value = moneyNum(credit.value + extra).toFixed(2);
+          else if (debit) debit.value = moneyNum((debit.value || 0) + extra).toFixed(2);
+          refreshJournalTotals();
+          amount = knocked;
+        }
+        var adv = box.querySelector(".js-advance-amt");
+        if (adv) adv.value = Math.max(0, moneyNum(amount - knocked)).toFixed(2);
+        syncAllocJson(row);
+      }
+      function addJournalRow() {
+        var total = form.querySelector('[name="lines-TOTAL_FORMS"]');
+        var tpl = document.getElementById("journal-empty-row");
+        var body = document.getElementById("journal-lines-body");
+        if (!total || !tpl || !body) return;
+        var i = parseInt(total.value, 10) || 0;
+        body.insertAdjacentHTML("beforeend", tpl.innerHTML.replace(/__prefix__/g, String(i)));
+        total.value = String(i + 1);
+        showPlusOnLastRow();
+        refreshJournalTotals();
+      }
+      form.addEventListener("click", function (e) {
+        var btn = e.target.closest(".js-add-journal-row");
+        if (!btn) return;
+        e.preventDefault();
+        addJournalRow();
+      });
+      form.addEventListener("change", function (e) {
+        if (e.target.classList.contains("js-jv-account")) {
+          var row = e.target.closest(".js-journal-row");
+          if (row) loadBillwise(row);
+        }
+        if (e.target.classList.contains("js-as-advance")) {
+          var wrap = e.target.closest(".js-billwise-wrap");
+          var row = wrap ? wrap.previousElementSibling : null;
+          if (row) renderBillwise(row, (billwiseBox(row) && billwiseBox(row)._bills) || [], false);
+        }
+      });
+      form.addEventListener("input", function (e) {
+        if (e.target.classList.contains("js-jv-debit") || e.target.classList.contains("js-jv-credit")) {
+          refreshJournalTotals();
+          var row = e.target.closest(".js-journal-row");
+          if (row && isBillwise) {
+            var box = billwiseBox(row);
+            if (box && box._bills) renderBillwise(row, box._bills, false);
+          }
+        }
+        if (e.target.classList.contains("js-knock-amt")) applyKnockCap(e.target);
+        if (e.target.classList.contains("js-advance-amt")) {
+          var wrap = e.target.closest(".js-billwise-wrap");
+          var row = wrap ? wrap.previousElementSibling : null;
+          if (!row) return;
+          syncAllocJson(row);
+        }
+      });
+      form.addEventListener("submit", function (e) {
+        var save = document.getElementById("voucher-save");
+        if (save && save.disabled) {
+          e.preventDefault();
+          var hint = document.getElementById("journal-balance-hint");
+          if (hint) hint.classList.remove("d-none");
+        }
+      });
+      showPlusOnLastRow();
+      refreshJournalTotals();
+      if (isBillwise) {
+        form.querySelectorAll(".js-journal-row").forEach(function (row) {
+          var sel = row.querySelector(".js-jv-account");
+          if (sel && sel.value) loadBillwise(row);
+        });
+      }
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

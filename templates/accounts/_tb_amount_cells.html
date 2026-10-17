@@ -1,0 +1,10 @@
+{% if data.show_opening %}
+  <td class="text-end mono">{% if row.opening_debit %}{{ row.opening_debit }}{% endif %}</td>
+  <td class="text-end mono">{% if row.opening_credit %}{{ row.opening_credit }}{% endif %}</td>
+{% endif %}
+{% if data.show_transactions %}
+  <td class="text-end mono">{% if row.period_debit %}{{ row.period_debit }}{% endif %}</td>
+  <td class="text-end mono">{% if row.period_credit %}{{ row.period_credit }}{% endif %}</td>
+{% endif %}
+<td class="text-end mono">{% if row.closing_debit %}{{ row.closing_debit }}{% endif %}</td>
+<td class="text-end mono">{% if row.closing_credit %}{{ row.closing_credit }}{% endif %}</td>

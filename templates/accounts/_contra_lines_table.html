@@ -1,0 +1,22 @@
+{{ formset.management_form }}
+<div class="js-contra-block mb-3" data-prefix="{{ prefix }}">
+  <div class="contra-block-title">{{ heading }}</div>
+  <div class="contra-line-head">
+    <span>Account</span>
+    <span class="text-end">Amount</span>
+    <span></span>
+  </div>
+  <div id="{{ prefix }}-lines-body">
+    {% for f in formset.forms %}
+      {% include "accounts/_contra_line_row.html" with f=f %}
+    {% endfor %}
+  </div>
+  <div class="contra-total-row">
+    <span>Total</span>
+    <span class="text-end mono js-contra-total" id="{{ prefix }}-total">0.00</span>
+    <span></span>
+  </div>
+</div>
+<template id="{{ prefix }}-empty-row">
+  {% include "accounts/_contra_line_row.html" with f=formset.empty_form %}
+</template>

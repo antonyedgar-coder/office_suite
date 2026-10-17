@@ -1,0 +1,10 @@
+---
+description: Accounts books cloud rules
+alwaysApply: true
+---
+
+# Accounts module
+
+The Accounts books module (`accounts/` app, `ENABLE_ACCOUNTS_MODULE`) is approved for cloud. Live needs `ENABLE_ACCOUNTS_MODULE=1` on App Platform.
+
+- Do not post Accounts invoices to MIS Fees/Receipts.

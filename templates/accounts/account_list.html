@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Account Ledger — CA Office Suite{% endblock %}
+{% block page_title %}Account Ledger{% endblock %}
+{% block content %}
+  {% include "accounts/_chart_tabs.html" %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="h5 mb-0">Account Ledger</h1>
+    {% if perms.accounts.add_account %}
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary btn-sm" href="{% url 'accounts_account_bulk_import' %}">Bulk upload (CSV)</a>
+        <a class="btn btn-primary btn-sm" href="{% url 'accounts_account_create' %}">Add</a>
+      </div>
+    {% endif %}
+  </div>
+  <p class="text-secondary small">Approved Client Master records create a ledger automatically under Sundry Debtors.</p>
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Search name" /></div>
+    <div class="col-auto"><button class="btn btn-sm btn-outline-secondary">Search</button></div>
+  </form>
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Account</th><th>Account Group</th><th>Primary group</th><th>GSTIN</th><th>HSN / SAC</th><th>GST % / Pure agent</th><th>PAN</th><th class="text-end">Opening</th><th></th></tr></thead>
+        <tbody>
+          {% for a in rows %}
+            <tr>
+              <td>{{ a.name }}{% if a.client_id %} <span class="badge text-bg-light">Client</span>{% endif %}</td>
+              <td>{% with s=a.secondary_group %}{{ s.name|default:"—" }}{% endwith %}</td>
+              <td>{% with p=a.primary_group %}{{ p.name|default:"—" }}{% endwith %}</td>
+              <td class="mono">{{ a.gstin|default:"—" }}</td>
+              <td class="mono">{{ a.hsn_code|default:"—" }}</td>
+              <td>{% if a.is_pure_agent %}Pure agent{% else %}{{ a.gst_rate|default:"—" }}{% endif %}</td>
+              <td class="mono">{{ a.pan|default:"—" }}</td>
+              <td class="text-end mono">{{ a.opening_balance }}</td>
+              <td class="text-nowrap">
+                {% if perms.accounts.change_account %}
+                  <a href="{% url 'accounts_account_edit' a.pk %}">Edit</a>
+                {% endif %}
+                {% if perms.accounts.change_account and perms.accounts.delete_account %} · {% endif %}
+                {% if perms.accounts.delete_account %}
+                  <form method="post" action="{% url 'accounts_account_delete' a.pk %}" class="d-inline" onsubmit="return confirm('Delete account {{ a.name|escapejs }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-link btn-sm p-0 align-baseline text-danger">Delete</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9" class="text-secondary">No accounts yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

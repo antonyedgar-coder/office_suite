@@ -1,0 +1,34 @@
+<tr class="js-invoice-row">
+  <td class="field-wrap">
+    {{ f.account }}
+    {{ f.bill_alloc }}
+    <input class="form-control form-control-sm js-invoice-account-search" placeholder="Type to filter accounts…" autocomplete="off" />
+    {% if f.account.errors %}<div class="text-danger small">{{ f.account.errors }}</div>{% endif %}
+    {% if f.non_field_errors %}<div class="text-danger small">{{ f.non_field_errors }}</div>{% endif %}
+  </td>
+  {% if vtype == 'sales' %}
+    <td><input class="form-control form-control-sm js-invoice-hsn" readonly tabindex="-1" /></td>
+  {% endif %}
+  <td>{{ f.amount }}{% if f.amount.errors %}<div class="text-danger small">{{ f.amount.errors }}</div>{% endif %}</td>
+  {% if vtype == 'sales' %}
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-rate" readonly tabindex="-1" /></td>
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-cgst-rate" readonly tabindex="-1" /></td>
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-cgst" readonly tabindex="-1" /></td>
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-sgst-rate" readonly tabindex="-1" /></td>
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-sgst" readonly tabindex="-1" /></td>
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-igst-rate" readonly tabindex="-1" /></td>
+    <td class="js-gst-col"><input class="form-control form-control-sm text-end js-invoice-igst" readonly tabindex="-1" /></td>
+  {% endif %}
+  <td class="text-end">
+    <button type="button" class="btn btn-sm btn-outline-primary js-add-invoice-row" title="Add row" aria-label="Add row">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+    </button>
+  </td>
+</tr>
+{% if vtype == 'receipt' %}
+<tr class="js-billwise-wrap">
+  <td colspan="3" class="pt-0 pb-3">
+    <div class="js-billwise-box border rounded p-2 bg-light d-none"></div>
+  </td>
+</tr>
+{% endif %}

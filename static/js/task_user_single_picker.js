@@ -4,9 +4,9 @@
    */
   window.initTaskUserSinglePicker = function (opts) {
     var options = opts.options || [];
-    var searchEl = document.getElementById(opts.searchId);
-    var suggestEl = document.getElementById(opts.suggestId);
-    var hiddenEl = document.getElementById(opts.hiddenId);
+    var searchEl = opts.searchEl || document.getElementById(opts.searchId);
+    var suggestEl = opts.suggestEl || document.getElementById(opts.suggestId);
+    var hiddenEl = opts.hiddenEl || document.getElementById(opts.hiddenId);
     var minChars = opts.minChars == null ? 1 : opts.minChars;
 
     if (!searchEl || !suggestEl || !hiddenEl) return;
@@ -43,6 +43,8 @@
           hiddenEl.value = String(o.id);
           searchEl.value = o.label;
           suggestEl.classList.remove("show");
+          hiddenEl.dispatchEvent(new Event("change", { bubbles: true }));
+          if (typeof opts.onSelect === "function") opts.onSelect(o);
         });
         suggestEl.appendChild(item);
       });

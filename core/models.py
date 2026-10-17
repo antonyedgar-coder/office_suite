@@ -175,6 +175,13 @@ class SiteSettings(models.Model):
         blank=True,
         help_text="Shown above CA Office Suite in the sidebar and on the login page.",
     )
+    gstin = models.CharField(
+        "GST No",
+        max_length=15,
+        blank=True,
+        help_text="Office GSTIN. Sales invoices use the first two digits to choose CGST/SGST or IGST.",
+    )
+    address = models.CharField(max_length=255, blank=True)
     logo = models.FileField(
         upload_to=site_settings_upload_to,
         blank=True,

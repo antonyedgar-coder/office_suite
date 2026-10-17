@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}{{ list_title }} — CA Office Suite{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block content %}
+  {% include "accounts/_register_tabs.html" %}
+  {% if sales_invoice_tabs %}
+    <ul class="nav nav-tabs nav-justified register-type-tabs mb-3">
+      {% for key, label in sales_invoice_tabs %}
+        <li class="nav-item">
+          <a class="nav-link {% if invoice_kind == key %}active{% endif %}" href="{% url 'accounts_register' %}?type=sales&invoice={{ key }}{% if date_from %}&date_from={{ date_from|date:'Y-m-d' }}{% endif %}{% if date_to %}&date_to={{ date_to|date:'Y-m-d' }}{% endif %}">{{ label }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  <form method="get" class="row g-2 mb-3 align-items-end">
+    <input type="hidden" name="type" value="{{ vtype }}" />
+    {% if invoice_kind %}<input type="hidden" name="invoice" value="{{ invoice_kind }}" />{% endif %}
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_from.id_for_label }}">From date</label>
+      {{ form.date_from }}
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_to.id_for_label }}">To date</label>
+      {{ form.date_to }}
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
+    </div>
+    <div class="col-auto">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Export
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{{ excel_url }}">Excel</a></li>
+          <li><a class="dropdown-item" href="{{ pdf_url }}">PDF</a></li>
+        </ul>
+      </div>
+    </div>
+  </form>
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="h5 mb-0">{{ list_title }}</h1>
+  </div>
+  <div class="card p-3">
+    <div class="table-responsive">
+      {% if vtype == 'sales' and invoice_kind == 'gst' %}
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Customer Name</th>
+              <th>GSTIN NO</th>
+              <th class="text-end">B2B Sales</th>
+              <th class="text-end">B2C Sales</th>
+              <th class="text-end">Pure Agent</th>
+              <th class="text-end">IGST</th>
+              <th class="text-end">CGST</th>
+              <th class="text-end">SGST</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.date|date:"d-m-Y" }}</td>
+                <td>
+                  {% if row.voucher %}
+                    <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}">{{ row.number }}</a>
+                  {% else %}
+                    {{ row.number }}
+                  {% endif %}
+                </td>
+                <td>{{ row.customer|default:"—" }}</td>
+                <td class="mono">{{ row.gstin|default:"—" }}</td>
+                <td class="text-end mono">{% if row.b2b_sales %}{{ row.b2b_sales }}{% endif %}</td>
+                <td class="text-end mono">{% if row.b2c_sales %}{{ row.b2c_sales }}{% endif %}</td>
+                <td class="text-end mono">{% if row.pure_agent %}{{ row.pure_agent }}{% endif %}</td>
+                <td class="text-end mono">{% if row.igst %}{{ row.igst }}{% endif %}</td>
+                <td class="text-end mono">{% if row.cgst %}{{ row.cgst }}{% endif %}</td>
+                <td class="text-end mono">{% if row.sgst %}{{ row.sgst }}{% endif %}</td>
+                <td class="text-end mono">{{ row.total }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="11" class="text-secondary">No GST invoices in this period.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if rows %}
+            <tfoot>
+              <tr class="fw-bold">
+                <td colspan="4">Total</td>
+                <td class="text-end mono">{{ column_totals.b2b_sales }}</td>
+                <td class="text-end mono">{{ column_totals.b2c_sales }}</td>
+                <td class="text-end mono">{{ column_totals.pure_agent }}</td>
+                <td class="text-end mono">{{ column_totals.igst }}</td>
+                <td class="text-end mono">{{ column_totals.cgst }}</td>
+                <td class="text-end mono">{{ column_totals.sgst }}</td>
+                <td class="text-end mono">{{ column_totals.total }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      {% elif vtype == 'sales' and invoice_kind == 'ngst' %}
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Customer Name</th>
+              <th class="text-end">Sales</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.date|date:"d-m-Y" }}</td>
+                <td>
+                  {% if row.voucher %}
+                    <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}">{{ row.number }}</a>
+                  {% else %}
+                    {{ row.number }}
+                  {% endif %}
+                </td>
+                <td>{{ row.customer|default:"—" }}</td>
+                <td class="text-end mono">{{ row.sales }}</td>
+                <td class="text-end mono">{{ row.total }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-secondary">No Non GST invoices in this period.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if rows %}
+            <tfoot>
+              <tr class="fw-bold">
+                <td colspan="3">Total</td>
+                <td class="text-end mono">{{ column_totals.sales }}</td>
+                <td class="text-end mono">{{ column_totals.total }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      {% else %}
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Particulars</th>
+              <th>Narration</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.date|date:"d-m-Y" }}</td>
+                <td>
+                  {% if row.voucher %}
+                    <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}">{{ row.number }}</a>
+                  {% else %}
+                    {{ row.number }}
+                  {% endif %}
+                </td>
+                <td>{{ row.particulars|default:"—" }}</td>
+                <td>{{ row.narration|default:"—" }}</td>
+                <td class="text-end mono">{{ row.amount }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-secondary">No entries in this period.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if rows %}
+            <tfoot>
+              <tr class="fw-bold">
+                <td colspan="4">Total</td>
+                <td class="text-end mono">{{ total }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

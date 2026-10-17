@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ list_title }} — CA Office Suite{% endblock %}
+{% block page_title %}{{ list_title }}{% endblock %}
+{% block content %}
+  {% include "accounts/_chart_tabs.html" %}
+
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="h5 mb-0">{{ list_title }}</h1>
+    {% if perms.accounts.add_accountgroup %}
+      <div class="d-flex flex-wrap gap-2">
+        {% if tab == 'parent' %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'accounts_primary_group_bulk_import' %}">Bulk upload (CSV)</a>
+        {% endif %}
+        {% if tab == 'account' %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'accounts_group_bulk_import' %}">Bulk upload (CSV)</a>
+        {% endif %}
+        {% if tab != 'main' or is_accounts_admin %}
+          <a class="btn btn-primary btn-sm" href="{% url 'accounts_group_create' %}?kind={{ tab }}">Add</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            {% if tab == 'account' %}<th>Primary group</th>{% endif %}
+            {% if tab == 'main' %}<th>Type</th>{% endif %}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in rows %}
+            <tr>
+              <td>{{ g.name }}</td>
+              {% if tab == 'account' %}
+                <td>{{ g.parent.name }}</td>
+              {% endif %}
+              {% if tab == 'main' %}
+                <td>{{ g.get_main_head_display }}</td>
+              {% endif %}
+              <td class="text-end text-nowrap">
+                {% if perms.accounts.change_accountgroup %}
+                  {% if tab != 'main' or is_accounts_admin %}
+                    <a href="{% url 'accounts_group_edit' g.pk %}">Edit</a>
+                  {% endif %}
+                {% endif %}
+                {% if tab != 'main' and perms.accounts.delete_accountgroup %}
+                  {% if perms.accounts.change_accountgroup %} · {% endif %}
+                  <form method="post" action="{% url 'accounts_group_delete' g.pk %}" class="d-inline" onsubmit="return confirm('Delete {{ g.name|escapejs }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-link btn-sm p-0 align-baseline text-danger">Delete</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-secondary">Nothing to show yet. Use Add.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

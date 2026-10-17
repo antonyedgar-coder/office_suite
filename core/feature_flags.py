@@ -18,3 +18,7 @@ def task_module_enabled() -> bool:
 
 def documents_module_enabled() -> bool:
     return env_flag("ENABLE_DOCUMENTS_MODULE", default=False)
+
+
+def accounts_module_enabled() -> bool:
+    return env_flag("ENABLE_ACCOUNTS_MODULE", default=False)

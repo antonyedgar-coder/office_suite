@@ -31,6 +31,21 @@ class SiteSettingsTests(TestCase):
         settings = SiteSettings.load()
         self.assertEqual(settings.company_name, "Sharma & Associates")
 
+    def test_save_gstin_and_address(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("site_settings_edit"),
+            {
+                "company_name": "Sharma & Associates",
+                "gstin": "32aaaaa0000a1z5",
+                "address": "1 MG Road, Trivandrum",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        settings = SiteSettings.load()
+        self.assertEqual(settings.gstin, "32AAAAA0000A1Z5")
+        self.assertEqual(settings.address, "1 MG Road, Trivandrum")
+
     def test_branding_in_context(self):
         SiteSettings.objects.update_or_create(
             pk=1,

@@ -24,6 +24,21 @@
           </div>
         </div>
         <div class="col-12 col-md-4">
+          <label class="form-label" for="{{ form.gstin.id_for_label }}">GST No</label>
+          {{ form.gstin }}
+          {% if form.gstin.errors %}
+            <div class="text-danger small">{{ form.gstin.errors }}</div>
+          {% endif %}
+          <div class="form-field-hint">Used on sales invoices. The first two digits decide CGST/SGST vs IGST.</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="{{ form.address.id_for_label }}">Address</label>
+          {{ form.address }}
+          {% if form.address.errors %}
+            <div class="text-danger small">{{ form.address.errors }}</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-md-4">
           {% if settings.logo %}
             <label class="form-label">Current logo</label>
             <div class="border rounded p-2 bg-white mb-2">

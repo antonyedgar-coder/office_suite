@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Ledger — CA Office Suite{% endblock %}
+{% block page_title %}Ledger{% endblock %}
+{% block content %}
+  <form method="get" class="row g-2 mb-3 align-items-end">
+    <div class="col-12 col-md-4">
+      <label class="form-label" for="{{ form.account.id_for_label }}">Account</label>
+      {{ form.account }}
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_from.id_for_label }}">From date</label>
+      {{ form.date_from }}
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_to.id_for_label }}">To date</label>
+      {{ form.date_to }}
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
+    </div>
+    {% if account or all_ledgers %}
+    <div class="col-auto">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Export
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{{ excel_url }}">Excel</a></li>
+          <li><a class="dropdown-item" href="{{ pdf_url }}">PDF</a></li>
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+  </form>
+  {% if all_ledgers %}
+    <h6 class="mb-3">All Ledger</h6>
+    {% for section in sections %}
+      {% ifchanged section.parent_group %}
+        <h5 class="mt-4 mb-2">{{ section.parent_group }}</h5>
+      {% endifchanged %}
+      {% if section.account_group %}
+        {% ifchanged section.parent_group section.account_group %}
+          <h6 class="text-secondary mb-2">{{ section.account_group }}</h6>
+        {% endifchanged %}
+      {% endif %}
+      <h6 class="mb-2">{{ section.account.name }}</h6>
+      <div class="card p-3 mb-3">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Voucher No</th>
+                <th>Ledger account</th>
+                <th>Narration</th>
+                <th class="text-end">Debit</th>
+                <th class="text-end">Credit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in section.rows %}
+                <tr class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}">
+                  <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
+                  <td>
+                    {% if row.voucher %}
+                      <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}">{{ row.number }}</a>
+                    {% else %}
+                      {{ row.number }}
+                    {% endif %}
+                  </td>
+                  <td>{{ row.ledger_account }}</td>
+                  <td>{{ row.narration }}</td>
+                  <td class="text-end mono">{% if row.debit %}{{ row.debit }}{% endif %}</td>
+                  <td class="text-end mono">{% if row.credit %}{{ row.credit }}{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6" class="text-secondary">No entries.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-secondary">No ledger entries in this period.</p>
+    {% endfor %}
+  {% elif account %}
+    <h6 class="mb-3">{{ account.name }}</h6>
+    <div class="card p-3">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Ledger account</th>
+              <th>Narration</th>
+              <th class="text-end">Debit</th>
+              <th class="text-end">Credit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}">
+                <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
+                <td>
+                  {% if row.voucher %}
+                    <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}">{{ row.number }}</a>
+                  {% else %}
+                    {{ row.number }}
+                  {% endif %}
+                </td>
+                <td>{{ row.ledger_account }}</td>
+                <td>{{ row.narration }}</td>
+                <td class="text-end mono">{% if row.debit %}{{ row.debit }}{% endif %}</td>
+                <td class="text-end mono">{% if row.credit %}{{ row.credit }}{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="text-secondary">No entries.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

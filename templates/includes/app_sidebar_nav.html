@@ -40,6 +40,8 @@
 
   {% include "includes/app_sidebar_tasks_nav.html" %}
 
+  {% include "includes/app_sidebar_accounts_nav.html" %}
+
   {% include "includes/app_sidebar_documents_nav.html" %}
 
   {% if user.is_superuser or perms.masters.view_clientdsc or perms.masters.view_dscinout %}

@@ -1,0 +1,17 @@
+<div class="js-invoice-row contra-line-row">
+  <div class="field-wrap contra-line-account">
+    {{ f.account }}
+    {{ f.bill_alloc }}
+    <input class="form-control form-control-sm js-invoice-account-search" placeholder="Type to filter accounts…" autocomplete="off" />
+    {% if f.account.errors %}<div class="text-danger small">{{ f.account.errors }}</div>{% endif %}
+    {% if f.non_field_errors %}<div class="text-danger small">{{ f.non_field_errors }}</div>{% endif %}
+  </div>
+  <div class="contra-line-amount">
+    {{ f.amount }}{% if f.amount.errors %}<div class="text-danger small">{{ f.amount.errors }}</div>{% endif %}
+  </div>
+  <div class="contra-line-add">
+    <button type="button" class="btn btn-sm btn-outline-primary js-add-invoice-row" title="Add row" aria-label="Add row">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+    </button>
+  </div>
+</div>

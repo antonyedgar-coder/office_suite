@@ -17,12 +17,26 @@ class SiteSettingsForm(forms.ModelForm):
 
     class Meta:
         model = SiteSettings
-        fields = ("company_name", "logo")
+        fields = ("company_name", "gstin", "address", "logo")
         widgets = {
             "company_name": forms.TextInput(
                 attrs={
                     "class": "form-control",
                     "placeholder": "e.g. Sharma & Associates",
+                }
+            ),
+            "gstin": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "maxlength": "15",
+                    "placeholder": "15-character GSTIN",
+                    "style": "text-transform: uppercase;",
+                }
+            ),
+            "address": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Office address",
                 }
             ),
             "logo": forms.FileInput(
