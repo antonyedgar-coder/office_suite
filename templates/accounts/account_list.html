@@ -18,9 +18,25 @@
     {% endif %}
   </div>
   <p class="text-secondary small">Approved Client Master records create a ledger automatically under Sundry Debtors.</p>
-  <form method="get" class="row g-2 mb-3">
-    <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Search name" /></div>
-    <div class="col-auto"><button class="btn btn-sm btn-outline-secondary">Search</button></div>
+  <form method="get" class="row g-2 mb-3 align-items-end">
+    <div class="col-sm-4 col-md-3">
+      <label class="form-label small mb-1" for="id_account">Account</label>
+      <input class="form-control form-control-sm" id="id_account" name="account" value="{{ account_q }}" placeholder="Search account" />
+    </div>
+    <div class="col-sm-4 col-md-3">
+      <label class="form-label small mb-1" for="id_account_group">Account Group</label>
+      <input class="form-control form-control-sm" id="id_account_group" name="account_group" value="{{ account_group_q }}" placeholder="Search account group" />
+    </div>
+    <div class="col-sm-4 col-md-3">
+      <label class="form-label small mb-1" for="id_primary_group">Primary Group</label>
+      <input class="form-control form-control-sm" id="id_primary_group" name="primary_group" value="{{ primary_group_q }}" placeholder="Search primary group" />
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-sm btn-outline-secondary">Search</button>
+      {% if has_search %}
+        <a class="btn btn-sm btn-link" href="{% url 'accounts_account_list' %}">Clear</a>
+      {% endif %}
+    </div>
   </form>
   <div class="card p-3">
     <div class="table-responsive">
@@ -51,7 +67,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="9" class="text-secondary">No accounts yet.</td></tr>
+            <tr><td colspan="9" class="text-secondary">{% if has_search %}No matching accounts.{% else %}No accounts yet.{% endif %}</td></tr>
           {% endfor %}
         </tbody>
       </table>

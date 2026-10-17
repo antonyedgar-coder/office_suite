@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Ledger — CA Office Suite{% endblock %}
 {% block page_title %}Ledger{% endblock %}
 {% block content %}
@@ -122,4 +123,7 @@
       </div>
     </div>
   {% endif %}
+{% endblock %}
+{% block extra_js %}
+  <script src="{% static 'js/filtered_select.js' %}?v=1"></script>
 {% endblock %}

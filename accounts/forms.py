@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.forms import BaseFormSet, formset_factory, inlineformset_factory
 from django.utils import timezone
 
+from core.widgets import FilteredSelect
+
 from .models import (
     MAIN_HEAD_CHOICES,
     VOUCHER_CONTRA,
@@ -429,7 +431,7 @@ class LedgerReportForm(forms.Form):
     )
     account = forms.ChoiceField(
         required=False,
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=FilteredSelect(),
     )
 
     def __init__(self, *args, **kwargs):

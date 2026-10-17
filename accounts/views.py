@@ -316,19 +316,53 @@ def group_delete(request, pk: int):
     return _tab_redirect(kind)
 
 
+def filter_account_ledgers(queryset, *, account="", account_group="", primary_group=""):
+    account = (account or "").strip()
+    account_group = (account_group or "").strip()
+    primary_group = (primary_group or "").strip()
+    if account:
+        queryset = queryset.filter(name__icontains=account)
+    if account_group:
+        queryset = queryset.filter(
+            group__parent__parent__isnull=False,
+            group__name__icontains=account_group,
+        )
+    if primary_group:
+        queryset = queryset.filter(
+            Q(
+                group__parent__isnull=False,
+                group__parent__parent__isnull=True,
+                group__name__icontains=primary_group,
+            )
+            | Q(
+                group__parent__parent__isnull=False,
+                group__parent__name__icontains=primary_group,
+            )
+        )
+    return queryset
+
+
 @require_perm("accounts.view_account")
 def account_list(request):
     seed_chart_of_accounts()
-    q = (request.GET.get("q") or "").strip()
-    rows = Account.objects.select_related("group", "group__parent", "client").order_by("name")
-    if q:
-        rows = rows.filter(name__icontains=q)
+    account_q = (request.GET.get("account") or request.GET.get("q") or "").strip()
+    account_group_q = (request.GET.get("account_group") or "").strip()
+    primary_group_q = (request.GET.get("primary_group") or "").strip()
+    rows = filter_account_ledgers(
+        Account.objects.select_related("group", "group__parent", "client").order_by("name"),
+        account=account_q,
+        account_group=account_group_q,
+        primary_group=primary_group_q,
+    )
     return render(
         request,
         "accounts/account_list.html",
         {
             "rows": rows,
-            "q": q,
+            "account_q": account_q,
+            "account_group_q": account_group_q,
+            "primary_group_q": primary_group_q,
+            "has_search": bool(account_q or account_group_q or primary_group_q),
             "tab": "ledger",
             "is_accounts_admin": user_is_accounts_admin(request.user),
         },

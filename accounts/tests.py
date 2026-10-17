@@ -1288,6 +1288,37 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(assets_blocked.status_code, 302)
         self.assertTrue(AccountGroup.objects.filter(pk=assets.pk).exists())
 
+    def test_account_ledger_search_by_account_group_and_primary(self):
+        from pathlib import Path
+        from django.conf import settings
+
+        from accounts.views import filter_account_ledgers
+
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        debtors = AccountGroup.objects.create(name="Sundry Debtors Search", parent=assets, main_head="assets")
+        domestic = AccountGroup.objects.create(name="Domestic debtors Search", parent=debtors, main_head="assets")
+        office = AccountGroup.objects.create(name="Office costs Search", parent=expenses, main_head="expenses")
+        buyer = Account.objects.create(name="Search Buyer Alpha", group=domestic)
+        under_primary = Account.objects.create(name="Search Direct Debtor", group=debtors)
+        rent = Account.objects.create(name="Search Office Rent", group=office)
+        qs = Account.objects.filter(name__startswith="Search ")
+        by_account = filter_account_ledgers(qs, account="buyer")
+        self.assertEqual(set(by_account.values_list("pk", flat=True)), {buyer.pk})
+        by_group = filter_account_ledgers(qs, account_group="domestic")
+        self.assertEqual(set(by_group.values_list("pk", flat=True)), {buyer.pk})
+        by_primary = filter_account_ledgers(qs, primary_group="sundry")
+        self.assertEqual(set(by_primary.values_list("pk", flat=True)), {buyer.pk, under_primary.pk})
+        combined = filter_account_ledgers(qs, account="rent", primary_group="office")
+        self.assertEqual(set(combined.values_list("pk", flat=True)), {rent.pk})
+        template = (Path(settings.BASE_DIR) / "templates/accounts/account_list.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('name="account"', template)
+        self.assertIn('name="account_group"', template)
+        self.assertIn('name="primary_group"', template)
+
     def test_account_ledger_is_chart_tab_not_sidebar(self):
         import re
 
@@ -2443,4 +2474,24 @@ class ClientLedgerBackfillTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Account.objects.filter(client=approved).exists())
+
+
+class LedgerAccountPickerTests(TestCase):
+    def test_ledger_account_field_is_typeable_filtered_select(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from accounts.forms import LedgerReportForm
+
+        form = LedgerReportForm()
+        self.assertIn("js-filtered-select", form.fields["account"].widget.attrs["class"])
+        template = (Path(settings.BASE_DIR) / "templates/accounts/report_ledger.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("filtered_select.js", template)
+        script = (Path(settings.BASE_DIR) / "static/js/filtered_select.js").read_text(encoding="utf-8")
+        self.assertIn("ArrowDown", script)
+        self.assertIn("ArrowUp", script)
+        self.assertIn("choose(option)", script)
 
