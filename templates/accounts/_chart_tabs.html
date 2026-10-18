@@ -1,21 +1,3 @@
-<ul class="nav nav-tabs mb-3">
-  {% if user.is_superuser or perms.accounts.view_accountgroup %}
-    {% if is_accounts_admin %}
-      <li class="nav-item">
-        <a class="nav-link {% if tab == 'main' %}active{% endif %}" href="{% url 'accounts_group_list' %}?tab=main">Main Head</a>
-      </li>
-    {% endif %}
-    <li class="nav-item">
-      <a class="nav-link {% if tab == 'parent' %}active{% endif %}" href="{% url 'accounts_group_list' %}?tab=parent">Primary Group</a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link {% if tab == 'account' %}active{% endif %}" href="{% url 'accounts_group_list' %}?tab=account">Account Group</a>
-    </li>
-  {% endif %}
-  {% if user.is_superuser or perms.accounts.view_account %}
-    <li class="nav-item">
-      <a class="nav-link {% if tab == 'ledger' %}active{% endif %}" href="{% url 'accounts_account_list' %}">Account Ledger</a>
-    </li>
-  {% endif %}
-</ul>
-
+<p class="mb-3">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}"><i class="bi bi-arrow-left"></i> Settings</a>
+</p>

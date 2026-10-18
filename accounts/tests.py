@@ -1320,10 +1320,10 @@ class AccountsModuleTests(TestCase):
         self.assertIn('name="primary_group"', template)
 
     def test_account_ledger_is_chart_tab_not_sidebar(self):
-        import re
-
         from django.template.loader import render_to_string
         from django.test import RequestFactory
+
+        from core.settings_hub import build_settings_sections
 
         request = RequestFactory().get("/accounts/groups/")
         request.user = self.admin
@@ -1332,10 +1332,9 @@ class AccountsModuleTests(TestCase):
             {"tab": "ledger", "is_accounts_admin": True},
             request=request,
         )
-        labels = re.findall(r"nav-link[^>]*>([^<]+)</a>", tabs)
-        self.assertEqual(labels, ["Main Head", "Primary Group", "Account Group", "Account Ledger"])
-        self.assertIn('href="%s"' % reverse("accounts_account_list"), tabs)
-        self.assertIn("nav-link active", tabs)
+        self.assertIn('href="%s"' % reverse("settings_hub"), tabs)
+        self.assertNotIn("Primary Group", tabs)
+        self.assertNotIn("Account Ledger", tabs)
         sidebar = render_to_string(
             "includes/app_sidebar_accounts_nav.html",
             {
@@ -1345,9 +1344,18 @@ class AccountsModuleTests(TestCase):
             },
             request=request,
         )
-        self.assertIn("Account groups", sidebar)
-        self.assertNotIn("Account Master", sidebar)
-        self.assertIn("active", sidebar)
+        self.assertNotIn("Account groups", sidebar)
+        self.assertNotIn("Main Account", sidebar)
+        sections = build_settings_sections(self.admin)
+        account = next(section for section in sections if section.title == "Account")
+        self.assertEqual(
+            [card.title for card in account.cards[:4]],
+            ["Main Account", "Primary Group", "Account Group", "Account Ledger"],
+        )
+        self.assertEqual(account.cards[0].href, reverse("accounts_group_list") + "?tab=main")
+        self.assertEqual(account.cards[1].href, reverse("accounts_group_list") + "?tab=parent")
+        self.assertEqual(account.cards[2].href, reverse("accounts_group_list") + "?tab=account")
+        self.assertEqual(account.cards[3].href, reverse("accounts_account_list"))
 
     def test_sales_buyer_is_sundry_debtors_only(self):
         seed_chart_of_accounts()
@@ -1767,11 +1775,24 @@ class TrialBalanceReportTests(TestCase):
         group_row = next(row for row in data["rows"] if row["name"] == "Bank Accounts TB")
         self.assertTrue(parent_row["is_header"])
         self.assertEqual(parent_row["kind"], "parent")
+        self.assertFalse(parent_row["expandable"])
         self.assertEqual(group_row["kind"], "account_group")
+        self.assertTrue(group_row["expandable"])
         self.assertEqual(parent_row["closing_debit"], Decimal("1200.00"))
+        alpha = next(row for row in data["rows"] if row["name"] == "Alpha Bank TB")
+        self.assertTrue(alpha["collapsed"])
+        self.assertEqual(alpha["parent_group_id"], self.bank_group.pk)
         self.assertFalse(data["show_group_column"])
         self.assertFalse(data["show_opening"])
         self.assertFalse(data["show_transactions"])
+        from pathlib import Path
+        from django.conf import settings
+
+        template = (Path(settings.BASE_DIR) / "templates/accounts/report_trial_balance.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("js-tb-toggle", template)
+        self.assertIn("bi-plus-lg", template)
 
     def test_ledger_wise_is_alphabetical_with_group_column(self):
         data = trial_balance(
@@ -2494,4 +2515,561 @@ class LedgerAccountPickerTests(TestCase):
         self.assertIn("ArrowDown", script)
         self.assertIn("ArrowUp", script)
         self.assertIn("choose(option)", script)
+
+
+class PaymentRecoveryTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="rec-admin@example.com",
+            password="pass12345",
+            is_staff=True,
+            is_superuser=True,
+        )
+        grp = ClientGroup.objects.create(name="REC GROUP")
+        self.client_row = Client.objects.create(
+            client_name="REC CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=grp,
+            approval_status=Client.APPROVED,
+            pan="RECDE7777F",
+        )
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        cash_group = AccountGroup.objects.create(
+            name="Cash and Cash Equivalents",
+            parent=assets,
+            main_head="assets",
+        )
+        self.bank = Account.objects.create(name="Recovery bank", group=cash_group)
+        current = AccountGroup.objects.create(name="Other current assets Rec", parent=assets, main_head="assets")
+        self.gst_payment = Account.objects.create(
+            name="GST Payment Rec",
+            group=current,
+            is_pure_agent=True,
+        )
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        self.rent = Account.objects.create(name="Office rent Rec", group=expenses)
+        self.party = sync_client_account(self.client_row)
+        tg = TaskGroup.objects.create(name="GST REC", sort_order=1)
+        self.master = TaskMaster.objects.create(
+            task_group=tg,
+            name="GSTR recovery",
+            is_recurring=False,
+            requires_verifier=False,
+            requires_document_checker=False,
+        )
+        self.task = Task.objects.create(
+            client=self.client_row,
+            task_master=self.master,
+            title="GSTR-3B Jul Rec",
+            due_date=date(2026, 7, 20),
+            period_key="2026-07",
+            status=Task.STATUS_ASSIGNED,
+        )
+
+    def test_pure_agent_payment_requires_client(self):
+        from accounts.services import build_payment_lines
+
+        lines = build_payment_lines(
+            mode=self.bank,
+            items=[{"account": self.gst_payment, "amount": Decimal("5180.00")}],
+        )
+        with self.assertRaises(ValidationError):
+            post_voucher(
+                voucher_type="payment",
+                voucher_date=date(2026, 7, 10),
+                lines=lines,
+                actor=self.admin,
+            )
+
+    def test_ordinary_payment_does_not_need_client(self):
+        from accounts.services import build_payment_lines
+
+        lines = build_payment_lines(
+            mode=self.bank,
+            items=[{"account": self.rent, "amount": Decimal("100.00")}],
+        )
+        voucher = post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 7, 10),
+            lines=lines,
+            actor=self.admin,
+        )
+        self.assertIsNone(voucher.on_behalf_of_id)
+
+    def test_tagged_payment_lists_until_invoice_knocks_off(self):
+        from accounts.services import (
+            build_invoice_lines,
+            build_payment_lines,
+            pending_recovery_rows,
+        )
+
+        pay_lines = build_payment_lines(
+            mode=self.bank,
+            items=[{"account": self.gst_payment, "amount": Decimal("5180.00")}],
+        )
+        payment = post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 7, 10),
+            lines=pay_lines,
+            actor=self.admin,
+            on_behalf_of=self.party,
+            on_behalf_task=self.task,
+        )
+        self.assertEqual(payment.on_behalf_of_id, self.party.pk)
+        pending = pending_recovery_rows(party=self.party)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["pending"], Decimal("5180.00"))
+        self.assertEqual(pending[0]["task_id"], self.task.pk)
+        income = _posting_ledgers()
+        income.gst_rate = Decimal("18.00")
+        income.save(update_fields=["gst_rate"])
+        items = [
+            {"account": income, "amount": Decimal("1000.00")},
+            {
+                "account": self.gst_payment,
+                "amount": Decimal("5180.00"),
+                "recovery_line": pending[0]["id"],
+            },
+        ]
+        invoice_lines = build_invoice_lines(
+            voucher_type="sales",
+            party=self.party,
+            items=items,
+            with_gst=False,
+        )
+        invoice = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 7, 12),
+            lines=invoice_lines,
+            actor=self.admin,
+            recovery_items=items,
+        )
+        self.assertEqual(invoice.recovery_allocations.count(), 1)
+        self.assertEqual(pending_recovery_rows(party=self.party), [])
+
+    def test_wrong_task_client_is_rejected(self):
+        from accounts.services import build_payment_lines
+
+        other = Client.objects.create(
+            client_name="OTHER REC",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=self.client_row.client_group,
+            approval_status=Client.APPROVED,
+            pan="RECDE8888G",
+        )
+        other_task = Task.objects.create(
+            client=other,
+            task_master=self.master,
+            title="Other GSTR Rec",
+            due_date=date(2026, 7, 21),
+            period_key="2026-07-other",
+            status=Task.STATUS_ASSIGNED,
+        )
+        lines = build_payment_lines(
+            mode=self.bank,
+            items=[{"account": self.gst_payment, "amount": Decimal("100.00")}],
+        )
+        with self.assertRaises(ValidationError):
+            post_voucher(
+                voucher_type="payment",
+                voucher_date=date(2026, 7, 10),
+                lines=lines,
+                actor=self.admin,
+                on_behalf_of=self.party,
+                on_behalf_task=other_task,
+            )
+
+    def _tagged_payment(self, amount=Decimal("5180.00"), task=None):
+        from accounts.services import build_payment_lines
+
+        lines = build_payment_lines(
+            mode=self.bank,
+            items=[{"account": self.gst_payment, "amount": amount}],
+        )
+        return post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 7, 10),
+            lines=lines,
+            actor=self.admin,
+            on_behalf_of=self.party,
+            on_behalf_task=task,
+        )
+
+    def test_unbilled_queue_fees_recovery_and_both(self):
+        from accounts.services import (
+            UNBILLED_FEES,
+            UNBILLED_RECOVERY,
+            build_unbilled_queue,
+            pending_recovery_rows,
+        )
+
+        self._tagged_payment(task=self.task)
+        queue = build_unbilled_queue(tasks=[])
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(queue[0]["kind"], UNBILLED_RECOVERY)
+        self.assertEqual(queue[0]["ledger_label"], "GST Payment Rec")
+        self.assertEqual(queue[0]["key"], f"recovery:{pending_recovery_rows()[0]['id']}")
+
+        self.task.status = Task.STATUS_COMPLETE
+        self.task.is_billable = True
+        self.task.fees_amount = Decimal("1000.00")
+        self.task.save(update_fields=["status", "is_billable", "fees_amount", "updated_at"])
+        queue = build_unbilled_queue(tasks=[self.task])
+        kinds = {item["key"]: item["kind"] for item in queue}
+        self.assertEqual(kinds[f"task:{self.task.pk}"], UNBILLED_FEES)
+        recovery_item = next(item for item in queue if item["kind"] == UNBILLED_RECOVERY)
+        self.assertEqual(recovery_item["ledger_label"], "GST Payment Rec")
+        self.assertEqual(recovery_item["recovery"], Decimal("5180.00"))
+
+        other = Task.objects.create(
+            client=self.client_row,
+            task_master=self.master,
+            title="Fees only Rec",
+            due_date=date(2026, 8, 20),
+            period_key="2026-08",
+            status=Task.STATUS_COMPLETE,
+            is_billable=True,
+            fees_amount=Decimal("250.00"),
+        )
+        queue = build_unbilled_queue(tasks=[self.task, other])
+        kinds = {item["key"]: item["kind"] for item in queue}
+        self.assertEqual(kinds[f"task:{self.task.pk}"], UNBILLED_FEES)
+        self.assertEqual(kinds[f"task:{other.pk}"], UNBILLED_FEES)
+        self.assertTrue(any(item["kind"] == UNBILLED_RECOVERY for item in queue))
+        from accounts.services import filter_unbilled_queue
+
+        found = filter_unbilled_queue(queue, "GST Payment")
+        self.assertTrue(any(item["kind"] == UNBILLED_RECOVERY for item in found))
+
+    def test_recovery_only_invoice_from_unbilled_keys(self):
+        from accounts.services import (
+            create_invoices_from_unbilled_keys,
+            pending_recovery_rows,
+        )
+
+        self._tagged_payment(task=self.task)
+        pending = pending_recovery_rows()
+        created = create_invoices_from_unbilled_keys(
+            keys=[f"recovery:{pending[0]['id']}"],
+            tasks=[],
+            actor=self.admin,
+            voucher_date=date(2026, 7, 12),
+            with_gst=False,
+        )
+        self.assertEqual(len(created), 1)
+        self.assertTrue(created[0].number.startswith("NGST/"))
+        self.assertEqual(created[0].recovery_allocations.count(), 1)
+        self.assertEqual(pending_recovery_rows(), [])
+        credits = {ln.account_id: ln.credit for ln in created[0].lines.all() if ln.credit > 0}
+        self.assertEqual(credits[self.gst_payment.pk], Decimal("5180.00"))
+
+    def test_same_client_rows_raise_one_invoice(self):
+        from accounts.services import create_invoices_from_unbilled_keys, pending_recovery_rows
+
+        self.task.status = Task.STATUS_COMPLETE
+        self.task.is_billable = True
+        self.task.fees_amount = Decimal("1000.00")
+        self.task.save(update_fields=["status", "is_billable", "fees_amount", "updated_at"])
+        other = Task.objects.create(
+            client=self.client_row,
+            task_master=self.master,
+            title="GSTR-1 Jul Rec",
+            due_date=date(2026, 7, 21),
+            period_key="2026-07-gstr1",
+            status=Task.STATUS_COMPLETE,
+            is_billable=True,
+            fees_amount=Decimal("250.00"),
+        )
+        self._tagged_payment(task=self.task)
+        pending = pending_recovery_rows()[0]
+        created = create_invoices_from_unbilled_keys(
+            keys=[f"task:{self.task.pk}", f"task:{other.pk}", f"recovery:{pending['id']}"],
+            tasks=[self.task, other],
+            actor=self.admin,
+            voucher_date=date(2026, 7, 12),
+            with_gst=False,
+        )
+        self.assertEqual(len(created), 1)
+        credits = {ln.account_id: ln.credit for ln in created[0].lines.all() if ln.credit > 0}
+        self.assertEqual(credits[self.gst_payment.pk], Decimal("5180.00"))
+        self.assertEqual(sum((ln.credit for ln in created[0].lines.all() if ln.account_id != self.gst_payment.pk and ln.credit > 0), Decimal("0.00")), Decimal("1250.00"))
+        self.assertEqual(created[0].tasks.count(), 2)
+        self.assertEqual(created[0].recovery_allocations.count(), 1)
+        self.task.refresh_from_db()
+        other.refresh_from_db()
+        self.assertTrue(self.task.bill_raised)
+        self.assertTrue(other.bill_raised)
+        self.assertEqual(pending_recovery_rows(), [])
+
+    def test_different_client_rows_raise_separate_invoices(self):
+        from accounts.services import create_invoices_from_unbilled_keys
+
+        self.task.status = Task.STATUS_COMPLETE
+        self.task.is_billable = True
+        self.task.fees_amount = Decimal("1000.00")
+        self.task.save(update_fields=["status", "is_billable", "fees_amount", "updated_at"])
+        other_client = Client.objects.create(
+            client_name="OTHER BILL CLIENT",
+            client_type="Individual",
+            branch="Trivandrum",
+            client_group=self.client_row.client_group,
+            approval_status=Client.APPROVED,
+            pan="RECDE9999H",
+        )
+        other_task = Task.objects.create(
+            client=other_client,
+            task_master=self.master,
+            title="Other fees Rec",
+            due_date=date(2026, 8, 20),
+            period_key="2026-08",
+            status=Task.STATUS_COMPLETE,
+            is_billable=True,
+            fees_amount=Decimal("400.00"),
+        )
+        created = create_invoices_from_unbilled_keys(
+            keys=[f"task:{self.task.pk}", f"task:{other_task.pk}"],
+            tasks=[self.task, other_task],
+            actor=self.admin,
+            voucher_date=date(2026, 7, 12),
+            with_gst=False,
+        )
+        self.assertEqual(len(created), 2)
+        parties = {next(ln.account_id for ln in voucher.lines.all() if ln.debit > 0) for voucher in created}
+        self.assertEqual(len(parties), 2)
+
+    def test_unbilled_page_posts_recovery_row(self):
+        from accounts.services import pending_recovery_rows
+
+        self._tagged_payment()
+        pending = pending_recovery_rows()[0]
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts_unbilled_tasks"),
+            {
+                "item": f"recovery:{pending['id']}",
+                "invoice_date": "2026-07-12",
+                "with_gst": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(pending_recovery_rows(), [])
+
+    def test_unbilled_template_lists_fees_and_recovery(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        template = (Path(settings.BASE_DIR) / "templates/accounts/unbilled_tasks.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('name="item"', template)
+        self.assertIn("Type", template)
+        self.assertIn("Ledger", template)
+        self.assertIn("Recovery", template)
+        self.assertIn("Fees", template)
+        sidebar = (Path(settings.BASE_DIR) / "templates/includes/app_sidebar_accounts_nav.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("Pending recoveries", sidebar)
+
+
+class PaymentVoucherPermissionTests(TestCase):
+    def setUp(self):
+        from django.core.exceptions import PermissionDenied
+        from django.test import RequestFactory
+
+        from accounts.permissions import voucher_action_flags
+        from accounts.views import voucher_create, voucher_delete, voucher_edit, voucher_list, voucher_print
+
+        self.PermissionDenied = PermissionDenied
+        self.factory = RequestFactory()
+        self.voucher_action_flags = voucher_action_flags
+        self.voucher_create = voucher_create
+        self.voucher_delete = voucher_delete
+        self.voucher_edit = voucher_edit
+        self.voucher_list = voucher_list
+        self.voucher_print = voucher_print
+        self.admin = User.objects.create_superuser(
+            email="payperm-admin@example.com",
+            password="pass12345",
+        )
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        cash_group = AccountGroup.objects.create(
+            name="Cash and Cash Equivalents",
+            parent=assets,
+            main_head="assets",
+        )
+        self.bank = Account.objects.create(name="PayPerm bank", group=cash_group)
+        self.rent = Account.objects.create(
+            name="PayPerm rent",
+            group=AccountGroup.objects.get(system_key="expenses"),
+        )
+
+    def _user_with(self, *codenames):
+        from django.contrib.auth.models import Permission
+
+        n = User.objects.filter(email__startswith="payperm-staff").count()
+        user = User.objects.create_user(
+            email=f"payperm-staff{n}@example.com",
+            password="pass12345",
+        )
+        perms = Permission.objects.filter(content_type__app_label="accounts", codename__in=codenames)
+        self.assertEqual(perms.count(), len(codenames), list(perms.values_list("codename", flat=True)))
+        user.user_permissions.add(*perms)
+        user = User.objects.get(pk=user.pk)
+        self.client.force_login(user)
+        return user
+
+    def _payment_post(self, narration="PayPerm rent"):
+        return {
+            "voucher_type": "payment",
+            "date": "2026-10-18",
+            "narration": narration,
+            "party": str(self.bank.pk),
+            "form-TOTAL_FORMS": "1",
+            "form-INITIAL_FORMS": "0",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-account": str(self.rent.pk),
+            "form-0-amount": "100.00",
+        }
+
+    def _posted_payment(self):
+        lines = build_payment_lines(
+            mode=self.bank,
+            items=[{"account": self.rent, "amount": Decimal("100.00")}],
+        )
+        return post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 10, 18),
+            narration="Posted PayPerm",
+            lines=lines,
+            actor=self.admin,
+        )
+
+    def _request(self, user, method, path, data=None):
+        if method == "post":
+            request = self.factory.post(path, data or {})
+        else:
+            request = self.factory.get(path, data or {})
+        request.user = user
+        return request
+
+    def test_post_voucher_cannot_add_payment(self):
+        user = self._user_with("post_voucher", "view_voucher")
+        request = self._request(
+            user,
+            "post",
+            reverse("accounts_voucher_create"),
+            self._payment_post(),
+        )
+        with self.assertRaises(self.PermissionDenied):
+            self.voucher_create(request)
+        self.assertFalse(Voucher.objects.filter(voucher_type="payment").exists())
+
+    def test_add_payment_voucher_creates(self):
+        self._user_with("add_payment_voucher")
+        response = self.client.post(
+            reverse("accounts_voucher_create") + "?type=payment",
+            self._payment_post(),
+            HTTP_HOST="127.0.0.1",
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Voucher.objects.filter(number__startswith="PV/").exists())
+
+    def test_payment_list_flags_follow_separate_perms(self):
+        user = self._user_with("add_payment_voucher")
+        flags = self.voucher_action_flags(user, "payment")
+        self.assertTrue(flags["can_add"])
+        self.assertFalse(flags["can_change"])
+        self.assertFalse(flags["can_delete"])
+        self.assertFalse(flags["can_print"])
+        self.assertEqual(flags["voucher_tabs"], [("payment", "Payment")])
+
+    def test_change_and_delete_are_separate(self):
+        voucher = self._posted_payment()
+        adder = self._user_with("add_payment_voucher")
+        with self.assertRaises(self.PermissionDenied):
+            self.voucher_edit(
+                self._request(
+                    adder,
+                    "post",
+                    reverse("accounts_voucher_edit", args=[voucher.pk]),
+                    self._payment_post("Updated"),
+                ),
+                pk=voucher.pk,
+            )
+        with self.assertRaises(self.PermissionDenied):
+            self.voucher_delete(
+                self._request(adder, "post", reverse("accounts_voucher_delete", args=[voucher.pk])),
+                pk=voucher.pk,
+            )
+        self.assertTrue(Voucher.objects.filter(pk=voucher.pk).exists())
+
+        self._user_with("change_payment_voucher")
+        edited = self.client.post(
+            reverse("accounts_voucher_edit", args=[voucher.pk]),
+            self._payment_post("Updated"),
+            HTTP_HOST="127.0.0.1",
+        )
+        self.assertEqual(edited.status_code, 302)
+        voucher.refresh_from_db()
+        self.assertEqual(voucher.narration, "Updated")
+
+        self._user_with("delete_payment_voucher")
+        deleted = self.client.post(
+            reverse("accounts_voucher_delete", args=[voucher.pk]),
+            HTTP_HOST="127.0.0.1",
+        )
+        self.assertEqual(deleted.status_code, 302)
+        self.assertFalse(Voucher.objects.filter(pk=voucher.pk).exists())
+
+    def test_print_payment_voucher_is_required(self):
+        voucher = self._posted_payment()
+        viewer = self._user_with("view_voucher")
+        with self.assertRaises(self.PermissionDenied):
+            self.voucher_list(
+                self._request(
+                    viewer,
+                    "get",
+                    reverse("accounts_voucher_list"),
+                    {"type": "payment", "export": "pdf"},
+                )
+            )
+        with self.assertRaises(self.PermissionDenied):
+            self.voucher_print(
+                self._request(viewer, "get", reverse("accounts_voucher_print", args=[voucher.pk])),
+                pk=voucher.pk,
+            )
+
+        printer = self._user_with("print_payment_voucher")
+        pdf_ok = self.voucher_list(
+            self._request(
+                printer,
+                "get",
+                reverse("accounts_voucher_list"),
+                {"type": "payment", "export": "pdf"},
+            )
+        )
+        self.assertEqual(pdf_ok.status_code, 200)
+        self.assertTrue(pdf_ok.content.startswith(b"%PDF-"))
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from accounts.permissions import can_print_voucher
+
+        self.assertTrue(can_print_voucher(printer, "payment"))
+        template = (Path(settings.BASE_DIR) / "templates/accounts/voucher_print.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Print / Save PDF", template)
+        detail = (Path(settings.BASE_DIR) / "templates/accounts/voucher_detail.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("accounts_voucher_print", detail)
 

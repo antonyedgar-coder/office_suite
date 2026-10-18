@@ -37,6 +37,7 @@ from .models import (
     AccountGroup,
     InvoiceNumberSeq,
     ReceiptAllocation,
+    RecoveryAllocation,
     Voucher,
     VoucherLine,
 )
@@ -249,12 +250,186 @@ def build_payment_lines(*, mode: Account, items: list[dict]) -> list[dict]:
                 "debit": amount,
                 "credit": Decimal("0.00"),
                 "hsn_code": "",
+                "is_pure_agent": bool(getattr(account, "is_pure_agent", False)),
             }
         )
     if not rows:
         raise ValidationError("Enter at least one account and amount.")
     rows.insert(0, {"account": mode, "debit": Decimal("0.00"), "credit": total, "hsn_code": ""})
     return rows
+
+
+def payment_has_pure_agent_debit(lines: list[dict]) -> bool:
+    return any(
+        row.get("account")
+        and getattr(row["account"], "is_pure_agent", False)
+        and money(row.get("debit")) > 0
+        for row in lines or []
+    )
+
+
+def assign_payment_recovery(voucher: Voucher, *, lines: list[dict], on_behalf_of=None, on_behalf_task=None) -> None:
+    if voucher.voucher_type != VOUCHER_PAYMENT or not payment_has_pure_agent_debit(lines):
+        voucher.on_behalf_of = None
+        voucher.on_behalf_task = None
+        return
+    if on_behalf_of is None:
+        raise ValidationError("Select the client this pure-agent payment is for.")
+    if not is_sundry_debtor(on_behalf_of):
+        raise ValidationError("Select a client ledger under Sundry Debtors.")
+    if on_behalf_task is not None:
+        client = getattr(on_behalf_of, "client", None)
+        if client is None or on_behalf_task.client_id != client.pk:
+            raise ValidationError("The task must belong to the selected client.")
+    voucher.on_behalf_of = on_behalf_of
+    voucher.on_behalf_task = on_behalf_task
+
+
+def _recovery_allocated_map(*, ignore_invoice_id=None) -> dict[int, Decimal]:
+    from django.db.models import Sum
+
+    qs = RecoveryAllocation.objects.all()
+    if ignore_invoice_id:
+        qs = qs.exclude(invoice_id=ignore_invoice_id)
+    return {
+        row["payment_line_id"]: money(row["total"])
+        for row in qs.values("payment_line_id").annotate(total=Sum("amount"))
+    }
+
+
+def pending_recovery_rows(*, party=None, task=None, ignore_invoice_id=None) -> list[dict]:
+    """Unbilled pure-agent payment debits, optionally for one client ledger or task."""
+    qs = (
+        VoucherLine.objects.filter(
+            voucher__voucher_type=VOUCHER_PAYMENT,
+            voucher__on_behalf_of__isnull=False,
+            debit__gt=0,
+            account__is_pure_agent=True,
+        )
+        .select_related(
+            "voucher",
+            "voucher__on_behalf_of",
+            "voucher__on_behalf_task",
+            "voucher__created_by",
+            "account",
+        )
+        .order_by("voucher__date", "voucher__pk", "pk")
+    )
+    if party is not None:
+        qs = qs.filter(voucher__on_behalf_of=party)
+    if task is not None:
+        qs = qs.filter(voucher__on_behalf_task=task)
+    allocated = _recovery_allocated_map(ignore_invoice_id=ignore_invoice_id)
+    rows = []
+    for line in qs:
+        pending = money(line.debit) - allocated.get(line.pk, Decimal("0.00"))
+        if pending <= 0:
+            continue
+        task_obj = line.voucher.on_behalf_task
+        rows.append(
+            {
+                "id": line.pk,
+                "voucher_id": line.voucher_id,
+                "number": line.voucher.number,
+                "date": line.voucher.date,
+                "account": line.account,
+                "account_id": line.account_id,
+                "account_name": line.account.name,
+                "party": line.voucher.on_behalf_of,
+                "party_id": line.voucher.on_behalf_of_id,
+                "party_name": line.voucher.on_behalf_of.name if line.voucher.on_behalf_of_id else "",
+                "task_id": task_obj.pk if task_obj else None,
+                "task_label": (
+                    f"{task_obj.display_title} ({task_obj.period_key})" if task_obj else ""
+                ),
+                "amount": money(line.debit),
+                "billed": allocated.get(line.pk, Decimal("0.00")),
+                "pending": pending,
+                "created_by": line.voucher.created_by,
+            }
+        )
+    return rows
+
+
+def pending_recovery_sections(*, party=None, task=None) -> dict:
+    rows = pending_recovery_rows(party=party, task=task)
+    sections = []
+    grand = Decimal("0.00")
+    grouped: dict[int, list[dict]] = {}
+    names: dict[int, str] = {}
+    for row in rows:
+        grouped.setdefault(row["party_id"], []).append(row)
+        names[row["party_id"]] = row["party_name"]
+    sl = 0
+    for party_id, party_rows in grouped.items():
+        total = sum((row["pending"] for row in party_rows), Decimal("0.00"))
+        grand += total
+        numbered = []
+        for row in party_rows:
+            sl += 1
+            numbered.append({**row, "sl_no": sl})
+        sections.append(
+            {
+                "party_id": party_id,
+                "name": names[party_id],
+                "rows": numbered,
+                "total": total,
+            }
+        )
+    return {"sections": sections, "grand_total": grand, "rows": rows}
+
+
+def apply_recovery_allocations(invoice: Voucher, items: list[dict] | None) -> None:
+    RecoveryAllocation.objects.filter(invoice=invoice).delete()
+    if invoice.voucher_type != VOUCHER_SALES or not items:
+        return
+    party_line = next((ln for ln in invoice.lines.all() if money(ln.debit) > 0), None)
+    party = party_line.account if party_line else None
+    used: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+
+    def remaining_for(line: VoucherLine) -> Decimal:
+        allocated = _recovery_allocated_map(ignore_invoice_id=invoice.pk).get(line.pk, Decimal("0.00"))
+        return money(line.debit) - allocated - used[line.pk]
+
+    for raw in items:
+        account = raw.get("account")
+        amount = money(raw.get("amount"))
+        if not account or amount <= 0 or not getattr(account, "is_pure_agent", False):
+            continue
+        leftover = amount
+        recovery_id = raw.get("recovery_line") or ""
+        if str(recovery_id).strip().isdigit():
+            line = (
+                VoucherLine.objects.select_related("voucher", "account")
+                .filter(pk=int(recovery_id), account=account, voucher__voucher_type=VOUCHER_PAYMENT)
+                .first()
+            )
+            if line is None:
+                raise ValidationError("Select a valid pending recovery.")
+            if party and line.voucher.on_behalf_of_id not in (None, party.pk):
+                raise ValidationError("That recovery belongs to a different client.")
+            take = min(leftover, remaining_for(line))
+            if take <= 0:
+                raise ValidationError("That recovery has already been billed.")
+            RecoveryAllocation.objects.create(invoice=invoice, payment_line=line, amount=take)
+            used[line.pk] += take
+            leftover -= take
+        if leftover <= 0:
+            continue
+        for row in pending_recovery_rows(party=party, ignore_invoice_id=invoice.pk):
+            if leftover <= 0:
+                break
+            if row["account_id"] != account.pk:
+                continue
+            line = VoucherLine.objects.filter(pk=row["id"]).first()
+            if line is None:
+                continue
+            take = min(leftover, remaining_for(line))
+            if take <= 0:
+                continue
+            RecoveryAllocation.objects.create(invoice=invoice, payment_line=line, amount=take)
+            used[line.pk] += take
+            leftover -= take
 
 
 def build_contra_lines(*, receivers: list[dict], payers: list[dict]) -> list[dict]:
@@ -1241,6 +1416,9 @@ def post_voucher(
     with_gst: bool = False,
     tasks=None,
     receipt_items=None,
+    on_behalf_of=None,
+    on_behalf_task=None,
+    recovery_items=None,
 ) -> Voucher:
     cleaned = _validate_lines(lines)
     series = series or default_series_for_type(voucher_type, with_gst=with_gst)
@@ -1252,6 +1430,9 @@ def post_voucher(
         date=voucher_date,
         narration=(narration or "").strip()[:500],
         created_by=actor if getattr(actor, "is_authenticated", False) else None,
+    )
+    assign_payment_recovery(
+        voucher, lines=cleaned, on_behalf_of=on_behalf_of, on_behalf_task=on_behalf_task
     )
     voucher.save()
     for row in cleaned:
@@ -1268,6 +1449,8 @@ def post_voucher(
         _mark_tasks_billed(tasks, voucher)
     if receipt_items:
         apply_receipt_allocations(voucher, receipt_items)
+    if recovery_items:
+        apply_recovery_allocations(voucher, recovery_items)
     return voucher
 
 
@@ -1279,13 +1462,26 @@ def update_voucher(
     narration: str = "",
     lines: list[dict],
     receipt_items=None,
+    on_behalf_of=None,
+    on_behalf_task=None,
+    recovery_items=None,
 ) -> Voucher:
     cleaned = _validate_lines(lines)
+    if voucher.voucher_type == VOUCHER_PAYMENT and RecoveryAllocation.objects.filter(
+        payment_line__voucher=voucher
+    ).exists():
+        raise ValidationError("This payment has been billed on a sales invoice. Edit or delete that invoice first.")
     ReceiptAllocation.objects.filter(Q(receipt=voucher) | Q(against=voucher)).delete()
+    RecoveryAllocation.objects.filter(invoice=voucher).delete()
     voucher.lines.all().delete()
     voucher.date = voucher_date
     voucher.narration = (narration or "").strip()[:500]
-    voucher.save(update_fields=["date", "narration", "updated_at"])
+    assign_payment_recovery(
+        voucher, lines=cleaned, on_behalf_of=on_behalf_of, on_behalf_task=on_behalf_task
+    )
+    voucher.save(
+        update_fields=["date", "narration", "on_behalf_of", "on_behalf_task", "updated_at"]
+    )
     for row in cleaned:
         VoucherLine.objects.create(
             voucher=voucher,
@@ -1302,6 +1498,8 @@ def update_voucher(
         task.save(update_fields=["bill_date", "updated_at"])
     if receipt_items:
         apply_receipt_allocations(voucher, receipt_items)
+    if recovery_items:
+        apply_recovery_allocations(voucher, recovery_items)
     return voucher
 
 
@@ -1451,18 +1649,7 @@ def ensure_task_income_ledger(task) -> Account:
     return acc
 
 
-@transaction.atomic
-def create_sales_invoice_for_task(*, task, actor, voucher_date=None, with_gst: bool | None = None) -> Voucher:
-    from tasks.models import Task
-
-    if task.bill_raised or task.accounts_vouchers.exists():
-        raise ValidationError(f"Bill already raised for {task.display_title}.")
-    if not task.is_billable:
-        raise ValidationError("Only billable tasks can raise a sales invoice.")
-    fees = money(task.fees_amount)
-    if fees <= 0:
-        raise ValidationError("Enter a fees amount on the task before raising the bill.")
-    client = task.client
+def _sales_party_for_client(client) -> Account:
     party = sync_client_account(client)
     if party is None:
         raise ValidationError("Could not create the client ledger.")
@@ -1470,11 +1657,54 @@ def create_sales_invoice_for_task(*, task, actor, voucher_date=None, with_gst: b
     if client_gstin and (party.gstin or "").strip().upper() != client_gstin:
         party.gstin = client_gstin
         party.save(update_fields=["gstin", "updated_at"])
+    return party
+
+
+def _invoice_use_gst(*, party, tasks, with_gst: bool | None) -> bool:
+    if with_gst is not None:
+        return bool(with_gst)
+    for task in tasks or []:
+        if (getattr(getattr(task, "client", None), "gstin", None) or "").strip():
+            return True
+    client = getattr(party, "client", None)
+    if (getattr(client, "gstin", None) or "").strip():
+        return True
+    return bool((getattr(party, "gstin", None) or "").strip())
+
+
+def _combined_invoice_narration(*, party, tasks, recoveries) -> str:
+    parts = []
+    for task in tasks or []:
+        label = f"Task {task.display_title}"
+        period = getattr(task, "period_key", "") or ""
+        if period:
+            label = f"{label} — {period}"
+        parts.append(label)
+    rec_names = sorted(
+        {
+            (row.get("account").name if row.get("account") else "") or (row.get("account_name") or "")
+            for row in recoveries or []
+        }
+    )
+    rec_names = [name for name in rec_names if name]
+    if rec_names and not tasks:
+        extra = f"Recoveries — {party.name}"
+        extra = f"{extra} ({', '.join(rec_names)})"
+        parts.append(extra)
+    elif rec_names:
+        parts.append(f"Recoveries ({', '.join(rec_names)})")
+    return "; ".join(parts)[:500]
+
+
+def _fee_item_for_task(task, *, use_gst: bool) -> dict:
+    if task.bill_raised or task.accounts_vouchers.exists():
+        raise ValidationError(f"Bill already raised for {task.display_title}.")
+    if not task.is_billable:
+        raise ValidationError("Only billable tasks can raise a sales invoice.")
+    fees = money(task.fees_amount)
+    if fees <= 0:
+        raise ValidationError("Enter a fees amount on the task before raising the bill.")
     income = ensure_task_income_ledger(task)
-    if with_gst is None:
-        use_gst = bool(client_gstin)
-    else:
-        use_gst = bool(with_gst)
     if use_gst:
         rate = _fill_income_gst_rate(income)
         if rate <= 0:
@@ -1482,22 +1712,253 @@ def create_sales_invoice_for_task(*, task, actor, voucher_date=None, with_gst: b
                 f'Set GST % on account ledger "{income.name}" (Account Ledger → GST rate %) '
                 "before raising a GST invoice."
             )
+    return {"account": income, "amount": fees}
+
+
+@transaction.atomic
+def create_sales_invoice_for_party_items(
+    *,
+    party: Account,
+    actor,
+    tasks=None,
+    recoveries=None,
+    voucher_date=None,
+    with_gst: bool | None = None,
+) -> Voucher:
+    tasks = list(tasks or [])
+    recoveries = list(recoveries or [])
+    if party is None:
+        raise ValidationError("Select a client ledger.")
+    if not tasks and not recoveries:
+        raise ValidationError("Select at least one fees or recovery row.")
+    seen_tasks = set()
+    unique_tasks = []
+    for task in tasks:
+        if task.pk in seen_tasks:
+            continue
+        seen_tasks.add(task.pk)
+        unique_tasks.append(task)
+    tasks = unique_tasks
+    party_client_id = getattr(party, "client_id", None)
+    for task in tasks:
+        if party_client_id and task.client_id != party_client_id:
+            raise ValidationError("Selected rows belong to more than one client.")
+    use_gst = _invoice_use_gst(party=party, tasks=tasks, with_gst=with_gst)
+    items = [_fee_item_for_task(task, use_gst=use_gst) for task in tasks]
+    seen_recoveries = set()
+    for row in recoveries:
+        amount = money(row.get("pending") or row.get("amount"))
+        account = row.get("account")
+        recovery_id = row.get("id") or row.get("recovery_line")
+        if not account or amount <= 0:
+            continue
+        if recovery_id in seen_recoveries:
+            continue
+        if recovery_id:
+            seen_recoveries.add(recovery_id)
+        items.append(
+            {
+                "account": account,
+                "amount": amount,
+                "recovery_line": recovery_id,
+            }
+        )
+    if not items:
+        raise ValidationError("Select at least one fees or recovery row.")
     lines = build_invoice_lines(
         voucher_type=VOUCHER_SALES,
         party=party,
-        items=[{"account": income, "amount": fees}],
+        items=items,
         with_gst=use_gst,
     )
-    narration = f"Task {task.display_title} — {task.period_key}"
     return post_voucher(
         voucher_type=VOUCHER_SALES,
         voucher_date=voucher_date or timezone.localdate(),
-        narration=narration,
+        narration=_combined_invoice_narration(party=party, tasks=tasks, recoveries=recoveries),
         lines=lines,
         actor=actor,
         with_gst=use_gst,
-        tasks=[task],
+        tasks=tasks,
+        recovery_items=items,
     )
+
+
+@transaction.atomic
+def create_sales_invoice_for_task(
+    *,
+    task,
+    actor,
+    voucher_date=None,
+    with_gst: bool | None = None,
+    include_recoveries: bool = True,
+) -> Voucher:
+    party = _sales_party_for_client(task.client)
+    recoveries = pending_recovery_rows(party=party, task=task) if include_recoveries else []
+    return create_sales_invoice_for_party_items(
+        party=party,
+        actor=actor,
+        tasks=[task],
+        recoveries=recoveries,
+        voucher_date=voucher_date,
+        with_gst=with_gst,
+    )
+
+
+UNBILLED_FEES = "fees"
+UNBILLED_RECOVERY = "recovery"
+UNBILLED_BOTH = "both"
+UNBILLED_KIND_LABELS = {
+    UNBILLED_FEES: "Fees",
+    UNBILLED_RECOVERY: "Recovery",
+    UNBILLED_BOTH: "Both",
+}
+
+
+def build_unbilled_queue(*, tasks) -> list[dict]:
+    """Fees waiting on completed tasks, plus each unbilled pure-agent recovery as its own row."""
+    items = []
+    for task in tasks:
+        items.append(
+            {
+                "key": f"task:{task.pk}",
+                "kind": UNBILLED_FEES,
+                "kind_label": UNBILLED_KIND_LABELS[UNBILLED_FEES],
+                "client_name": task.client.client_name,
+                "task": task,
+                "task_id": task.pk,
+                "task_label": task.display_title,
+                "ledger_label": "",
+                "voucher_number": "",
+                "period": task.period_key,
+                "fees": money(task.fees_amount),
+                "recovery": None,
+                "recovery_ids": [],
+            }
+        )
+    for row in pending_recovery_rows():
+        items.append(
+            {
+                "key": f"recovery:{row['id']}",
+                "kind": UNBILLED_RECOVERY,
+                "kind_label": UNBILLED_KIND_LABELS[UNBILLED_RECOVERY],
+                "client_name": row["party_name"],
+                "task": None,
+                "task_id": row.get("task_id"),
+                "task_label": row["task_label"] or "—",
+                "ledger_label": row["account_name"],
+                "voucher_number": row.get("number") or "",
+                "period": "",
+                "fees": None,
+                "recovery": row["pending"],
+                "recovery_ids": [row["id"]],
+                "party": row["party"],
+            }
+        )
+    return items
+
+
+def filter_unbilled_queue(items: list[dict], q: str) -> list[dict]:
+    needle = (q or "").strip().casefold()
+    if not needle:
+        return items
+    out = []
+    for item in items:
+        hay = " ".join(
+            filter(
+                None,
+                [
+                    item.get("client_name"),
+                    item.get("task_label"),
+                    item.get("ledger_label"),
+                    item.get("voucher_number"),
+                    item.get("period"),
+                    item.get("kind_label"),
+                ],
+            )
+        ).casefold()
+        if needle in hay:
+            out.append(item)
+    return out
+
+
+@transaction.atomic
+def create_sales_invoice_for_recoveries(
+    *,
+    party: Account,
+    recoveries: list[dict],
+    actor,
+    voucher_date=None,
+    with_gst: bool = False,
+) -> Voucher:
+    return create_sales_invoice_for_party_items(
+        party=party,
+        actor=actor,
+        recoveries=recoveries,
+        voucher_date=voucher_date,
+        with_gst=with_gst,
+    )
+
+
+@transaction.atomic
+def create_invoices_from_unbilled_keys(
+    *,
+    keys: list[str],
+    tasks,
+    actor,
+    voucher_date=None,
+    with_gst: bool = False,
+) -> list[Voucher]:
+    seen: set[str] = set()
+    unique_keys = []
+    for raw in keys:
+        key = str(raw or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique_keys.append(key)
+    queue = {item["key"]: item for item in build_unbilled_queue(tasks=tasks)}
+    selected = []
+    for key in unique_keys:
+        item = queue.get(key)
+        if item is None:
+            raise ValidationError("One or more selected rows are not eligible.")
+        selected.append(item)
+    if not selected:
+        raise ValidationError("Select at least one fees or recovery row.")
+    task_map = {task.pk: task for task in tasks}
+    pending_by_id = {row["id"]: row for row in pending_recovery_rows()}
+    groups: dict[int, dict] = {}
+    for item in selected:
+        if item["kind"] in (UNBILLED_FEES, UNBILLED_BOTH):
+            task = task_map.get(item["task_id"])
+            if task is None:
+                raise ValidationError("One or more selected tasks are not eligible.")
+            party = _sales_party_for_client(task.client)
+            bucket = groups.setdefault(party.pk, {"party": party, "tasks": [], "recoveries": []})
+            bucket["tasks"].append(task)
+            continue
+        if item["kind"] != UNBILLED_RECOVERY:
+            continue
+        for recovery_id in item.get("recovery_ids") or []:
+            row = pending_by_id.get(recovery_id)
+            if row is None:
+                raise ValidationError("One or more selected rows are not eligible.")
+            party = row["party"]
+            bucket = groups.setdefault(party.pk, {"party": party, "tasks": [], "recoveries": []})
+            bucket["recoveries"].append(row)
+    created = []
+    for bucket in groups.values():
+        created.append(
+            create_sales_invoice_for_party_items(
+                party=bucket["party"],
+                actor=actor,
+                tasks=bucket["tasks"],
+                recoveries=bucket["recoveries"],
+                voucher_date=voucher_date,
+                with_gst=with_gst,
+            )
+        )
+    return created
 
 
 TB_REPORT_GROUP = "group"
@@ -1751,6 +2212,7 @@ def _tb_group_display_rows(ledger_rows: list[dict]) -> list[dict]:
         amounts["opening_credit"] = oc
         amounts["closing_debit"] = cd
         amounts["closing_credit"] = cc
+        direct = by_group.get(group.pk, [])
         display.append(
             {
                 **amounts,
@@ -1760,11 +2222,15 @@ def _tb_group_display_rows(ledger_rows: list[dict]) -> list[dict]:
                 "is_header": True,
                 "account": None,
                 "group": group,
+                "group_id": group.pk,
+                "expandable": bool(direct),
+                "collapsed": False,
+                "parent_group_id": None,
             }
         )
         for child in children.get(group.pk, []):
             add_group(child, indent + 1)
-        for row in by_group.get(group.pk, []):
+        for row in direct:
             display.append(
                 {
                     **row,
@@ -1773,6 +2239,10 @@ def _tb_group_display_rows(ledger_rows: list[dict]) -> list[dict]:
                     "indent": indent + 1,
                     "is_header": False,
                     "group": group,
+                    "group_id": None,
+                    "expandable": False,
+                    "collapsed": True,
+                    "parent_group_id": group.pk,
                 }
             )
 
@@ -1811,6 +2281,10 @@ def trial_balance(
                 "indent": 0,
                 "is_header": False,
                 "group": row["account"].group,
+                "group_id": None,
+                "expandable": False,
+                "collapsed": False,
+                "parent_group_id": None,
             }
             for row in ledger_rows
         ]

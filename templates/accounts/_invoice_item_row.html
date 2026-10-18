@@ -2,6 +2,7 @@
   <td class="field-wrap">
     {{ f.account }}
     {{ f.bill_alloc }}
+    {{ f.recovery_line }}
     <input class="form-control form-control-sm js-invoice-account-search" placeholder="Type to filter accounts…" autocomplete="off" />
     {% if f.account.errors %}<div class="text-danger small">{{ f.account.errors }}</div>{% endif %}
     {% if f.non_field_errors %}<div class="text-danger small">{{ f.non_field_errors }}</div>{% endif %}

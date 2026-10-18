@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -57,3 +59,27 @@ class DualListPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         user = User.objects.get(email="dual-list-staff@example.com")
         self.assertTrue(user.user_permissions.filter(pk=self.perm.pk).exists())
+
+    @patch("core.permission_utils.accounts_module_enabled", return_value=True)
+    def test_payment_voucher_activities_are_listed(self, _enabled):
+        expected = {
+            "add_payment_voucher": "Payment voucher | Add",
+            "change_payment_voucher": "Payment voucher | Change",
+            "delete_payment_voucher": "Payment voucher | Delete",
+            "print_payment_voucher": "Payment voucher | Print",
+        }
+        found = {
+            perm.codename: perm.name
+            for perm in manageable_permissions().filter(
+                content_type__app_label="accounts",
+                content_type__model="voucher",
+                codename__in=expected,
+            )
+        }
+        self.assertEqual(found, expected)
+        form = EmployeeCreateForm()
+        form_names = {perm.name for perm in form.fields["user_permissions"].queryset}
+        self.assertTrue(set(expected.values()) <= form_names)
+        group = GroupAccessForm()
+        group_names = {perm.name for perm in group.fields["assigned_permissions"].queryset}
+        self.assertTrue(set(expected.values()) <= group_names)

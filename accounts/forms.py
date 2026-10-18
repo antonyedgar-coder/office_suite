@@ -185,16 +185,26 @@ class AccountForm(forms.ModelForm):
 class VoucherForm(forms.ModelForm):
     class Meta:
         model = Voucher
-        fields = ["voucher_type", "date", "narration"]
+        fields = ["voucher_type", "date", "narration", "on_behalf_of", "on_behalf_task"]
         widgets = {
             "voucher_type": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "narration": forms.TextInput(attrs={"class": "form-control"}),
+            "on_behalf_of": forms.HiddenInput(attrs={"id": "id_on_behalf_of"}),
+            "on_behalf_task": forms.HiddenInput(attrs={"id": "id_on_behalf_task"}),
         }
 
     def __init__(self, *args, locked_type=None, **kwargs):
+        from tasks.models import Task
+
+        from .services import sundry_debtors_ledgers
+
         super().__init__(*args, **kwargs)
         self.fields["voucher_type"].choices = VOUCHER_TYPE_CHOICES
+        self.fields["on_behalf_of"].queryset = sundry_debtors_ledgers()
+        self.fields["on_behalf_of"].required = False
+        self.fields["on_behalf_task"].queryset = Task.objects.all()
+        self.fields["on_behalf_task"].required = False
         if locked_type:
             self.fields["voucher_type"].initial = locked_type
             self.fields["voucher_type"].widget = forms.HiddenInput()
@@ -311,6 +321,10 @@ class InvoiceItemForm(forms.Form):
     bill_alloc = forms.CharField(
         required=False,
         widget=forms.HiddenInput(attrs={"class": "js-bill-alloc"}),
+    )
+    recovery_line = forms.IntegerField(
+        required=False,
+        widget=forms.HiddenInput(attrs={"class": "js-recovery-line"}),
     )
 
     def __init__(self, *args, voucher_type=None, **kwargs):

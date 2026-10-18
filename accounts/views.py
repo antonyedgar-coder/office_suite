@@ -38,6 +38,15 @@ from .forms import (
     JournalLineFormSet,
     VoucherLineFormSet,
 )
+from .permissions import (
+    can_add_voucher,
+    can_change_voucher,
+    can_delete_voucher,
+    can_print_voucher,
+    can_view_voucher_type,
+    first_addable_voucher_type,
+    voucher_action_flags,
+)
 from .models import (
     REGISTER_TABS,
     REGISTER_TYPE_KEYS,
@@ -54,7 +63,6 @@ from .models import (
     VOUCHER_PURCHASE,
     VOUCHER_RECEIPT,
     VOUCHER_SALES,
-    VOUCHER_TABS,
     VOUCHER_TYPE_CHOICES,
     VOUCHER_TYPE_KEYS,
     Account,
@@ -88,8 +96,11 @@ from .services import (
     money,
     non_cash_ledgers,
     outstanding_bills_for_account,
+    pending_recovery_rows,
     outstanding_party_bills_for_note,
-    create_sales_invoices_for_tasks,
+    build_unbilled_queue,
+    create_invoices_from_unbilled_keys,
+    filter_unbilled_queue,
     delete_voucher,
     all_ledger_sections,
     billwise_outstanding_sections,
@@ -97,6 +108,7 @@ from .services import (
     is_gst_output_account,
     sales_register_totals,
     ledger_lines,
+    amount_in_indian_words,
     post_voucher,
     update_voucher,
     profit_and_loss,
@@ -188,15 +200,13 @@ def _tab_redirect(kind: str):
 def group_list(request):
     seed_chart_of_accounts()
     is_admin = user_is_accounts_admin(request.user)
-    default_tab = "main" if is_admin else "parent"
+    default_tab = "parent"
     tab = (request.GET.get("tab") or default_tab).strip()
-    if tab == "main" and not is_admin:
-        tab = "parent"
     if tab not in ("account", "parent", "main"):
         tab = default_tab
     if tab == "main":
         rows = AccountGroup.main_heads().order_by("name")
-        title = "Main head"
+        title = "Main Account"
     elif tab == "parent":
         rows = AccountGroup.parent_groups().select_related("parent").order_by("name")
         title = "Primary group"
@@ -812,6 +822,54 @@ def account_outstanding(request, pk: int):
     )
 
 
+@require_perm("accounts.view_voucher")
+def account_recovery_tasks(request, pk: int):
+    account = get_object_or_404(Account, pk=pk, is_active=True)
+    if not account.client_id:
+        return JsonResponse({"tasks": []})
+    rows = (
+        Task.objects.filter(client_id=account.client_id)
+        .exclude(status=Task.STATUS_CANCELLED)
+        .select_related("task_master")
+        .order_by("-due_date", "-pk")[:80]
+    )
+    return JsonResponse(
+        {
+            "tasks": [
+                {
+                    "id": task.pk,
+                    "label": f"{task.display_title} ({task.period_key})",
+                }
+                for task in rows
+            ]
+        }
+    )
+
+
+@require_perm("accounts.view_voucher")
+def account_pending_recoveries(request, pk: int):
+    account = get_object_or_404(Account, pk=pk, is_active=True)
+    ignore_raw = (request.GET.get("ignore") or "").strip()
+    ignore_invoice_id = int(ignore_raw) if ignore_raw.isdigit() else None
+    rows = pending_recovery_rows(party=account, ignore_invoice_id=ignore_invoice_id)
+    return JsonResponse(
+        {
+            "recoveries": [
+                {
+                    "id": row["id"],
+                    "number": row["number"],
+                    "date": row["date"].isoformat() if row["date"] else "",
+                    "account_id": row["account_id"],
+                    "account_name": row["account_name"],
+                    "task_label": row["task_label"],
+                    "pending": str(row["pending"]),
+                }
+                for row in rows
+            ]
+        }
+    )
+
+
 def _voucher_type(request) -> str:
     raw = (request.POST.get("voucher_type") or request.GET.get("type") or VOUCHER_SALES).strip()
     return raw if raw in VOUCHER_TYPE_KEYS else VOUCHER_SALES
@@ -826,13 +884,22 @@ def _voucher_register_qs(vtype: str):
     )
 
 
-@require_perm("accounts.view_voucher")
+@login_required
 def voucher_list(request):
-    vtype = _voucher_type(request)
+    requested = (request.GET.get("type") or "").strip()
+    vtype = requested if requested in VOUCHER_TYPE_KEYS else VOUCHER_SALES
+    if not can_view_voucher_type(request.user, vtype):
+        if not requested:
+            tabs = voucher_action_flags(request.user, vtype)["voucher_tabs"]
+            if tabs:
+                return redirect(f"{reverse('accounts_voucher_list')}?type={tabs[0][0]}")
+        raise PermissionDenied
     export = (request.GET.get("export") or "").strip().lower()
     rows = _voucher_register_qs(vtype)
     list_title = dict(VOUCHER_TYPE_CHOICES)[vtype]
     if export == "pdf":
+        if not can_print_voucher(request.user, vtype):
+            raise PermissionDenied
         settings = get_site_settings()
         return voucher_register_pdf_response(
             rows,
@@ -841,6 +908,7 @@ def voucher_list(request):
             company_name=(settings.company_name or "").strip(),
             company_address=(settings.address or "").strip(),
         )
+    flags = voucher_action_flags(request.user, vtype)
     return render(
         request,
         "accounts/voucher_list.html",
@@ -848,8 +916,8 @@ def voucher_list(request):
             "rows": rows[:500],
             "vtype": vtype,
             "list_title": list_title,
-            "voucher_tabs": VOUCHER_TABS,
             "pdf_url": f"{reverse('accounts_voucher_list')}?{urlencode({'type': vtype, 'export': 'pdf'})}",
+            **flags,
         },
     )
 
@@ -866,13 +934,22 @@ def _entry_initials(voucher: Voucher) -> dict:
         party_line = next((ln for ln in lines if money(ln.debit) > 0), None)
         party = party_line.account if party_line else None
         has_gst = False
+        used_allocs = set()
         for ln in lines:
             if money(ln.credit) <= 0:
                 continue
             if is_gst_output_account(ln.account):
                 has_gst = True
                 continue
-            items.append({"account": ln.account_id, "amount": money(ln.credit)})
+            rec_id = None
+            for alloc in voucher.recovery_allocations.select_related("payment_line"):
+                if alloc.pk in used_allocs:
+                    continue
+                if alloc.payment_line.account_id == ln.account_id and money(alloc.amount) == money(ln.credit):
+                    rec_id = alloc.payment_line_id
+                    used_allocs.add(alloc.pk)
+                    break
+            items.append({"account": ln.account_id, "amount": money(ln.credit), "recovery_line": rec_id})
         tax_kind = "gst" if voucher.series == SERIES_GST or has_gst else "ngst"
     elif vtype == VOUCHER_PURCHASE:
         party_line = next((ln for ln in lines if money(ln.credit) > 0), None)
@@ -898,23 +975,38 @@ def _entry_initials(voucher: Voucher) -> dict:
     }
 
 
-@require_perm("accounts.post_voucher")
+@login_required
 def voucher_create(request):
+    requested = (request.POST.get("voucher_type") or request.GET.get("type") or "").strip()
+    vtype = requested if requested in VOUCHER_TYPE_KEYS else VOUCHER_SALES
+    if not can_add_voucher(request.user, vtype):
+        if request.method != "POST" and not requested:
+            fallback = first_addable_voucher_type(request.user)
+            if fallback:
+                return redirect(f"{reverse('accounts_voucher_create')}?type={fallback}")
+        raise PermissionDenied
     return _save_voucher(request)
 
 
-@require_perm("accounts.post_voucher")
+@login_required
 def voucher_edit(request, pk: int):
     voucher = get_object_or_404(
-        Voucher.objects.prefetch_related("lines__account", "tasks"),
+        Voucher.objects.prefetch_related("lines__account", "tasks", "recovery_allocations__payment_line"),
         pk=pk,
     )
+    if not can_change_voucher(request.user, voucher.voucher_type):
+        raise PermissionDenied
     return _save_voucher(request, voucher=voucher)
 
 
 def _save_voucher(request, voucher=None):
     existing = voucher if voucher and voucher.pk else None
     vtype = existing.voucher_type if existing else _voucher_type(request)
+    if existing:
+        if not can_change_voucher(request.user, vtype):
+            raise PermissionDenied
+    elif not can_add_voucher(request.user, vtype):
+        raise PermissionDenied
     invoice_mode = vtype in (VOUCHER_SALES, VOUCHER_PURCHASE)
     receipt_mode = vtype == VOUCHER_RECEIPT
     payment_mode = vtype == VOUCHER_PAYMENT
@@ -976,6 +1068,7 @@ def _save_voucher(request, voucher=None):
                             "account": row.get("account"),
                             "amount": row.get("amount"),
                             "bill_alloc": row.get("bill_alloc") or "",
+                            "recovery_line": row.get("recovery_line") or "",
                         }
                         for row in item_formset.cleaned_data
                         if row and not row.get("DELETE")
@@ -1033,6 +1126,9 @@ def _save_voucher(request, voucher=None):
                     if journal_mode
                     else None
                 )
+                on_behalf_of = form.cleaned_data.get("on_behalf_of") if payment_mode else None
+                on_behalf_task = form.cleaned_data.get("on_behalf_task") if payment_mode else None
+                recovery_items = items if invoice_mode and vtype == VOUCHER_SALES else None
                 if existing:
                     posted = update_voucher(
                         existing,
@@ -1040,6 +1136,9 @@ def _save_voucher(request, voucher=None):
                         narration=form.cleaned_data.get("narration") or "",
                         lines=line_rows,
                         receipt_items=receipt_items,
+                        on_behalf_of=on_behalf_of,
+                        on_behalf_task=on_behalf_task,
+                        recovery_items=recovery_items,
                     )
                 else:
                     posted = post_voucher(
@@ -1051,6 +1150,9 @@ def _save_voucher(request, voucher=None):
                         with_gst=with_gst,
                         tasks=linked_tasks or None,
                         receipt_items=receipt_items,
+                        on_behalf_of=on_behalf_of,
+                        on_behalf_task=on_behalf_task,
+                        recovery_items=recovery_items,
                     )
             except ValidationError as exc:
                 messages.error(request, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
@@ -1077,8 +1179,10 @@ def _save_voucher(request, voucher=None):
             JournalLineFormSet(instance=form_voucher) if journal_mode else VoucherLineFormSet(instance=form_voucher)
         )
     outstanding_url = reverse("accounts_account_outstanding", args=[0])
+    recoveries_url = reverse("accounts_account_recoveries", args=[0])
     if existing:
         outstanding_url = f"{outstanding_url}?ignore={existing.pk}"
+        recoveries_url = f"{recoveries_url}?ignore={existing.pk}"
     return render(
         request,
         "accounts/voucher_form.html",
@@ -1093,7 +1197,6 @@ def _save_voucher(request, voucher=None):
             "compact_entry": compact_entry,
             "contra_mode": contra_mode,
             "journal_mode": journal_mode,
-            "voucher_tabs": VOUCHER_TABS,
             "note_mode": note_mode,
             "billwise_mode": journal_mode,
             "contra_recv_formset": contra_recv_formset,
@@ -1103,6 +1206,14 @@ def _save_voucher(request, voucher=None):
             "vtype": vtype,
             "list_title": dict(VOUCHER_TYPE_CHOICES)[vtype],
             "outstanding_url": outstanding_url,
+            "recoveries_url": recoveries_url,
+            "recovery_tasks_url": reverse("accounts_account_recovery_tasks", args=[0]),
+            "on_behalf_options": [
+                {"id": a.pk, "label": a.name, "search": " ".join(filter(None, [a.name, a.gstin, a.pan]))}
+                for a in sundry_debtors_ledgers()
+            ]
+            if payment_mode or invoice_mode
+            else [],
             "account_meta": {
                 str(a.pk): {
                     "name": a.name,
@@ -1137,6 +1248,7 @@ def _save_voucher(request, voucher=None):
             ],
             "company_gstin": (getattr(get_site_settings(), "gstin", None) or "").strip().upper(),
             "company_address": (getattr(get_site_settings(), "address", None) or "").strip(),
+            **voucher_action_flags(request.user, vtype),
         },
     )
 
@@ -1152,10 +1264,12 @@ def _ledger_back_url(next_url: str) -> str:
     return raw
 
 
-@require_perm("accounts.post_voucher")
+@login_required
 @require_POST
 def voucher_delete(request, pk: int):
     obj = get_object_or_404(Voucher, pk=pk)
+    if not can_delete_voucher(request.user, obj.voucher_type):
+        raise PermissionDenied
     vtype = obj.voucher_type
     number = obj.number
     next_url = _ledger_back_url(request.POST.get("next") or "")
@@ -1172,20 +1286,54 @@ def voucher_delete(request, pk: int):
     return redirect(f"{reverse('accounts_voucher_list')}?type={vtype}")
 
 
-@require_perm("accounts.view_voucher")
+@login_required
 def voucher_detail(request, pk: int):
     obj = get_object_or_404(
-        Voucher.objects.prefetch_related("lines__account", "tasks", "receipt_allocations__against", "receipt_allocations__party"),
+        Voucher.objects.select_related("on_behalf_of", "on_behalf_task").prefetch_related(
+            "lines__account",
+            "tasks",
+            "receipt_allocations__against",
+            "receipt_allocations__party",
+            "recovery_allocations__payment_line__voucher",
+        ),
         pk=pk,
     )
+    if not can_view_voucher_type(request.user, obj.voucher_type):
+        raise PermissionDenied
     return render(
         request,
         "accounts/voucher_detail.html",
         {
             "obj": obj,
             "vtype": obj.voucher_type,
-            "voucher_tabs": VOUCHER_TABS,
             "back_to_ledger": _ledger_back_url(request.GET.get("next") or ""),
+            **voucher_action_flags(request.user, obj.voucher_type),
+        },
+    )
+
+
+@login_required
+def voucher_print(request, pk: int):
+    obj = get_object_or_404(
+        Voucher.objects.select_related("on_behalf_of", "on_behalf_task").prefetch_related("lines__account"),
+        pk=pk,
+    )
+    if obj.voucher_type == VOUCHER_SALES:
+        return redirect("accounts_sales_invoice_print", pk=obj.pk)
+    if not can_print_voucher(request.user, obj.voucher_type):
+        raise PermissionDenied
+    settings = get_site_settings()
+    amount = obj.debit_total()
+    return render(
+        request,
+        "accounts/voucher_print.html",
+        {
+            "obj": obj,
+            "vtype": obj.voucher_type,
+            "company_name": (settings.company_name or "").strip(),
+            "company_address": (settings.address or "").strip(),
+            "amount": amount,
+            "amount_words": amount_in_indian_words(amount),
         },
     )
 
@@ -1215,44 +1363,36 @@ def unbilled_tasks(request):
         .order_by("-completed_at")
     )
     q = (request.POST.get("q") or request.GET.get("q") or "").strip()
-    if q:
-        qs = qs.filter(
-            Q(client__client_name__icontains=q)
-            | Q(title__icontains=q)
-            | Q(task_master__name__icontains=q)
-            | Q(period_key__icontains=q)
-        )
+    fee_tasks = list(qs[:500])
+    rows = filter_unbilled_queue(build_unbilled_queue(tasks=fee_tasks), q)
     form = UnbilledInvoiceForm(request.POST or None)
     if request.method == "POST":
-        ids = [int(x) for x in request.POST.getlist("task_id") if str(x).isdigit()]
-        if not ids:
-            messages.error(request, "Select at least one task.")
+        keys = [str(x).strip() for x in request.POST.getlist("item") if str(x).strip()]
+        if not keys:
+            messages.error(request, "Select at least one fees or recovery row.")
         elif form.is_valid():
-            selected = list(qs.filter(pk__in=ids))
-            if len(selected) != len(set(ids)):
-                messages.error(request, "One or more selected tasks are not eligible.")
+            with_gst = form.cleaned_data["with_gst"] == "1"
+            try:
+                created = create_invoices_from_unbilled_keys(
+                    keys=keys,
+                    tasks=fee_tasks,
+                    actor=request.user,
+                    voucher_date=form.cleaned_data["invoice_date"],
+                    with_gst=with_gst,
+                )
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
             else:
-                with_gst = form.cleaned_data["with_gst"] == "1"
-                try:
-                    created = create_sales_invoices_for_tasks(
-                        tasks=selected,
-                        actor=request.user,
-                        voucher_date=form.cleaned_data["invoice_date"],
-                        with_gst=with_gst,
-                    )
-                except ValidationError as exc:
-                    messages.error(request, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
-                else:
-                    numbers = ", ".join(v.number for v in created)
-                    messages.success(request, f"Created invoice(s): {numbers}")
-                    list_url = reverse("accounts_unbilled_tasks")
-                    if q:
-                        list_url = f"{list_url}?{urlencode({'q': q})}"
-                    return redirect(list_url)
+                numbers = ", ".join(v.number for v in created)
+                messages.success(request, f"Created invoice(s): {numbers}")
+                list_url = reverse("accounts_unbilled_tasks")
+                if q:
+                    list_url = f"{list_url}?{urlencode({'q': q})}"
+                return redirect(list_url)
     return render(
         request,
         "accounts/unbilled_tasks.html",
-        {"tasks": qs[:500], "form": form, "q": q},
+        {"rows": rows, "form": form, "q": q},
     )
 
 
@@ -1630,6 +1770,11 @@ def report_billwise_outstanding(request):
             "pdf_url": f"{reverse('accounts_billwise_outstanding')}?{query}&export=pdf",
         },
     )
+
+
+@require_perm("accounts.post_voucher")
+def report_pending_recoveries(request):
+    return redirect("accounts_unbilled_tasks")
 
 
 @login_required

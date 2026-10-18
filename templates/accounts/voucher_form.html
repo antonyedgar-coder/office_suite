@@ -7,6 +7,7 @@
     {{ account_meta|json_script:"account-meta" }}
     {{ party_options|json_script:"party-options" }}
     {{ line_account_options|json_script:"line-account-options" }}
+    {{ on_behalf_options|json_script:"on-behalf-options" }}
     {{ company_gstin|default:""|json_script:"company-gstin" }}
     <style>
       .field-wrap { position: relative; }
@@ -134,7 +135,7 @@
   {% include "accounts/_voucher_type_tabs.html" %}
   {% if obj %}<p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.number }}</p>{% endif %}
   <div{% if compact_entry or contra_mode %} class="receipt-form-frame{% if contra_mode %} contra-frame{% endif %}"{% elif journal_mode %} class="journal-form-frame"{% endif %}>
-  <form method="post" class="card p-3" action="{% if obj %}{% url 'accounts_voucher_edit' obj.pk %}{% else %}{% url 'accounts_voucher_create' %}?type={{ vtype }}{% endif %}" id="voucher-form" data-vtype="{{ vtype }}" data-outstanding-url="{{ outstanding_url }}">
+  <form method="post" class="card p-3" action="{% if obj %}{% url 'accounts_voucher_edit' obj.pk %}{% else %}{% url 'accounts_voucher_create' %}?type={{ vtype }}{% endif %}" id="voucher-form" data-vtype="{{ vtype }}" data-outstanding-url="{{ outstanding_url }}" data-recoveries-url="{{ recoveries_url }}" data-recovery-tasks-url="{{ recovery_tasks_url }}">
     {% csrf_token %}
     {{ form.voucher_type }}
     {% if linked_task %}
@@ -159,13 +160,34 @@
           <div id="partySuggestions" class="task-suggest-list border rounded shadow-sm"></div>
           {{ party_form.party.errors }}
         </div>
+        {% if payment_mode %}
+        </div>
+        {{ form.on_behalf_of }}
+        {{ form.on_behalf_task }}
+        <div class="d-flex align-items-end gap-3 mb-3 invoice-header-row">
+          <div class="invoice-buyer-col field-wrap">
+            <label class="form-label" for="onBehalfSearch">On behalf of client</label>
+            <input class="form-control" id="onBehalfSearch" placeholder="Type to filter…" autocomplete="off" />
+            <div id="onBehalfSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+            {{ form.on_behalf_of.errors }}
+          </div>
+          {% if enable_task_module %}
+          <div class="invoice-buyer-col field-wrap">
+            <label class="form-label" for="onBehalfTaskSearch">Task (optional)</label>
+            <input class="form-control" id="onBehalfTaskSearch" placeholder="Select client first…" autocomplete="off" />
+            <div id="onBehalfTaskSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+            {{ form.on_behalf_task.errors }}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
         {% if invoice_mode %}
         <div class="invoice-gst-col" id="party-gst-wrap">
           <label class="form-label">GST No of the {{ party_form.party.label }}</label>
           <div class="form-control bg-light" id="party-gstin">—</div>
         </div>
         {% endif %}
-      </div>
+      {% if not payment_mode %}</div>{% endif %}
       {% if invoice_mode %}
       <div class="mb-3">
         <label class="form-label">Address</label>
@@ -190,12 +212,13 @@
 
       {{ item_formset.management_form }}
       {% if vtype == 'sales' %}
+      <div id="pending-recoveries" class="border rounded p-2 bg-light mb-3 d-none"></div>
         <p class="small text-secondary mb-1">Company GST No <span class="mono">{{ company_gstin|default:"—" }}</span>{% if company_address %} · {{ company_address }}{% endif %}</p>
         <p class="small text-secondary">Each account amount is credited. GST uses that account’s rate. Same first two GSTIN digits as the company GST No → CGST and SGST at half the rate. Different digits → IGST. Pure agent lines have no GST. The buyer is debited for amount plus GST.</p>
       {% elif vtype == 'receipt' %}
         <p class="small text-secondary">The mode of receipt is debited for the total. Each account amount is credited. After you select an account, opening balance and outstanding bills are shown so you can knock off the receipt. If there are none, enter the amount as advance.</p>
       {% elif vtype == 'payment' %}
-        <p class="small text-secondary">The mode of payment is credited for the total. Each account amount is debited. Cash and cash equivalent ledgers are only used as the mode of payment.</p>
+        <p class="small text-secondary">The mode of payment is credited for the total. Each account amount is debited. Cash and cash equivalent ledgers are only used as the mode of payment. If you debit a pure-agent ledger (GST Payment, Income Tax, and similar), select the client this payment is for. Task is optional.</p>
       {% else %}
         <p class="small text-secondary">Each account amount is debited. The supplier is credited for the total.</p>
       {% endif %}
@@ -786,7 +809,160 @@
           onSelect: fillParty,
         });
       }
+      var onBehalfOpts = [];
+      try {
+        var onBehalfEl = document.getElementById("on-behalf-options");
+        onBehalfOpts = onBehalfEl ? JSON.parse(onBehalfEl.textContent || "[]") : [];
+      } catch (e) { onBehalfOpts = []; }
+      var taskOpts = [];
+      var recoveriesTpl = form.getAttribute("data-recoveries-url") || "";
+      var recoveryTasksTpl = form.getAttribute("data-recovery-tasks-url") || "";
+      var isPayment = form.getAttribute("data-vtype") === "payment";
+      var isSales = form.getAttribute("data-vtype") === "sales";
+      function usedRecoveryIds() {
+        var ids = {};
+        form.querySelectorAll(".js-recovery-line").forEach(function (el) {
+          if (el.value) ids[String(el.value)] = true;
+        });
+        return ids;
+      }
+      function fillRecoveryRow(row, rec) {
+        if (!row || !rec) return;
+        var hidden = row.querySelector(".js-invoice-account");
+        var search = row.querySelector(".js-invoice-account-search");
+        var amount = row.querySelector(".js-invoice-amount");
+        var recEl = row.querySelector(".js-recovery-line");
+        if (hidden) {
+          hidden.value = String(rec.account_id);
+          hidden.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (search) search.value = rec.account_name || "";
+        if (amount) amount.value = rec.pending;
+        if (recEl) recEl.value = String(rec.id);
+        refreshRow(row);
+      }
+      function emptyInvoiceRow() {
+        var found = null;
+        form.querySelectorAll(".js-invoice-row").forEach(function (row) {
+          var hidden = row.querySelector(".js-invoice-account");
+          var recEl = row.querySelector(".js-recovery-line");
+          if (hidden && !hidden.value && recEl && !recEl.value) found = row;
+        });
+        if (found) return found;
+        addRow();
+        var rows = form.querySelectorAll(".js-invoice-row");
+        return rows[rows.length - 1] || null;
+      }
+      function toggleRecovery(rec, checked) {
+        if (checked) {
+          fillRecoveryRow(emptyInvoiceRow(), rec);
+          return;
+        }
+        form.querySelectorAll(".js-invoice-row").forEach(function (row) {
+          var recEl = row.querySelector(".js-recovery-line");
+          if (recEl && String(recEl.value) === String(rec.id)) {
+            var hidden = row.querySelector(".js-invoice-account");
+            var search = row.querySelector(".js-invoice-account-search");
+            var amount = row.querySelector(".js-invoice-amount");
+            if (hidden) hidden.value = "";
+            if (search) search.value = "";
+            if (amount) amount.value = "";
+            recEl.value = "";
+            refreshRow(row);
+          }
+        });
+      }
+      function renderRecoveries(rows) {
+        var box = document.getElementById("pending-recoveries");
+        if (!box) return;
+        if (!rows || !rows.length) {
+          box.classList.add("d-none");
+          box.innerHTML = "";
+          return;
+        }
+        var used = usedRecoveryIds();
+        var html = "<p class=\"mb-2\"><strong>Pending recoveries</strong> — tick to add as a pure-agent line on this invoice.</p>";
+        rows.forEach(function (rec) {
+          var checked = used[String(rec.id)] ? " checked" : "";
+          html += "<label class=\"d-flex flex-wrap align-items-center gap-2 mb-1\">";
+          html += "<input type=\"checkbox\" class=\"form-check-input js-pending-recovery\" data-id=\"" + rec.id + "\" data-account-id=\"" + rec.account_id + "\" data-account-name=\"" + String(rec.account_name || "").replace(/"/g, "&quot;") + "\" data-pending=\"" + rec.pending + "\"" + checked + " />";
+          html += "<span>" + rec.number + " · " + rec.account_name + " · " + rec.pending;
+          if (rec.task_label) html += " · " + rec.task_label;
+          html += "</span></label>";
+        });
+        box.innerHTML = html;
+        box.classList.remove("d-none");
+      }
+      function loadRecoveries() {
+        var box = document.getElementById("pending-recoveries");
+        if (!isSales || !box) return;
+        var party = document.getElementById("id_party");
+        if (!party || !party.value) {
+          renderRecoveries([]);
+          return;
+        }
+        var url = recoveriesTpl.replace("/0/", "/" + party.value + "/").replace("/0?", "/" + party.value + "?");
+        fetch(url, { headers: { Accept: "application/json" } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) { renderRecoveries(data.recoveries || []); })
+          .catch(function () { renderRecoveries([]); });
+      }
+      function bindTaskPicker() {
+        var search = document.getElementById("onBehalfTaskSearch");
+        if (!search || !window.initTaskUserSinglePicker) return;
+        var clone = search.cloneNode(true);
+        search.parentNode.replaceChild(clone, search);
+        window.initTaskUserSinglePicker({
+          searchId: "onBehalfTaskSearch",
+          suggestId: "onBehalfTaskSuggestions",
+          hiddenId: "id_on_behalf_task",
+          options: taskOpts,
+          minChars: 0
+        });
+      }
+      function loadRecoveryTasks(clientId, keepTask) {
+        var hidden = document.getElementById("id_on_behalf_task");
+        var search = document.getElementById("onBehalfTaskSearch");
+        if (!keepTask) {
+          if (hidden) hidden.value = "";
+          if (search) search.value = "";
+        }
+        taskOpts = [];
+        bindTaskPicker();
+        if (!clientId || !recoveryTasksTpl) return;
+        var url = recoveryTasksTpl.replace("/0/", "/" + clientId + "/");
+        fetch(url, { headers: { Accept: "application/json" } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            taskOpts = data.tasks || [];
+            bindTaskPicker();
+          });
+      }
+      if (isPayment && window.initTaskUserSinglePicker) {
+        window.initTaskUserSinglePicker({
+          searchId: "onBehalfSearch",
+          suggestId: "onBehalfSuggestions",
+          hiddenId: "id_on_behalf_of",
+          options: onBehalfOpts,
+          minChars: 0,
+          onSelect: function (o) { loadRecoveryTasks(o && o.id, false); }
+        });
+        var currentClient = document.getElementById("id_on_behalf_of");
+        if (currentClient && currentClient.value) loadRecoveryTasks(currentClient.value, true);
+      }
+      form.addEventListener("change", function (e) {
+        if (e.target && e.target.id === "id_party") loadRecoveries();
+        if (e.target && e.target.classList.contains("js-pending-recovery")) {
+          toggleRecovery({
+            id: e.target.getAttribute("data-id"),
+            account_id: e.target.getAttribute("data-account-id"),
+            account_name: e.target.getAttribute("data-account-name"),
+            pending: e.target.getAttribute("data-pending")
+          }, e.target.checked);
+        }
+      });
       fillParty();
+      if (isSales) loadRecoveries();
       syncTaxTabs();
       refreshAll();
       showPlusOnLastRow();

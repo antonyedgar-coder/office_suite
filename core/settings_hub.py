@@ -14,6 +14,16 @@ class SettingsCard:
     url_name: str
     icon: str
     icon_bg: str = "settings-icon-blue"
+    url_query: str = ""
+
+    @property
+    def href(self) -> str:
+        from django.urls import reverse
+
+        url = reverse(self.url_name)
+        if self.url_query:
+            return f"{url}?{self.url_query}"
+        return url
 
 
 @dataclass(frozen=True)
@@ -162,17 +172,61 @@ def _documents_setup_cards(user) -> tuple[SettingsCard, ...]:
 
 
 def _accounts_setup_cards(user) -> tuple[SettingsCard, ...]:
-    if not accounts_module_enabled() or not user.is_superuser:
+    if not accounts_module_enabled():
         return ()
-    return (
-        SettingsCard(
-            title="Client Master → ledgers",
-            description="One-time: create Sundry Debtor ledgers for approved clients that do not have one yet.",
-            url_name="accounts_sync_client_ledgers",
-            icon="bi-journal-plus",
-            icon_bg="settings-icon-teal",
-        ),
-    )
+    cards: list[SettingsCard] = []
+    can_groups = user.is_superuser or user.has_perm("accounts.view_accountgroup")
+    can_ledgers = user.is_superuser or user.has_perm("accounts.view_account")
+    if can_groups:
+        cards.extend(
+            (
+                SettingsCard(
+                    title="Main Account",
+                    description="Assets, Liabilities, Income, and Expenses heads.",
+                    url_name="accounts_group_list",
+                    url_query="tab=main",
+                    icon="bi-layers-fill",
+                    icon_bg="settings-icon-teal",
+                ),
+                SettingsCard(
+                    title="Primary Group",
+                    description="Groups under a main account head.",
+                    url_name="accounts_group_list",
+                    url_query="tab=parent",
+                    icon="bi-diagram-3-fill",
+                    icon_bg="settings-icon-green",
+                ),
+                SettingsCard(
+                    title="Account Group",
+                    description="Groups under a primary group.",
+                    url_name="accounts_group_list",
+                    url_query="tab=account",
+                    icon="bi-folder-fill",
+                    icon_bg="settings-icon-orange",
+                ),
+            )
+        )
+    if can_ledgers:
+        cards.append(
+            SettingsCard(
+                title="Account Ledger",
+                description="Ledgers used on vouchers, invoices, and reports.",
+                url_name="accounts_account_list",
+                icon="bi-journal-text",
+                icon_bg="settings-icon-blue",
+            )
+        )
+    if user.is_superuser:
+        cards.append(
+            SettingsCard(
+                title="Client Master → ledgers",
+                description="One-time: create Sundry Debtor ledgers for approved clients that do not have one yet.",
+                url_name="accounts_sync_client_ledgers",
+                icon="bi-journal-plus",
+                icon_bg="settings-icon-indigo",
+            )
+        )
+    return tuple(cards)
 
 
 def _billing_setup_cards(user) -> tuple[SettingsCard, ...]:
@@ -223,7 +277,7 @@ def build_settings_sections(user) -> list[SettingsSection]:
         sections.append(SettingsSection(title="Documents", cards=doc_cards))
     accounts_cards = _accounts_setup_cards(user)
     if accounts_cards:
-        sections.append(SettingsSection(title="Accounts", cards=accounts_cards))
+        sections.append(SettingsSection(title="Account", cards=accounts_cards))
     billing_cards = _billing_setup_cards(user)
     if billing_cards:
         sections.append(SettingsSection(title="Billing", cards=billing_cards))

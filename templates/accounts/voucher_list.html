@@ -7,8 +7,10 @@
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     <h1 class="h5 mb-0">{{ list_title }}</h1>
     <div class="d-flex flex-wrap gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ pdf_url }}">Export PDF</a>
-      {% if perms.accounts.post_voucher %}
+      {% if can_print %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ pdf_url }}">Export PDF</a>
+      {% endif %}
+      {% if can_add %}
         <a class="btn btn-primary btn-sm" href="{% url 'accounts_voucher_create' %}?type={{ vtype }}">Add</a>
       {% endif %}
     </div>
@@ -34,9 +36,11 @@
               <td>{{ v.narration|default:"—" }}</td>
               <td class="text-end mono">{{ v.amount }}</td>
               <td class="text-nowrap text-end">
-                {% if perms.accounts.post_voucher %}
+                {% if can_change %}
                   <a href="{% url 'accounts_voucher_edit' v.pk %}">Edit</a>
-                  ·
+                {% endif %}
+                {% if can_change and can_delete %} · {% endif %}
+                {% if can_delete %}
                   <form method="post" action="{% url 'accounts_voucher_delete' v.pk %}" class="d-inline" onsubmit="return confirm('Delete voucher {{ v.number|escapejs }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-link btn-sm p-0 align-baseline text-danger">Delete</button>

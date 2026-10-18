@@ -1031,22 +1031,23 @@ body {
   overflow: visible;
   padding: 0.45rem 0.35rem;
   font-size: 0.85rem;
-  color: #1f2937;
-  background: #e5e7eb;
-  border: 1px solid #d1d5db;
+  color: var(--app-primary);
+  background: #fff;
+  border: 1px solid var(--app-primary);
   border-radius: 8px;
 }
 
 .voucher-type-tabs .nav-link:hover {
-  color: #1f2937;
-  background: #f3f4f6;
+  color: #fff;
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
 }
 
 .voucher-type-tabs .nav-link.active {
-  color: #111827;
+  color: #fff;
   font-weight: 600;
-  background: #d1d5db;
-  border-color: #9ca3af;
+  background: var(--app-primary);
+  border-color: var(--app-primary);
 }
 
 .tb-indent-0 { padding-left: 0.5rem; }

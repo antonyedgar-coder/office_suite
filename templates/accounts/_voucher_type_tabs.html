@@ -25,17 +25,21 @@
       overflow: visible;
       padding: 0.45rem 0.35rem;
       font-size: 0.85rem;
-      color: #1f2937 !important;
-      background: #e5e7eb !important;
-      border: 1px solid #d1d5db !important;
+      color: var(--app-primary) !important;
+      background: #fff !important;
+      border: 1px solid var(--app-primary) !important;
       border-radius: 8px;
     }
-    .voucher-type-tabs .nav-link:hover { background: #f3f4f6 !important; }
+    .voucher-type-tabs .nav-link:hover {
+      color: #fff !important;
+      background: var(--app-primary-hover) !important;
+      border-color: var(--app-primary-hover) !important;
+    }
     .voucher-type-tabs .nav-link.active {
       font-weight: 600;
-      background: #d1d5db !important;
-      border-color: #9ca3af !important;
-      color: #111827 !important;
+      color: #fff !important;
+      background: var(--app-primary) !important;
+      border-color: var(--app-primary) !important;
     }
   </style>
   <ul class="nav nav-tabs nav-justified voucher-type-tabs mb-3">

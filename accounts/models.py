@@ -260,6 +260,20 @@ class Voucher(models.Model):
     date = models.DateField()
     narration = models.CharField(max_length=500, blank=True)
     tasks = models.ManyToManyField("tasks.Task", blank=True, related_name="accounts_vouchers")
+    on_behalf_of = models.ForeignKey(
+        "Account",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="recoverable_payments",
+    )
+    on_behalf_task = models.ForeignKey(
+        "tasks.Task",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="recoverable_payments",
+    )
     created_by = created_by_field()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -269,6 +283,10 @@ class Voucher(models.Model):
         permissions = [
             ("post_voucher", "Can post accounts vouchers"),
             ("view_accounts_reports", "Can view accounts reports"),
+            ("add_payment_voucher", "Payment voucher | Add"),
+            ("change_payment_voucher", "Payment voucher | Change"),
+            ("delete_payment_voucher", "Payment voucher | Delete"),
+            ("print_payment_voucher", "Payment voucher | Print"),
         ]
 
     def __str__(self) -> str:
@@ -347,3 +365,22 @@ class ReceiptAllocation(models.Model):
             return
         if not self.against_id:
             raise ValidationError("Select the bill or opening balance to knock off, or mark the amount as advance.")
+
+
+class RecoveryAllocation(models.Model):
+    """Knock-off of a pure-agent payment debit against a sales invoice credit."""
+
+    invoice = models.ForeignKey(Voucher, on_delete=models.CASCADE, related_name="recovery_allocations")
+    payment_line = models.ForeignKey(
+        VoucherLine,
+        on_delete=models.PROTECT,
+        related_name="recovery_allocations",
+    )
+    amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+
+    class Meta:
+        ordering = ["pk"]

@@ -11,6 +11,29 @@
     .tb-row-account_group { background: #f3f4f6; }
     .tb-row-ledger td { background: transparent; }
     .tb-report th, .tb-report .mono { white-space: nowrap; }
+    .tb-toggle,
+    .tb-toggle-spacer {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.25rem;
+      height: 1.25rem;
+      margin-right: 0.3rem;
+      vertical-align: middle;
+    }
+    .tb-toggle {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--app-primary);
+      line-height: 1;
+    }
+    .tb-toggle:hover { color: var(--app-primary-hover); }
+    .tb-toggle-spacer { visibility: hidden; }
+    @media print {
+      .tb-ledger-row { display: table-row !important; }
+      .tb-toggle { display: none; }
+    }
   </style>
 {% endblock %}
 {% block content %}
@@ -71,8 +94,26 @@
       </thead>
       <tbody>
         {% for row in rows %}
-          <tr class="tb-row-{{ row.kind }}{% if row.is_header %} fw-semibold{% endif %}">
-            <td class="tb-indent-{{ row.indent }}">{{ row.name }}</td>
+          <tr
+            class="tb-row-{{ row.kind }}{% if row.is_header %} fw-semibold{% endif %}{% if row.collapsed %} tb-ledger-row js-tb-ledger{% endif %}"
+            {% if row.parent_group_id %}data-group-id="{{ row.parent_group_id }}" hidden{% endif %}
+          >
+            <td class="tb-indent-{{ row.indent }}">
+              {% if row.expandable %}
+                <button
+                  type="button"
+                  class="tb-toggle js-tb-toggle"
+                  data-group-id="{{ row.group_id }}"
+                  aria-expanded="false"
+                  aria-label="Show ledgers in {{ row.name }}"
+                >
+                  <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                </button>
+              {% elif row.is_header %}
+                <span class="tb-toggle-spacer"></span>
+              {% endif %}
+              {{ row.name }}
+            </td>
             {% if data.show_group_column %}
               <td>{% if row.group %}{{ row.group.name }}{% endif %}</td>
             {% endif %}
@@ -95,4 +136,21 @@
     </table>
     </div>
   </div>
+{% endblock %}
+{% block extra_js %}
+  <script>
+    document.querySelectorAll(".js-tb-toggle").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var groupId = btn.getAttribute("data-group-id");
+        var open = btn.getAttribute("aria-expanded") === "true";
+        var next = !open;
+        btn.setAttribute("aria-expanded", next ? "true" : "false");
+        var icon = btn.querySelector("i");
+        if (icon) icon.className = next ? "bi bi-dash-lg" : "bi bi-plus-lg";
+        document.querySelectorAll('.js-tb-ledger[data-group-id="' + groupId + '"]').forEach(function (row) {
+          row.hidden = !next;
+        });
+      });
+    });
+  </script>
 {% endblock %}

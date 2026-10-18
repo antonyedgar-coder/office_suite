@@ -9,7 +9,7 @@
     <h2 class="settings-hub-section-title">{{ section.title }}</h2>
     <div class="settings-hub-grid mb-4">
       {% for card in section.cards %}
-        <a class="settings-hub-card" href="{% url card.url_name %}">
+        <a class="settings-hub-card" href="{{ card.href }}">
           <span class="settings-hub-card-icon {{ card.icon_bg }}" aria-hidden="true">
             <i class="bi {{ card.icon }}"></i>
           </span>

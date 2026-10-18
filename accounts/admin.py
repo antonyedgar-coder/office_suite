@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Account, AccountGroup, InvoiceNumberSeq, ReceiptAllocation, Voucher, VoucherLine
+from .models import Account, AccountGroup, InvoiceNumberSeq, ReceiptAllocation, RecoveryAllocation, Voucher, VoucherLine
 
 
 class VoucherLineInline(admin.TabularInline):
@@ -34,3 +34,8 @@ class InvoiceNumberSeqAdmin(admin.ModelAdmin):
 @admin.register(ReceiptAllocation)
 class ReceiptAllocationAdmin(admin.ModelAdmin):
     list_display = ["receipt", "party", "against", "amount", "is_opening", "is_advance"]
+
+
+@admin.register(RecoveryAllocation)
+class RecoveryAllocationAdmin(admin.ModelAdmin):
+    list_display = ["invoice", "payment_line", "amount"]

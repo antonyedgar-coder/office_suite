@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Print{% endblock %}
+{% block page_title %}{{ obj.get_voucher_type_display }}{% endblock %}
+{% block extra_head %}
+<style>
+  .voucher-toolbar { margin-bottom: 1rem; }
+  .voucher-sheet {
+    max-width: 210mm;
+    margin: 0 auto;
+    background: #fff;
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+  .voucher-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: center;
+    margin: 0 0 1rem;
+  }
+  .voucher-firm { font-size: 1.2rem; font-weight: 700; }
+  .voucher-meta td { padding: 0.15rem 0.5rem 0.15rem 0; vertical-align: top; }
+  @media print {
+    .no-print, .sidebar, .topbar, aside, .sidebar-collapse-toggle, .offcanvas, .btn { display: none !important; }
+    .app-shell, .content, .container { display: block !important; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
+    .voucher-sheet { max-width: none; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+  <div class="voucher-toolbar no-print d-flex flex-wrap gap-2">
+    <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">Print / Save PDF</button>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_detail' obj.pk %}">Back</a>
+  </div>
+  <div class="voucher-sheet">
+    {% if company_name %}<div class="voucher-firm">{{ company_name }}</div>{% endif %}
+    {% if company_address %}<div class="text-secondary mb-3">{{ company_address|linebreaksbr }}</div>{% endif %}
+    <h1 class="voucher-heading">{{ obj.get_voucher_type_display }}</h1>
+    <table class="voucher-meta mb-3">
+      <tr><td>Voucher No</td><td class="mono">{{ obj.number }}</td></tr>
+      <tr><td>Date</td><td>{{ obj.date|date:"d-m-Y" }}</td></tr>
+      {% if obj.narration %}<tr><td>Narration</td><td>{{ obj.narration }}</td></tr>{% endif %}
+      {% if obj.on_behalf_of %}
+        <tr>
+          <td>On behalf of</td>
+          <td>{{ obj.on_behalf_of.name }}{% if obj.on_behalf_task %} · {{ obj.on_behalf_task.display_title }}{% endif %}</td>
+        </tr>
+      {% endif %}
+    </table>
+    <table class="table table-sm">
+      <thead><tr><th>Account</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
+      <tbody>
+        {% for line in obj.lines.all %}
+          <tr>
+            <td>{{ line.account.name }}</td>
+            <td class="text-end mono">{% if line.debit %}{{ line.debit }}{% endif %}</td>
+            <td class="text-end mono">{% if line.credit %}{{ line.credit }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+        <tr>
+          <th>Total</th>
+          <th class="text-end mono">{{ amount }}</th>
+          <th class="text-end mono">{{ amount }}</th>
+        </tr>
+      </tbody>
+    </table>
+    {% if amount_words %}<p class="mb-0">Amount in words: {{ amount_words }}</p>{% endif %}
+  </div>
+{% endblock %}

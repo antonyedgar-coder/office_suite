@@ -202,9 +202,10 @@ def _delete_accounts_module() -> dict[str, int]:
     """Vouchers, allocations, number series, ledgers, and user-created groups. Keeps the four Main Heads."""
     if not accounts_module_enabled():
         return {}
-    from accounts.models import Account, AccountGroup, InvoiceNumberSeq, ReceiptAllocation, Voucher
+    from accounts.models import Account, AccountGroup, InvoiceNumberSeq, ReceiptAllocation, RecoveryAllocation, Voucher
 
     out: dict[str, int] = {}
+    out["accounts_recovery_allocations"] = RecoveryAllocation.objects.all().delete()[0]
     out["accounts_allocations"] = ReceiptAllocation.objects.all().delete()[0]
     out["accounts_vouchers"] = Voucher.objects.all().delete()[0]
     out["accounts_sequences"] = InvoiceNumberSeq.objects.all().delete()[0]

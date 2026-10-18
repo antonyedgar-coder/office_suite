@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Bill not raised — CA Office Suite{% endblock %}
-{% block page_title %}Task completed — bill not raised{% endblock %}
+{% block page_title %}Bill not raised{% endblock %}
 {% block content %}
-  {% include "includes/page_header.html" with title="Task completed — bill not raised" subtitle="Select tasks and create one sales invoice per task. GST vs non-GST uses separate number series." %}
+  {% include "includes/page_header.html" with title="Bill not raised" subtitle="Raise fees and reimbursed expenses from this list. Rows for the same client go on one invoice. A separate invoice is created only when another client is also selected. GST vs non-GST uses separate number series." %}
   <form id="unbilled-search-form" method="get" class="d-none"></form>
   <form method="post">
     {% csrf_token %}
+    <input type="hidden" name="q" value="{{ q }}" />
     <div class="row g-2 mb-3 align-items-end">
       <div class="col-md-3">
         <label class="form-label" for="unbilled-search">Search</label>
@@ -15,7 +16,7 @@
           form="unbilled-search-form"
           name="q"
           value="{{ q }}"
-          placeholder="Client or task"
+          placeholder="Client, task, GST Payment, or Fees/Recovery"
         />
       </div>
       <div class="col-md-3"><label class="form-label" for="{{ form.invoice_date.id_for_label }}">Invoice date</label>{{ form.invoice_date }}</div>
@@ -31,23 +32,43 @@
           <thead>
             <tr>
               <th></th>
+              <th>Type</th>
               <th>Client</th>
+              <th>Ledger</th>
               <th>Task</th>
               <th>Period</th>
               <th class="text-end">Fees</th>
+              <th class="text-end">Recovery</th>
             </tr>
           </thead>
           <tbody>
-            {% for t in tasks %}
+            {% for row in rows %}
               <tr>
-                <td><input type="checkbox" name="task_id" value="{{ t.pk }}" /></td>
-                <td>{{ t.client.client_name }}</td>
-                <td><a href="{% url 'task_detail' t.pk %}">{{ t.display_title }}</a></td>
-                <td>{{ t.period_key }}</td>
-                <td class="text-end mono">{{ t.fees_amount }}</td>
+                <td><input type="checkbox" name="item" value="{{ row.key }}" /></td>
+                <td>
+                  {% if row.kind == 'both' %}
+                    <span class="badge text-bg-primary">Both</span>
+                  {% elif row.kind == 'recovery' %}
+                    <span class="badge text-bg-warning">Recovery</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">Fees</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.client_name }}</td>
+                <td>{{ row.ledger_label|default:"—" }}</td>
+                <td>
+                  {% if row.task %}
+                    <a href="{% url 'task_detail' row.task.pk %}">{{ row.task_label }}</a>
+                  {% else %}
+                    {{ row.task_label }}
+                  {% endif %}
+                </td>
+                <td>{{ row.period|default:"—" }}</td>
+                <td class="text-end mono">{% if row.fees %}{{ row.fees }}{% else %}—{% endif %}</td>
+                <td class="text-end mono">{% if row.recovery %}{{ row.recovery }}{% else %}—{% endif %}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="5" class="text-secondary">No completed billable tasks waiting for an invoice.</td></tr>
+              <tr><td colspan="8" class="text-secondary">Nothing waiting for an invoice.</td></tr>
             {% endfor %}
           </tbody>
         </table>
