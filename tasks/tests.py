@@ -1619,6 +1619,67 @@ class TaskListMultiFilterTests(TestCase):
         self.assertEqual(filters.statuses, (Task.STATUS_SUBMITTED, Task.STATUS_VERIFIED))
         self.assertEqual(filters.status, f"{Task.STATUS_SUBMITTED},{Task.STATUS_VERIFIED}")
 
+    def test_parse_and_apply_branch_filter(self):
+        from pathlib import Path
+
+        from django.conf import settings
+        from django.test import RequestFactory
+        from tasks.listing import (
+            TaskListFilters,
+            apply_task_list_filters,
+            parse_task_list_filters,
+            tasks_queryset_for_user,
+        )
+        from tasks.services import create_task_from_master
+
+        self.client_b.branch = "Nagercoil"
+        self.client_b.save(update_fields=["branch"])
+        rf = RequestFactory()
+        filters = parse_task_list_filters(rf.get("/tasks/", {"branch": "Nagercoil,Trivandrum"}))
+        self.assertEqual(filters.branches, ("Nagercoil", "Trivandrum"))
+        self.assertEqual(filters.branch, "Nagercoil,Trivandrum")
+        ignored = parse_task_list_filters(rf.get("/tasks/", {"branch": "Unknown"}))
+        self.assertEqual(ignored.branches, ())
+
+        t_tvm = create_task_from_master(
+            master=self.master_a,
+            client=self.client_a,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-05",
+            due_date=date(2026, 5, 20),
+            auto_created=True,
+        )
+        t_ngl = create_task_from_master(
+            master=self.master_a,
+            client=self.client_b,
+            assignee_users=[self.user],
+            verifier=self.verifier,
+            document_checker=self.doc,
+            created_by=self.user,
+            period_key="2026-06",
+            due_date=date(2026, 6, 20),
+            auto_created=True,
+        )
+        qs = apply_task_list_filters(
+            tasks_queryset_for_user(self.user),
+            TaskListFilters(branches=("Nagercoil",)),
+        )
+        ids = set(qs.values_list("pk", flat=True))
+        self.assertEqual(ids, {t_ngl.pk})
+        self.assertNotIn(t_tvm.pk, ids)
+
+        template = (Path(settings.BASE_DIR) / "templates/tasks/includes/task_list_filters.html").read_text(
+            encoding="utf-8"
+        )
+        client_at = template.find("taskFilterClientSearch")
+        branch_at = template.find("taskFilterBranchSearch")
+        master_at = template.find("taskFilterMasterSearch")
+        self.assertTrue(0 < client_at < branch_at < master_at)
+        self.assertIn(">Branch</label>", template)
+
     def test_apply_multi_status_filter(self):
         from tasks.listing import TaskListFilters, apply_task_list_filters, tasks_queryset_for_user
         from tasks.services import create_task_from_master, submit_task, verify_task

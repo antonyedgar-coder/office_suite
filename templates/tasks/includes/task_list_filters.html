@@ -31,6 +31,20 @@
   </div>
 
   <div class="col-12 col-md-6 col-lg-3 field-wrap">
+    <label class="form-label small text-secondary mb-0" for="taskFilterBranchSearch">Branch</label>
+    <input
+      type="text"
+      class="form-control form-control-sm"
+      id="taskFilterBranchSearch"
+      placeholder="Type to add branches…"
+      autocomplete="off"
+    />
+    <div id="taskFilterBranchSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
+    <div id="taskFilterBranchChips" class="task-filter-chips mt-1"></div>
+    <input type="hidden" name="branch" id="taskFilterBranchValue" value="{{ filters.branch }}" />
+  </div>
+
+  <div class="col-12 col-md-6 col-lg-3 field-wrap">
     <label class="form-label small text-secondary mb-0" for="taskFilterMasterSearch">Type of task</label>
     <input
       type="text"
@@ -102,6 +116,7 @@
 
 {{ status_filter_options|json_script:"task-filter-statuses" }}
 {{ client_filter_options|json_script:"task-filter-clients" }}
+{{ branch_filter_options|json_script:"task-filter-branches" }}
 {{ master_filter_options|json_script:"task-filter-masters" }}
 {{ staff_user_options|json_script:"task-filter-staff-users" }}
 {% load static %}
@@ -111,6 +126,7 @@
   (function () {
     var statusOptions = JSON.parse(document.getElementById("task-filter-statuses").textContent || "[]");
     var clientOptions = JSON.parse(document.getElementById("task-filter-clients").textContent || "[]");
+    var branchOptions = JSON.parse(document.getElementById("task-filter-branches").textContent || "[]");
     var masterOptions = JSON.parse(document.getElementById("task-filter-masters").textContent || "[]");
     var staffUserOptions = JSON.parse(document.getElementById("task-filter-staff-users").textContent || "[]");
 
@@ -129,6 +145,14 @@
         chipsId: "taskFilterClientChips",
         hiddenId: "taskFilterClientValue",
         options: clientOptions,
+        minChars: 0,
+      });
+      window.initTaskFilterMultiPicker({
+        searchId: "taskFilterBranchSearch",
+        suggestId: "taskFilterBranchSuggestions",
+        chipsId: "taskFilterBranchChips",
+        hiddenId: "taskFilterBranchValue",
+        options: branchOptions,
         minChars: 0,
       });
       window.initTaskFilterMultiPicker({

@@ -10,7 +10,8 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from core.branch_access import approved_clients_for_user
+from core.branch_access import approved_clients_for_user, branch_access_for_user
+from masters.models import BRANCH_CHOICES
 
 from .date_presets import DATE_PRESET_CHOICES, PRESET_ALL_TIME, PRESET_CUSTOM, resolve_date_preset
 from .models import Task, TaskMaster
@@ -21,12 +22,14 @@ User = get_user_model()
 
 
 _VALID_STATUSES = frozenset(code for code, _label in Task.STATUS_CHOICES)
+_VALID_BRANCHES = frozenset(code for code, _label in BRANCH_CHOICES)
 
 
 @dataclass
 class TaskListFilters:
     statuses: tuple[str, ...] = ()
     client_ids: tuple[str, ...] = ()
+    branches: tuple[str, ...] = ()
     master_ids: tuple[str, ...] = ()
     assignee_ids: tuple[str, ...] = ()
     verifier_id: str = ""
@@ -50,6 +53,10 @@ class TaskListFilters:
     def client_id(self) -> str:
         """Comma-joined IDs for form hidden fields / templates."""
         return ",".join(self.client_ids)
+
+    @property
+    def branch(self) -> str:
+        return ",".join(self.branches)
 
     @property
     def master_id(self) -> str:
@@ -83,6 +90,18 @@ def _parse_multi_ids(request, param: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _parse_branches(request) -> tuple[str, ...]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw in request.GET.getlist("branch"):
+        for part in str(raw or "").split(","):
+            part = part.strip()
+            if part in _VALID_BRANCHES and part not in seen:
+                seen.add(part)
+                values.append(part)
+    return tuple(values)
+
+
 def parse_task_list_filters(request) -> TaskListFilters:
     c_preset, c_from, c_to = _parse_preset_block(request, "created")
     d_preset, d_from, d_to = _parse_preset_block(request, "due")
@@ -92,6 +111,7 @@ def parse_task_list_filters(request) -> TaskListFilters:
     return TaskListFilters(
         statuses=statuses,
         client_ids=_parse_multi_ids(request, "client"),
+        branches=_parse_branches(request),
         master_ids=_parse_multi_ids(request, "master"),
         assignee_ids=_parse_multi_ids(request, "assignee"),
         verifier_id=(g.get("verifier") or "").strip(),
@@ -139,6 +159,8 @@ def apply_task_list_filters(qs, filters: TaskListFilters):
         qs = qs.filter(status__in=filters.statuses)
     if filters.client_ids:
         qs = qs.filter(client_id__in=filters.client_ids)
+    if filters.branches:
+        qs = qs.filter(client__branch__in=filters.branches)
     if filters.master_ids:
         qs = qs.filter(task_master_id__in=filters.master_ids)
     if filters.assignee_ids:
@@ -248,6 +270,7 @@ def prepare_task_list_rows(tasks, *, include_assignees: bool = False) -> list[Ta
 def filter_context(user, filters: TaskListFilters) -> dict:
     masters = list(TaskMaster.selectable_for_new_tasks())
     clients = list(approved_clients_for_user(user).order_by("client_name"))
+    scoped_branch = branch_access_for_user(user)
     return {
         "filters": filters,
         "status_choices": Task.STATUS_CHOICES,
@@ -269,6 +292,15 @@ def filter_context(user, filters: TaskListFilters) -> dict:
                 "search": f"{c.client_name} {c.pan or ''} {c.client_id}".lower(),
             }
             for c in clients
+        ],
+        "branch_filter_options": [
+            {
+                "id": code,
+                "label": label,
+                "search": f"{label} {code}".lower(),
+            }
+            for code, label in BRANCH_CHOICES
+            if not scoped_branch or code == scoped_branch
         ],
         "master_filter_options": [
             {
@@ -334,6 +366,8 @@ def filters_query_string(filters: TaskListFilters) -> str:
         params["status"] = ",".join(filters.statuses)
     if filters.client_ids:
         params["client"] = ",".join(filters.client_ids)
+    if filters.branches:
+        params["branch"] = ",".join(filters.branches)
     if filters.master_ids:
         params["master"] = ",".join(filters.master_ids)
     if filters.assignee_ids:
