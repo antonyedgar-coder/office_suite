@@ -115,6 +115,7 @@ from .services import (
     sales_invoice_document,
     seed_chart_of_accounts,
     backfill_approved_client_ledgers,
+    import_legacy_vouchers,
     sundry_debtors_ledgers,
     TB_FORMAT_TB,
     TB_REPORT_GROUP,
@@ -436,6 +437,7 @@ def account_delete(request, pk: int):
 GROUP_IMPORT_SESSION_KEY = "accounts_group_import_csv"
 PRIMARY_GROUP_IMPORT_SESSION_KEY = "accounts_primary_group_import_csv"
 LEDGER_IMPORT_SESSION_KEY = "accounts_ledger_import_csv"
+VOUCHER_BOOKS_IMPORT_SESSION_KEY = "accounts_voucher_books_import_csv"
 
 
 def _csv_template_response(filename: str, columns: list[str], sample_rows: list[list[str]]) -> HttpResponse:
@@ -778,6 +780,104 @@ def account_bulk_import_template(request):
                 "0",
                 "YES",
             ],
+        ],
+    )
+
+
+@login_required
+def voucher_books_bulk_import(request):
+    """Superuser one-time: import old-software vouchers keeping their serials."""
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    from .csv_import import VOUCHER_BOOKS_CSV_COLUMNS, parse_voucher_books_csv
+
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        raw = request.session.get(VOUCHER_BOOKS_IMPORT_SESSION_KEY)
+        if not raw:
+            messages.error(request, "Nothing to import. Please upload the CSV again.")
+            return redirect("accounts_voucher_books_bulk_import")
+        rows, file_errors = parse_voucher_books_csv(raw.encode("utf-8"))
+        if file_errors or not rows or any(r.errors for r in rows):
+            messages.error(request, "Cannot import: fix validation errors and upload again.")
+            return redirect("accounts_voucher_books_bulk_import")
+        with transaction.atomic():
+            created = import_legacy_vouchers(rows=rows, actor=request.user)
+        request.session.pop(VOUCHER_BOOKS_IMPORT_SESSION_KEY, None)
+        messages.success(
+            request,
+            f"Imported {created} voucher{'s' if created != 1 else ''} ({len(rows)} line{'s' if len(rows) != 1 else ''}).",
+        )
+        return redirect("accounts_voucher_list")
+
+    if request.method == "POST":
+        f = request.FILES.get("csv_file")
+        if not f:
+            messages.error(request, "Please choose a CSV file.")
+            return redirect("accounts_voucher_books_bulk_import")
+        raw_bytes = f.read()
+        rows, file_errors = parse_voucher_books_csv(raw_bytes)
+        if file_errors:
+            messages.error(request, file_errors[0])
+            return redirect("accounts_voucher_books_bulk_import")
+        request.session[VOUCHER_BOOKS_IMPORT_SESSION_KEY] = _decode_csv_session(raw_bytes)
+        ctx = _accounts_bulk_preview_context(
+            rows=rows,
+            preview_columns=["Date", "Type", "Number", "Account", "Debit", "Credit", "Series"],
+            upload_url_name="accounts_voucher_books_bulk_import",
+            preview_title="Old books import",
+            preview_page_title="Old books — Import preview",
+            success_hint="Click Confirm import to post these vouchers with their old numbers.",
+            cells_fn=lambda r: [
+                r.data["date"].strftime("%d-%m-%Y") if r.data.get("date") else "",
+                r.data.get("voucher_type") or "",
+                r.data.get("number") or "",
+                r.data.get("account_name") or "",
+                r.data.get("debit") or "",
+                r.data.get("credit") or "",
+                r.data.get("series") or "",
+            ],
+        )
+        if ctx["can_import"]:
+            messages.success(request, f"File uploaded. {len(rows)} line(s) ready to import.")
+        else:
+            messages.error(request, f"{ctx['error_count']} row(s) have errors.")
+        return render(request, "includes/bulk_csv_import_preview_page.html", ctx)
+
+    return render(
+        request,
+        "includes/bulk_csv_import_page.html",
+        {
+            "import_title": "Old books import",
+            "import_page_title": "Old books — Bulk upload (CSV)",
+            "import_description": (
+                "Import vouchers from the previous software from 01-04-2026 to cutover. "
+                "Keep the old NUMBER on every line of the same voucher. This does not use this software's "
+                "GST/NGST monthly serial — new vouchers posted here still start at 00001. "
+                "Create Account Ledgers first. One CSV row per debit or credit line. "
+                "Bill-wise receipt knock-off is not imported."
+            ),
+            "columns": VOUCHER_BOOKS_CSV_COLUMNS,
+            "template_url_name": "accounts_voucher_books_bulk_import_template",
+            "cancel_url_name": "settings_hub",
+        },
+    )
+
+
+@login_required
+def voucher_books_bulk_import_template(request):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    from .csv_import import VOUCHER_BOOKS_CSV_COLUMNS
+
+    return _csv_template_response(
+        "old-books-vouchers-template.csv",
+        VOUCHER_BOOKS_CSV_COLUMNS,
+        [
+            ["01-04-2026", "Journal", "JV-24-0001", "Opening", "Cash", "1000.00", "", "JV"],
+            ["01-04-2026", "Journal", "JV-24-0001", "Opening", "Capital", "", "1000.00", "JV"],
+            ["02-04-2026", "GST", "INV/24-25/001", "Fees", "ABC Traders", "1180.00", "", "GST"],
+            ["02-04-2026", "GST", "INV/24-25/001", "Fees", "Professional income", "", "1000.00", "GST"],
+            ["02-04-2026", "GST", "INV/24-25/001", "Fees", "GST output", "", "180.00", "GST"],
         ],
     )
 

@@ -41,6 +41,16 @@ urlpatterns = [
     path("ledgers/<int:pk>/outstanding/", views.account_outstanding, name="accounts_account_outstanding"),
     path("ledgers/<int:pk>/recovery-tasks/", views.account_recovery_tasks, name="accounts_account_recovery_tasks"),
     path("ledgers/<int:pk>/recoveries/", views.account_pending_recoveries, name="accounts_account_recoveries"),
+    path(
+        "vouchers/legacy-import/",
+        views.voucher_books_bulk_import,
+        name="accounts_voucher_books_bulk_import",
+    ),
+    path(
+        "vouchers/legacy-import/template/",
+        views.voucher_books_bulk_import_template,
+        name="accounts_voucher_books_bulk_import_template",
+    ),
     path("vouchers/", views.voucher_list, name="accounts_voucher_list"),
     path("vouchers/new/", views.voucher_create, name="accounts_voucher_create"),
     path("vouchers/<int:pk>/", views.voucher_detail, name="accounts_voucher_detail"),

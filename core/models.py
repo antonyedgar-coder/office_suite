@@ -188,6 +188,18 @@ class SiteSettings(models.Model):
         null=True,
         help_text="PNG, JPG, WEBP, GIF, or SVG. Recommended height about 40px.",
     )
+    theme_primary = models.CharField(
+        max_length=7,
+        blank=True,
+        default="#0369a1",
+        help_text="Buttons, links, and active menu colour.",
+    )
+    theme_sidebar = models.CharField(
+        max_length=7,
+        blank=True,
+        default="#f1f5f9",
+        help_text="Left menu background colour.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

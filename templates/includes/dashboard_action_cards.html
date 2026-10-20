@@ -26,5 +26,12 @@
         <div class="dac-hint">Awaiting verification</div>
       </a>
     </div>
+    <div class="col-6 col-md-4 col-lg-3">
+      <a href="{% url 'task_document_check_queue' %}" class="dashboard-action-card {% if task_nav_document_check_count %}has-items{% endif %}">
+        <div class="dac-count">{{ task_nav_document_check_count|default:0 }}</div>
+        <div class="dac-label">Document check queue</div>
+        <div class="dac-hint">Awaiting document check</div>
+      </a>
+    </div>
   {% endif %}
 </div>

@@ -1700,6 +1700,129 @@ class AccountsModuleTests(TestCase):
         self.assertIn(b"ACCOUNT_GROUP", ledger_template.content)
 
 
+class LegacyVoucherBooksImportTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="legacy-admin@example.com",
+            password="pass12345",
+            is_staff=True,
+            is_superuser=True,
+        )
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        liab = AccountGroup.objects.get(system_key="liabilities")
+        income = AccountGroup.objects.get(system_key="income")
+        self.cash = Account.objects.create(name="Cash", group=assets)
+        self.capital = Account.objects.create(name="Capital", group=liab)
+        self.income = Account.objects.create(name="Professional income", group=income)
+        self.party = Account.objects.create(name="ABC Traders", group=assets)
+        self.gst_out = Account.objects.create(name="GST output", group=liab)
+
+    def _journal_csv(self, number="JV-24-0001", debit="1000.00", credit="1000.00"):
+        return (
+            "DATE,VOUCHER_TYPE,NUMBER,NARRATION,ACCOUNT,DEBIT,CREDIT,SERIES\r\n"
+            f"01-04-2026,Journal,{number},Opening,Cash,{debit},,JV\r\n"
+            f"01-04-2026,Journal,{number},Opening,Capital,,{credit},JV\r\n"
+        ).encode("utf-8")
+
+    def test_csv_groups_two_lines_and_rejects_unbalanced(self):
+        from accounts.csv_import import grouped_voucher_books, parse_voucher_books_csv
+
+        rows, errors = parse_voucher_books_csv(self._journal_csv())
+        self.assertEqual(errors, [])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].errors, [])
+        self.assertEqual(rows[1].errors, [])
+        books = grouped_voucher_books(rows)
+        self.assertEqual(len(books), 1)
+        self.assertEqual(books[0]["number"], "JV-24-0001")
+        self.assertEqual(len(books[0]["lines"]), 2)
+
+        bad, _ = parse_voucher_books_csv(self._journal_csv(debit="1000.00", credit="50.00"))
+        self.assertTrue(bad[0].errors)
+        self.assertTrue(any("debit must equal" in e.lower() for e in bad[0].errors))
+
+    def test_legacy_number_does_not_consume_invoice_seq(self):
+        from accounts.csv_import import parse_voucher_books_csv
+        from accounts.services import allocate_voucher_number, import_legacy_vouchers
+
+        gst_csv = (
+            "DATE,VOUCHER_TYPE,NUMBER,NARRATION,ACCOUNT,DEBIT,CREDIT,SERIES\r\n"
+            "02-04-2026,GST,INV/24-25/001,Fees,ABC Traders,1180.00,,GST\r\n"
+            "02-04-2026,GST,INV/24-25/001,Fees,Professional income,,1000.00,GST\r\n"
+            "02-04-2026,GST,INV/24-25/001,Fees,GST output,,180.00,GST\r\n"
+        ).encode("utf-8")
+        rows, errors = parse_voucher_books_csv(gst_csv)
+        self.assertEqual(errors, [])
+        self.assertTrue(all(not r.errors for r in rows))
+        created = import_legacy_vouchers(rows=rows, actor=self.admin)
+        self.assertEqual(created, 1)
+        voucher = Voucher.objects.get(number="INV/24-25/001")
+        self.assertEqual(voucher.voucher_type, "sales")
+        self.assertEqual(voucher.series, SERIES_GST)
+        self.assertEqual(voucher.date, date(2026, 4, 2))
+        self.assertEqual(voucher.lines.count(), 3)
+        self.assertEqual(InvoiceNumberSeq.objects.filter(series=SERIES_GST).count(), 0)
+        next_no = allocate_voucher_number(SERIES_GST, date(2026, 4, 15))
+        self.assertEqual(next_no, "GST/2026/04/00001")
+
+    def test_existing_number_is_rejected(self):
+        from accounts.csv_import import parse_voucher_books_csv
+
+        post_voucher(
+            voucher_type="journal",
+            voucher_date=date(2026, 4, 1),
+            number="JV-24-0001",
+            lines=[
+                {"account": self.cash, "debit": Decimal("10.00"), "credit": Decimal("0.00")},
+                {"account": self.capital, "debit": Decimal("0.00"), "credit": Decimal("10.00")},
+            ],
+            actor=self.admin,
+        )
+        rows, _ = parse_voucher_books_csv(self._journal_csv())
+        self.assertTrue(any("already exists" in e for e in rows[0].errors))
+
+    def test_confirm_import_posts_old_number(self):
+        csv_bytes = self._journal_csv()
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session["accounts_voucher_books_import_csv"] = csv_bytes.decode("utf-8")
+        session.save()
+        confirm = self.client.post(reverse("accounts_voucher_books_bulk_import"), {"confirm": "1"})
+        self.assertEqual(confirm.status_code, 302)
+        voucher = Voucher.objects.get(number="JV-24-0001")
+        self.assertEqual(voucher.voucher_type, "journal")
+        self.assertEqual(voucher.lines.count(), 2)
+        self.assertEqual(InvoiceNumberSeq.objects.count(), 0)
+
+    def test_template_and_settings_card(self):
+        from core.settings_hub import build_settings_sections
+
+        titles = [card.title for section in build_settings_sections(self.admin) for card in section.cards]
+        self.assertIn("Old books import", titles)
+        self.client.force_login(self.admin)
+        template = self.client.get(reverse("accounts_voucher_books_bulk_import_template"))
+        self.assertEqual(template.status_code, 200)
+        self.assertIn(b"VOUCHER_TYPE", template.content)
+        self.assertIn(b"INV/24-25/001", template.content)
+
+    def test_staff_cannot_import_old_books(self):
+        from django.core.exceptions import PermissionDenied
+        from django.test import RequestFactory
+
+        from accounts.views import voucher_books_bulk_import
+
+        staff = User.objects.create_user(
+            email="legacy-staff@example.com",
+            password="pass12345",
+            is_staff=True,
+        )
+        request = RequestFactory().get("/accounts/vouchers/legacy-import/")
+        request.user = staff
+        with self.assertRaises(PermissionDenied):
+            voucher_books_bulk_import(request)
+
+
 class TrialBalanceReportTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(

@@ -1,19 +1,14 @@
 import csv
-from datetime import date
-from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Count, Sum
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 
-from dirkyc.fy import fy_label_for_date, fy_label_to_date_range
-from masters.models import Client, DirectorMapping
-from mis.models import ExpenseDetail, FeesDetail, Receipt
+from masters.models import Client
 
 from .activity_log import log_activity_from_request
 from .feature_flags import task_module_enabled
@@ -66,38 +61,6 @@ def logout_view(request):
 
 @login_required
 def dashboard_view(request):
-    today = date.today()
-    fy_label = fy_label_for_date(today)
-    fy_range = fy_label_to_date_range(fy_label)
-    fy_start, fy_end = fy_range if fy_range else (today, today)
-
-    client_qs = Client.approved_objects()
-    client_total = client_qs.count()
-    client_type_counts = list(
-        client_qs.values("client_type").annotate(count=Count("pk")).order_by("-count", "client_type")
-    )
-
-    user = request.user
-    show_mis_dashboard = user.is_superuser or (
-        user.has_perm("mis.add_feesdetail")
-        or user.has_perm("mis.add_receipt")
-        or user.has_perm("mis.add_expensedetail")
-    )
-    fees_sum = mis_fy_fees_received = mis_fy_expenses_received = mis_fy_expenses = Decimal("0")
-    if show_mis_dashboard:
-        mis_filter = {"date__gte": fy_start, "date__lte": fy_end}
-        mis_fy_fees = FeesDetail.objects.filter(**mis_filter).aggregate(total=Sum("total_amount"))
-        fees_sum = mis_fy_fees["total"] or Decimal("0")
-        rec_totals = Receipt.objects.filter(**mis_filter).aggregate(
-            fees_received=Sum("fees_received"),
-            expenses_received=Sum("expenses_received"),
-        )
-        mis_fy_fees_received = rec_totals["fees_received"] or Decimal("0")
-        mis_fy_expenses_received = rec_totals["expenses_received"] or Decimal("0")
-        mis_fy_expenses = ExpenseDetail.objects.filter(**mis_filter).aggregate(total=Sum("expenses_paid"))[
-            "total"
-        ] or Decimal("0")
-
     pending_client_count = 0
     show_pending_clients_card = False
     if request.user.is_superuser or request.user.has_perm("masters.approve_client"):
@@ -105,20 +68,8 @@ def dashboard_view(request):
         pending_client_count = Client.objects.filter(approval_status=Client.PENDING).count()
 
     context = {
-        "today": today,
-        "client_total": client_total,
         "pending_client_count": pending_client_count,
         "show_pending_clients_card": show_pending_clients_card,
-        "client_type_counts": client_type_counts,
-        "mis_fy_label": fy_label,
-        "mis_fy_period_start": fy_start,
-        "mis_fy_period_end": fy_end,
-        "mis_fy_fees": fees_sum,
-        "mis_fy_fees_received": mis_fy_fees_received,
-        "mis_fy_expenses_received": mis_fy_expenses_received,
-        "mis_fy_expenses": mis_fy_expenses,
-        "director_mapping_count": DirectorMapping.objects.count(),
-        "show_mis_dashboard": show_mis_dashboard,
         "show_task_dashboard": False,
     }
     if task_module_enabled():
@@ -300,10 +251,12 @@ def site_settings_edit(request):
             return redirect("site_settings_edit")
     else:
         form = SiteSettingsForm(instance=settings)
+    from .theme import THEME_PRESETS
+
     return render(
         request,
         "core/site_settings_form.html",
-        {"form": form, "settings": settings},
+        {"form": form, "settings": settings, "theme_presets": THEME_PRESETS},
     )
 
 

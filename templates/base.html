@@ -41,6 +41,7 @@
     />
 
     <link href="{% static 'css/app.css' %}?v=filtered-select-1" rel="stylesheet" />
+    {% include "includes/theme_css_vars.html" %}
 
     {% block extra_head %}{% endblock %}
 
@@ -133,6 +134,11 @@
 
               </div>
 
+              {% if show_settings_hub %}
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'settings_hub' %}">
+                  <i class="bi bi-gear" aria-hidden="true"></i> Settings
+                </a>
+              {% endif %}
               <a class="btn btn-sm btn-outline-danger" href="{% url 'logout' %}">Logout</a>
 
             {% endif %}

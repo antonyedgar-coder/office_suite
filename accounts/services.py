@@ -1413,16 +1413,26 @@ def post_voucher(
     lines: list[dict],
     actor=None,
     series: str | None = None,
+    number: str | None = None,
     with_gst: bool = False,
     tasks=None,
     receipt_items=None,
     on_behalf_of=None,
     on_behalf_task=None,
     recovery_items=None,
+    skip_recovery_assignment: bool = False,
 ) -> Voucher:
     cleaned = _validate_lines(lines)
     series = series or default_series_for_type(voucher_type, with_gst=with_gst)
-    number = allocate_voucher_number(series, voucher_date)
+    requested = (number or "").strip()
+    if requested:
+        if len(requested) > 40:
+            raise ValidationError("Voucher number cannot be longer than 40 characters.")
+        if Voucher.objects.filter(number=requested).exists():
+            raise ValidationError(f"Voucher number {requested} already exists.")
+        number = requested
+    else:
+        number = allocate_voucher_number(series, voucher_date)
     voucher = Voucher(
         voucher_type=voucher_type,
         series=series,
@@ -1431,9 +1441,13 @@ def post_voucher(
         narration=(narration or "").strip()[:500],
         created_by=actor if getattr(actor, "is_authenticated", False) else None,
     )
-    assign_payment_recovery(
-        voucher, lines=cleaned, on_behalf_of=on_behalf_of, on_behalf_task=on_behalf_task
-    )
+    if skip_recovery_assignment:
+        voucher.on_behalf_of = None
+        voucher.on_behalf_task = None
+    else:
+        assign_payment_recovery(
+            voucher, lines=cleaned, on_behalf_of=on_behalf_of, on_behalf_task=on_behalf_task
+        )
     voucher.save()
     for row in cleaned:
         VoucherLine.objects.create(
@@ -1452,6 +1466,26 @@ def post_voucher(
     if recovery_items:
         apply_recovery_allocations(voucher, recovery_items)
     return voucher
+
+
+@transaction.atomic
+def import_legacy_vouchers(*, rows, actor=None) -> int:
+    """Post old-software vouchers keeping their numbers. Does not consume InvoiceNumberSeq."""
+    from .csv_import import grouped_voucher_books
+
+    books = grouped_voucher_books(rows)
+    for book in books:
+        post_voucher(
+            voucher_type=book["voucher_type"],
+            voucher_date=book["date"],
+            narration=book["narration"],
+            lines=book["lines"],
+            actor=actor,
+            series=book["series"],
+            number=book["number"],
+            skip_recovery_assignment=True,
+        )
+    return len(books)
 
 
 @transaction.atomic

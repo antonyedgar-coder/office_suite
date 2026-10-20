@@ -6,6 +6,7 @@
   --app-surface: #f6f7fb;
   --app-border: #e8eaf1;
   --app-sidebar: #f1f5f9;
+  --app-primary-soft: color-mix(in srgb, var(--app-primary) 18%, #fff);
   --app-sidebar-width: 260px;
   --app-sidebar-width-collapsed: 72px;
   --app-radius: 14px;
@@ -371,6 +372,21 @@ body {
   --bs-btn-hover-border-color: var(--app-primary-hover);
   --bs-btn-active-bg: var(--app-primary-hover);
   --bs-btn-active-border-color: var(--app-primary-hover);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--app-primary);
+  --bs-btn-border-color: var(--app-primary);
+  --bs-btn-hover-bg: var(--app-primary);
+  --bs-btn-hover-border-color: var(--app-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: var(--app-primary-hover);
+  --bs-btn-active-border-color: var(--app-primary-hover);
+  --bs-btn-active-color: #fff;
+}
+
+.text-primary {
+  color: var(--app-primary) !important;
 }
 
 /* Client detail hub */
@@ -778,8 +794,8 @@ body {
 }
 
 .dashboard-action-card:hover {
-  border-color: #bae6fd;
-  box-shadow: 0 2px 8px rgba(3, 105, 161, 0.08);
+  border-color: var(--app-primary-soft);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--app-primary) 16%, transparent);
   color: inherit;
 }
 

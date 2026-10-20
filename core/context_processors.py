@@ -51,9 +51,16 @@ def site_branding(request):
 
     settings = get_site_settings()
     logo_url = reverse("site_logo") if settings.logo else ""
+    from core.theme import resolved_theme
+
+    theme = resolved_theme(settings)
     return {
         "site_company_name": (settings.company_name or "").strip(),
         "site_logo_url": logo_url,
+        "theme_primary": theme["primary"],
+        "theme_primary_hover": theme["primary_hover"],
+        "theme_sidebar": theme["sidebar"],
+        "theme_chart_palette": theme["chart_palette"],
     }
 
 

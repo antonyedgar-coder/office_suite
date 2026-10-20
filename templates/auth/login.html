@@ -8,9 +8,18 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
+    {% include "includes/theme_css_vars.html" %}
     <style>
+      .btn-primary {
+        --bs-btn-bg: var(--app-primary);
+        --bs-btn-border-color: var(--app-primary);
+        --bs-btn-hover-bg: var(--app-primary-hover);
+        --bs-btn-hover-border-color: var(--app-primary-hover);
+        --bs-btn-active-bg: var(--app-primary-hover);
+        --bs-btn-active-border-color: var(--app-primary-hover);
+      }
       body {
-        background: radial-gradient(1200px 600px at 20% 10%, #dbeafe, transparent 60%),
+        background: radial-gradient(1200px 600px at 20% 10%, color-mix(in srgb, var(--app-primary) 18%, #fff), transparent 60%),
           radial-gradient(1200px 600px at 80% 40%, #fef3c7, transparent 55%),
           #f6f7fb;
         min-height: 100vh;

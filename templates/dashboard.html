@@ -18,7 +18,7 @@
   </div>
 
   <div class="row g-3">
-    <div class="col-12 col-lg-8">
+    <div class="col-12">
       <div class="card p-3">
         <div class="fw-semibold mb-1">Quick actions</div>
         <div class="text-secondary small mb-3">Go directly to the most-used screens.</div>
@@ -29,15 +29,6 @@
           {% if perms.masters.view_directormapping %}
             <a class="btn btn-outline-primary btn-sm" href="{% url 'director_list' %}">Director Mapping</a>
           {% endif %}
-          {% if perms.mis.view_feesdetail %}
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_fees_list' %}">MIS • Fees</a>
-          {% endif %}
-          {% if perms.mis.view_receipt %}
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_receipt_list' %}">MIS • Receipts</a>
-          {% endif %}
-          {% if perms.mis.view_expensedetail %}
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'mis_expense_list' %}">MIS • Client Expenses</a>
-          {% endif %}
           {% if perms.reports.access_reports_menu or perms.reports.view_director_mapping_report or perms.reports.view_dir3kyc_report %}
             <a class="btn btn-outline-secondary btn-sm" href="{% url 'reports_index' %}">Reports</a>
           {% endif %}
@@ -46,9 +37,6 @@
           {% endif %}
           {% if request.user.is_superuser %}
             <a class="btn btn-outline-danger btn-sm" href="{% url 'reset_test_data' %}">Reset test data</a>
-          {% endif %}
-          {% if enable_accounts_module and request.user.is_superuser %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_sync_client_ledgers' %}">Client Master → ledgers</a>
           {% endif %}
           {% if show_task_dashboard %}
             {% if perms.tasks.view_task or request.user.is_superuser %}
@@ -59,16 +47,6 @@
         </div>
       </div>
     </div>
-
-    <div class="col-12 col-lg-4">
-      <div class="card p-3">
-        <div class="fw-semibold mb-1">Tips</div>
-        <div class="text-secondary small">
-          Use <strong>MIS → Bulk upload</strong> to import fees, receipts, and expenses in one file. Use
-          <strong>Reports → MIS Report</strong> for period and client summaries.
-        </div>
-      </div>
-    </div>
   </div>
 
   {% if show_task_dashboard %}
@@ -76,136 +54,4 @@
       {% include "includes/dashboard_task_summary.html" %}
     </div>
   {% endif %}
-
-  <div class="row g-3 mt-0">
-    <div class="col-12 {% if show_mis_dashboard %}col-lg-6{% else %}col-lg-12{% endif %}">
-      <div class="card p-3 h-100">
-        <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
-          <div class="fw-semibold">Clients by type</div>
-          <div class="text-secondary small">Total <span class="mono fw-semibold">{{ client_total }}</span></div>
-        </div>
-        <div class="text-secondary small mb-2">Approved Client Master only.</div>
-        <div class="mb-2" style="max-height: 200px">
-          <canvas id="clientTypeChart" height="180"></canvas>
-        </div>
-        <div class="small text-secondary mb-1">Breakdown</div>
-        <div class="list-group list-group-flush">
-          {% for r in client_type_counts %}
-            <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
-              <div>{{ r.client_type|default:"—" }}</div>
-              <div class="mono fw-semibold">{{ r.count }}</div>
-            </div>
-          {% empty %}
-            <div class="text-secondary">No clients yet.</div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
-    {% if show_mis_dashboard %}
-    <div class="col-12 col-lg-6">
-      <div class="card p-3 h-100">
-        <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
-          <div class="fw-semibold">MIS this financial year</div>
-          <div class="text-secondary small text-end">
-            FY <span class="mono">{{ mis_fy_label }}</span><br />
-            <span class="mono">{{ mis_fy_period_start }}</span> – <span class="mono">{{ mis_fy_period_end }}</span>
-          </div>
-        </div>
-        <div class="row g-2 mb-3">
-          <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center border rounded px-2 py-2">
-              <span class="text-secondary small">Fees total</span>
-              <span class="mono fw-semibold">{{ mis_fy_fees|floatformat:2 }}</span>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center border rounded px-2 py-2">
-              <span class="text-secondary small">Fees received</span>
-              <span class="mono fw-semibold">{{ mis_fy_fees_received|floatformat:2 }}</span>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center border rounded px-2 py-2">
-              <span class="text-secondary small">Expenses received</span>
-              <span class="mono fw-semibold">{{ mis_fy_expenses_received|floatformat:2 }}</span>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center border rounded px-2 py-2">
-              <span class="text-secondary small">Expenses</span>
-              <span class="mono fw-semibold">{{ mis_fy_expenses|floatformat:2 }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 border-top pt-3">
-          <div>
-            <div class="text-secondary small">Director mapping rows</div>
-            <div class="fs-5 fw-semibold mono">{{ director_mapping_count }}</div>
-          </div>
-          {% if perms.masters.view_directormapping %}
-            <a class="btn btn-sm btn-outline-primary" href="{% url 'director_list' %}">Director Mapping</a>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    {% endif %}
-  </div>
-  {{ client_type_counts|json_script:"dashboard-client-types" }}
-{% endblock %}
-
-{% block extra_js %}
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script>
-    (function () {
-      function safeParse(jsonText, fallback) {
-        try {
-          return JSON.parse(jsonText);
-        } catch (e) {
-          return fallback;
-        }
-      }
-
-      var el = document.getElementById("dashboard-client-types");
-      var clientCounts = el ? safeParse(el.textContent || "[]", []) : [];
-      var typeLabels = clientCounts.map(function (r) {
-        return r.client_type || "—";
-      });
-      var typeValues = clientCounts.map(function (r) {
-        return r.count;
-      });
-
-      var ctx1 = document.getElementById("clientTypeChart");
-      if (ctx1 && window.Chart && typeValues.length) {
-        new Chart(ctx1, {
-          type: "doughnut",
-          data: {
-            labels: typeLabels,
-            datasets: [
-              {
-                data: typeValues,
-                backgroundColor: [
-                  "#60a5fa",
-                  "#34d399",
-                  "#fbbf24",
-                  "#fb7185",
-                  "#a78bfa",
-                  "#22c55e",
-                  "#f97316",
-                  "#94a3b8",
-                  "#0ea5e9",
-                  "#e879f9",
-                ],
-              },
-            ],
-          },
-          options: {
-            plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } },
-            cutout: "58%",
-            maintainAspectRatio: false,
-          },
-        });
-      }
-    })();
-  </script>
 {% endblock %}

@@ -226,6 +226,15 @@ def _accounts_setup_cards(user) -> tuple[SettingsCard, ...]:
                 icon_bg="settings-icon-indigo",
             )
         )
+        cards.append(
+            SettingsCard(
+                title="Old books import",
+                description="One-time: import vouchers from the previous software, keeping their original numbers.",
+                url_name="accounts_voucher_books_bulk_import",
+                icon="bi-upload",
+                icon_bg="settings-icon-amber",
+            )
+        )
     return tuple(cards)
 
 
@@ -250,7 +259,7 @@ def _general_setup_cards(user) -> tuple[SettingsCard, ...]:
     return (
         SettingsCard(
             title="Company branding",
-            description="Set your firm name and logo shown above CA Office Suite in the sidebar and login page.",
+            description="Firm name, logo, and layout colours for the sidebar, buttons, and dashboard charts.",
             url_name="site_settings_edit",
             icon="bi-building",
             icon_bg="settings-icon-blue",
