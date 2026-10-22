@@ -93,8 +93,8 @@ from .services import (
     cash_equivalent_ledgers,
     is_sundry_creditor,
     is_sundry_debtor,
+    line_account_ledgers,
     money,
-    non_cash_ledgers,
     outstanding_bills_for_account,
     pending_recovery_rows,
     outstanding_party_bills_for_note,
@@ -851,7 +851,8 @@ def voucher_books_bulk_import(request):
             "import_page_title": "Old books — Bulk upload (CSV)",
             "import_description": (
                 "Import vouchers from the previous software from 01-04-2026 to cutover. "
-                "Keep the old NUMBER on every line of the same voucher. This does not use this software's "
+                "Keep the old NUMBER on every line of the same voucher. The same NUMBER may be used on "
+                "different voucher types (Receipt 1 and Sales 1). This does not use this software's "
                 "GST/NGST monthly serial — new vouchers posted here still start at 00001. "
                 "Create Account Ledgers first. One CSV row per debit or credit line. "
                 "Bill-wise receipt knock-off is not imported."
@@ -1338,13 +1339,7 @@ def _save_voucher(request, voucher=None):
             ],
             "line_account_options": [
                 {"id": a.pk, "label": a.name, "search": a.name}
-                for a in (
-                    non_cash_ledgers()
-                    if vtype == VOUCHER_PAYMENT
-                    else cash_equivalent_ledgers()
-                    if vtype == VOUCHER_CONTRA
-                    else Account.objects.filter(is_active=True).order_by("name")
-                )
+                for a in line_account_ledgers(vtype)
             ],
             "company_gstin": (getattr(get_site_settings(), "gstin", None) or "").strip().upper(),
             "company_address": (getattr(get_site_settings(), "address", None) or "").strip(),

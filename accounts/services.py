@@ -202,6 +202,70 @@ def non_cash_ledgers():
     return Account.objects.filter(is_active=True).exclude(pk__in=cash_ids).order_by("name")
 
 
+def task_master_ledgers():
+    """Active ledgers that match a Task Master name or sit under its account group."""
+    from django.db.models.functions import Lower
+
+    from tasks.models import TaskMaster
+
+    names = {
+        (name or "").strip().lower()
+        for name in TaskMaster.objects.values_list("name", flat=True)
+        if (name or "").strip()
+    }
+    if not names:
+        return Account.objects.none()
+    return (
+        Account.objects.filter(is_active=True)
+        .annotate(_name_l=Lower("name"), _group_l=Lower("group__name"))
+        .filter(Q(_name_l__in=names) | Q(_group_l__in=names))
+        .distinct()
+        .order_by("name")
+    )
+
+
+def capital_ledgers():
+    """Active ledgers under Capital / Capital Account (liabilities)."""
+    name_q = (
+        Q(group__name__iexact="Capital")
+        | Q(group__name__iexact="Capital Account")
+        | Q(group__parent__name__iexact="Capital")
+        | Q(group__parent__name__iexact="Capital Account")
+        | Q(group__name__icontains="capital")
+        | Q(group__parent__name__icontains="capital")
+    )
+    return (
+        Account.objects.filter(is_active=True, group__main_head=HEAD_LIABILITIES)
+        .filter(name_q)
+        .distinct()
+        .order_by("name")
+    )
+
+
+def receipt_account_ledgers():
+    """Receipt Account tab: Sundry Debtors plus Capital ledgers."""
+    return (sundry_debtors_ledgers() | capital_ledgers()).distinct().order_by("name")
+
+
+def payment_account_ledgers():
+    """Payment Account tab: non-cash ledgers excluding Sundry Debtors."""
+    debtor_ids = sundry_debtors_ledgers().values_list("pk", flat=True)
+    return non_cash_ledgers().exclude(pk__in=debtor_ids)
+
+
+def line_account_ledgers(voucher_type: str | None):
+    """Account-tab ledgers for invoice-style vouchers."""
+    if voucher_type == VOUCHER_SALES:
+        return task_master_ledgers()
+    if voucher_type == VOUCHER_RECEIPT:
+        return receipt_account_ledgers()
+    if voucher_type == VOUCHER_PAYMENT:
+        return payment_account_ledgers()
+    if voucher_type == VOUCHER_CONTRA:
+        return cash_equivalent_ledgers()
+    return Account.objects.filter(is_active=True).order_by("name")
+
+
 def build_receipt_lines(*, mode: Account, items: list[dict]) -> list[dict]:
     """Debit mode of receipt for the total; credit each selected account."""
     if mode is None:
@@ -1428,8 +1492,12 @@ def post_voucher(
     if requested:
         if len(requested) > 40:
             raise ValidationError("Voucher number cannot be longer than 40 characters.")
-        if Voucher.objects.filter(number=requested).exists():
-            raise ValidationError(f"Voucher number {requested} already exists.")
+        if Voucher.objects.filter(
+            voucher_type=voucher_type, series=series, number=requested
+        ).exists():
+            raise ValidationError(
+                f"Voucher number {requested} already exists for this voucher type."
+            )
         number = requested
     else:
         number = allocate_voucher_number(series, voucher_date)

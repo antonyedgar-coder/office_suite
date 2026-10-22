@@ -696,11 +696,6 @@
         var lineAccountEl = document.getElementById("line-account-options");
         lineAccountOpts = lineAccountEl ? JSON.parse(lineAccountEl.textContent || "[]") : [];
       } catch (e) { lineAccountOpts = []; }
-      if (!lineAccountOpts.length) {
-        Object.keys(meta).forEach(function (id) {
-          lineAccountOpts.push({ id: id, label: (meta[id] && meta[id].name) || id, search: (meta[id] && meta[id].name) || "" });
-        });
-      }
       var accountFloat = document.createElement("div");
       accountFloat.className = "task-suggest-list invoice-account-float border rounded shadow-sm";
       document.body.appendChild(accountFloat);

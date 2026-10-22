@@ -477,28 +477,32 @@ def _find_ledger(name: str) -> Account | None:
     return None
 
 
-def _annotate_voucher_group_errors(rows: list[ParsedRow]) -> None:
-    grouped: dict[str, list[ParsedRow]] = defaultdict(list)
-    for row in rows:
-        number = (row.data.get("number") or "").strip()
-        if number:
-            grouped[number].append(row)
-    existing = set(
-        Voucher.objects.filter(number__in=grouped.keys()).values_list("number", flat=True)
+def _voucher_book_key(data: dict) -> tuple[str, str, str]:
+    return (
+        data.get("voucher_type") or "",
+        data.get("series") or "",
+        (data.get("number") or "").strip(),
     )
-    for number, members in grouped.items():
+
+
+def _annotate_voucher_group_errors(rows: list[ParsedRow]) -> None:
+    grouped: dict[tuple[str, str, str], list[ParsedRow]] = defaultdict(list)
+    for row in rows:
+        key = _voucher_book_key(row.data)
+        if key[2]:
+            grouped[key].append(row)
+    existing = set(
+        Voucher.objects.filter(number__in={key[2] for key in grouped}).values_list(
+            "voucher_type", "series", "number"
+        )
+    )
+    for key, members in grouped.items():
         if any(m.errors for m in members):
             continue
         extra: list[str] = []
         dates = {m.data["date"] for m in members}
-        types = {m.data["voucher_type"] for m in members}
-        series = {m.data.get("series") for m in members}
         if len(dates) > 1:
-            extra.append("All rows for this NUMBER must use the same DATE.")
-        if len(types) > 1:
-            extra.append("All rows for this NUMBER must use the same VOUCHER_TYPE.")
-        if len(series) > 1:
-            extra.append("All rows for this NUMBER must use the same SERIES.")
+            extra.append("All rows for this NUMBER and voucher type must use the same DATE.")
         debit = sum((m.data.get("debit") or Decimal("0.00") for m in members), Decimal("0.00"))
         credit = sum((m.data.get("credit") or Decimal("0.00") for m in members), Decimal("0.00"))
         filled = [
@@ -510,22 +514,22 @@ def _annotate_voucher_group_errors(rows: list[ParsedRow]) -> None:
             extra.append("Each voucher needs at least two debit/credit lines.")
         if debit != credit:
             extra.append("Total debit must equal total credit for this NUMBER.")
-        if number in existing:
-            extra.append(f"Voucher number already exists: {number}")
+        if key in existing:
+            extra.append(f"Voucher number already exists: {key[2]}")
         for m in members:
             m.errors.extend(extra)
 
 
 def grouped_voucher_books(rows: list[ParsedRow]) -> list[dict]:
-    grouped: dict[str, list[ParsedRow]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str], list[ParsedRow]] = defaultdict(list)
     for row in rows:
-        grouped[row.data["number"]].append(row)
+        grouped[_voucher_book_key(row.data)].append(row)
     out = []
-    for number, members in grouped.items():
+    for _key, members in grouped.items():
         first = members[0]
         out.append(
             {
-                "number": number,
+                "number": first.data["number"],
                 "date": first.data["date"],
                 "voucher_type": first.data["voucher_type"],
                 "series": first.data.get("series"),
@@ -592,6 +596,10 @@ def parse_voucher_books_csv(csv_bytes: bytes) -> tuple[list[ParsedRow], list[str
             series = _TYPE_SERIES_HINTS.get((raw_type or "").strip().lower())
         if voucher_type == VOUCHER_SALES and not series:
             errors.append("SERIES is required for Sales (GST or NGST).")
+        elif series is None and voucher_type:
+            from .services import default_series_for_type
+
+            series = default_series_for_type(voucher_type)
         try:
             debit = _parse_decimal(_row_value(raw, header_map, "DEBIT"), "DEBIT") or Decimal("0.00")
             credit = _parse_decimal(_row_value(raw, header_map, "CREDIT"), "CREDIT") or Decimal("0.00")

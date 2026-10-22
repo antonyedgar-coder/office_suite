@@ -329,16 +329,21 @@ class InvoiceItemForm(forms.Form):
 
     def __init__(self, *args, voucher_type=None, **kwargs):
         super().__init__(*args, **kwargs)
-        from .services import non_cash_ledgers
+        from .services import line_account_ledgers
 
-        if voucher_type == VOUCHER_PAYMENT:
-            self.fields["account"].queryset = non_cash_ledgers()
-        elif voucher_type == VOUCHER_CONTRA:
-            from .services import cash_equivalent_ledgers
-
-            self.fields["account"].queryset = cash_equivalent_ledgers()
-        else:
-            self.fields["account"].queryset = Account.objects.filter(is_active=True).order_by("name")
+        qs = line_account_ledgers(voucher_type)
+        extra_pk = None
+        if self.is_bound:
+            raw = self.data.get(self.add_prefix("account"))
+            if raw:
+                extra_pk = raw
+        elif self.initial.get("account"):
+            current = self.initial["account"]
+            extra_pk = getattr(current, "pk", current)
+        ids = list(qs.values_list("pk", flat=True))
+        if extra_pk:
+            ids.append(extra_pk)
+        self.fields["account"].queryset = Account.objects.filter(pk__in=ids).order_by("name")
         self.fields["account"].empty_label = "Select account"
         self.fields["account"].label = "Account"
         self.fields["amount"].label = "Amount"

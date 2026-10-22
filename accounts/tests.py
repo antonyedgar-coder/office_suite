@@ -46,8 +46,13 @@ from accounts.services import (
     build_invoice_lines,
     build_payment_lines,
     build_receipt_lines,
+    capital_ledgers,
     cash_equivalent_ledgers,
+    line_account_ledgers,
     non_cash_ledgers,
+    payment_account_ledgers,
+    receipt_account_ledgers,
+    task_master_ledgers,
     outstanding_bills_for_account,
     outstanding_party_bills_for_note,
     outstanding_purchase_bills_for_account,
@@ -1373,6 +1378,78 @@ class AccountsModuleTests(TestCase):
         self.assertIn(buyer_sub.name, names)
         self.assertNotIn(other.name, names)
 
+    def test_sales_account_tab_is_task_master_ledgers_only(self):
+        seed_chart_of_accounts()
+        income = AccountGroup.objects.get(system_key="income")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        master_group = AccountGroup.objects.create(
+            name=self.master.name,
+            parent=income,
+            main_head="income",
+        )
+        master_ledger = Account.objects.create(name=self.master.name, group=income)
+        task_named = Account.objects.create(name="GSTR-1 Apr 2026", group=master_group)
+        rent = Account.objects.create(name="Office rent sales", group=expenses)
+        income_other = Account.objects.create(name="Professional income", group=income)
+        names = set(InvoiceItemForm(voucher_type="sales").fields["account"].queryset.values_list("name", flat=True))
+        self.assertIn(master_ledger.name, names)
+        self.assertIn(task_named.name, names)
+        self.assertNotIn(rent.name, names)
+        self.assertNotIn(income_other.name, names)
+        self.assertEqual(
+            set(task_master_ledgers().values_list("name", flat=True)),
+            {master_ledger.name, task_named.name},
+        )
+
+    def test_receipt_account_tab_is_debtors_and_capital_only(self):
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        liabilities = AccountGroup.objects.get(system_key="liabilities")
+        income = AccountGroup.objects.get(system_key="income")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        debtors = AccountGroup.objects.create(name="Sundry Debtors", parent=assets, main_head="assets")
+        capital = AccountGroup.objects.create(name="Capital Account", parent=liabilities, main_head="liabilities")
+        buyer = Account.objects.create(name="Receipt buyer", group=debtors)
+        proprietor = Account.objects.create(name="Proprietor capital", group=capital)
+        fees = Account.objects.create(name="Receipt fees", group=income)
+        rent = Account.objects.create(name="Receipt rent", group=expenses)
+        names = set(InvoiceItemForm(voucher_type="receipt").fields["account"].queryset.values_list("name", flat=True))
+        self.assertIn(buyer.name, names)
+        self.assertIn(proprietor.name, names)
+        self.assertNotIn(fees.name, names)
+        self.assertNotIn(rent.name, names)
+        self.assertIn(proprietor.name, set(capital_ledgers().values_list("name", flat=True)))
+        receipt_names = set(receipt_account_ledgers().values_list("name", flat=True))
+        self.assertIn(buyer.name, receipt_names)
+        self.assertIn(proprietor.name, receipt_names)
+        self.assertNotIn(fees.name, receipt_names)
+        self.assertNotIn(rent.name, receipt_names)
+
+    def test_payment_account_tab_excludes_sundry_debtors(self):
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        cash_group = AccountGroup.objects.create(
+            name="Cash and Cash Equivalents",
+            parent=assets,
+            main_head="assets",
+        )
+        debtors = AccountGroup.objects.create(name="Sundry Debtors", parent=assets, main_head="assets")
+        bank = Account.objects.create(name="Payment bank", group=cash_group)
+        buyer = Account.objects.create(name="Payment buyer", group=debtors)
+        rent = Account.objects.create(name="Payment rent", group=expenses)
+        names = set(InvoiceItemForm(voucher_type="payment").fields["account"].queryset.values_list("name", flat=True))
+        self.assertIn(rent.name, names)
+        self.assertNotIn(buyer.name, names)
+        self.assertNotIn(bank.name, names)
+        self.assertIn(rent.name, set(non_cash_ledgers().values_list("name", flat=True)))
+        self.assertIn(buyer.name, set(non_cash_ledgers().values_list("name", flat=True)))
+        payment_names = set(payment_account_ledgers().values_list("name", flat=True))
+        self.assertIn(rent.name, payment_names)
+        self.assertNotIn(buyer.name, payment_names)
+        self.assertNotIn(bank.name, payment_names)
+        self.assertEqual(payment_names, set(line_account_ledgers("payment").values_list("name", flat=True)))
+
     def test_sales_invoice_print_summarises_gst_by_rate(self):
         income = _posting_ledgers()
         income.gst_rate = Decimal("18.00")
@@ -1781,6 +1858,50 @@ class LegacyVoucherBooksImportTests(TestCase):
         )
         rows, _ = parse_voucher_books_csv(self._journal_csv())
         self.assertTrue(any("already exists" in e for e in rows[0].errors))
+
+    def test_same_number_allowed_across_voucher_types(self):
+        from accounts.csv_import import grouped_voucher_books, parse_voucher_books_csv
+        from accounts.services import import_legacy_vouchers
+
+        csv_bytes = (
+            "DATE,VOUCHER_TYPE,NUMBER,NARRATION,ACCOUNT,DEBIT,CREDIT,SERIES\r\n"
+            "01-04-2026,Receipt,1,Fee received,Cash,1000.00,,RV\r\n"
+            "01-04-2026,Receipt,1,Fee received,ABC Traders,,1000.00,RV\r\n"
+            "02-04-2026,GST,1,Fees,ABC Traders,1180.00,,GST\r\n"
+            "02-04-2026,GST,1,Fees,Professional income,,1000.00,GST\r\n"
+            "02-04-2026,GST,1,Fees,GST output,,180.00,GST\r\n"
+            "03-04-2026,NGST,1,Fees,ABC Traders,500.00,,NGST\r\n"
+            "03-04-2026,NGST,1,Fees,Professional income,,500.00,NGST\r\n"
+        ).encode("utf-8")
+        rows, errors = parse_voucher_books_csv(csv_bytes)
+        self.assertEqual(errors, [])
+        self.assertTrue(all(not r.errors for r in rows))
+        books = grouped_voucher_books(rows)
+        self.assertEqual(len(books), 3)
+        created = import_legacy_vouchers(rows=rows, actor=self.admin)
+        self.assertEqual(created, 3)
+        self.assertEqual(Voucher.objects.filter(number="1").count(), 3)
+        receipt = Voucher.objects.get(number="1", voucher_type="receipt")
+        gst = Voucher.objects.get(number="1", voucher_type="sales", series=SERIES_GST)
+        ngst = Voucher.objects.get(number="1", voucher_type="sales", series=SERIES_NGST)
+        self.assertEqual(receipt.series, "RV")
+        self.assertEqual(gst.lines.count(), 3)
+        self.assertEqual(ngst.lines.count(), 2)
+
+    def test_same_number_same_type_is_still_rejected(self):
+        from accounts.csv_import import parse_voucher_books_csv
+        from accounts.services import import_legacy_vouchers
+
+        first = (
+            "DATE,VOUCHER_TYPE,NUMBER,NARRATION,ACCOUNT,DEBIT,CREDIT,SERIES\r\n"
+            "01-04-2026,Receipt,1,Fee received,Cash,1000.00,,RV\r\n"
+            "01-04-2026,Receipt,1,Fee received,ABC Traders,,1000.00,RV\r\n"
+        ).encode("utf-8")
+        rows, errors = parse_voucher_books_csv(first)
+        self.assertEqual(errors, [])
+        import_legacy_vouchers(rows=rows, actor=self.admin)
+        again, _ = parse_voucher_books_csv(first)
+        self.assertTrue(any("already exists" in e for e in again[0].errors))
 
     def test_confirm_import_posts_old_number(self):
         csv_bytes = self._journal_csv()

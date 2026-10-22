@@ -256,7 +256,7 @@ class InvoiceNumberSeq(models.Model):
 class Voucher(models.Model):
     voucher_type = models.CharField(max_length=20, choices=VOUCHER_TYPE_CHOICES)
     series = models.CharField(max_length=8, choices=SERIES_CHOICES)
-    number = models.CharField(max_length=40, unique=True)
+    number = models.CharField(max_length=40)
     date = models.DateField()
     narration = models.CharField(max_length=500, blank=True)
     tasks = models.ManyToManyField("tasks.Task", blank=True, related_name="accounts_vouchers")
@@ -280,6 +280,12 @@ class Voucher(models.Model):
 
     class Meta:
         ordering = ["-date", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["voucher_type", "series", "number"],
+                name="accounts_voucher_type_series_number_uniq",
+            ),
+        ]
         permissions = [
             ("post_voucher", "Can post accounts vouchers"),
             ("view_accounts_reports", "Can view accounts reports"),
