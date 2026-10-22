@@ -51,10 +51,16 @@ from .models import (
     REGISTER_TABS,
     REGISTER_TYPE_KEYS,
     SALES_INVOICE_GST,
+    SALES_INVOICE_GST_B2C,
+    SALES_INVOICE_NGST,
     SALES_INVOICE_KEYS,
     SALES_INVOICE_TABS,
     SERIES_GST,
+    SERIES_GST_B2C,
     SERIES_NGST,
+    sales_series_uses_gst,
+    series_for_sales_tax_kind,
+    tax_kind_for_sales_series,
     VOUCHER_CONTRA,
     VOUCHER_CREDIT_NOTE,
     VOUCHER_DEBIT_NOTE,
@@ -879,6 +885,9 @@ def voucher_books_bulk_import_template(request):
             ["02-04-2026", "GST", "INV/24-25/001", "Fees", "ABC Traders", "1180.00", "", "GST"],
             ["02-04-2026", "GST", "INV/24-25/001", "Fees", "Professional income", "", "1000.00", "GST"],
             ["02-04-2026", "GST", "INV/24-25/001", "Fees", "GST output", "", "180.00", "GST"],
+            ["03-04-2026", "GST-B2C", "12", "Walk-in fees", "ABC Traders", "590.00", "", "GSTB2C"],
+            ["03-04-2026", "GST-B2C", "12", "Walk-in fees", "Professional income", "", "500.00", "GSTB2C"],
+            ["03-04-2026", "GST-B2C", "12", "Walk-in fees", "GST output", "", "90.00", "GSTB2C"],
         ],
     )
 
@@ -1051,7 +1060,9 @@ def _entry_initials(voucher: Voucher) -> dict:
                     used_allocs.add(alloc.pk)
                     break
             items.append({"account": ln.account_id, "amount": money(ln.credit), "recovery_line": rec_id})
-        tax_kind = "gst" if voucher.series == SERIES_GST or has_gst else "ngst"
+        tax_kind = tax_kind_for_sales_series(voucher.series)
+        if tax_kind == "ngst" and (voucher.series == SERIES_GST or has_gst):
+            tax_kind = "gst"
     elif vtype == VOUCHER_PURCHASE:
         party_line = next((ln for ln in lines if money(ln.credit) > 0), None)
         party = party_line.account if party_line else None
@@ -1163,6 +1174,7 @@ def _save_voucher(request, voucher=None):
             linked_tasks = [linked_task] if linked_task else []
             try:
                 items = None
+                tax_kind = None
                 if amount_entry:
                     items = [
                         {
@@ -1175,9 +1187,11 @@ def _save_voucher(request, voucher=None):
                         if row and not row.get("DELETE")
                     ]
                     with_gst = False
+                    tax_kind = None
                     if invoice_mode:
                         if vtype == VOUCHER_SALES:
-                            with_gst = party_form.cleaned_data.get("tax_kind") == "gst"
+                            tax_kind = party_form.cleaned_data.get("tax_kind")
+                            with_gst = sales_series_uses_gst(series_for_sales_tax_kind(tax_kind))
                         line_rows = build_invoice_lines(
                             voucher_type=vtype,
                             party=party_form.cleaned_data["party"],
@@ -1249,6 +1263,7 @@ def _save_voucher(request, voucher=None):
                         lines=line_rows,
                         actor=request.user,
                         with_gst=with_gst,
+                        tax_kind=tax_kind,
                         tasks=linked_tasks or None,
                         receipt_items=receipt_items,
                         on_behalf_of=on_behalf_of,
@@ -1466,14 +1481,14 @@ def unbilled_tasks(request):
         if not keys:
             messages.error(request, "Select at least one fees or recovery row.")
         elif form.is_valid():
-            with_gst = form.cleaned_data["with_gst"] == "1"
+            tax_kind = form.cleaned_data["invoice_type"]
             try:
                 created = create_invoices_from_unbilled_keys(
                     keys=keys,
                     tasks=fee_tasks,
                     actor=request.user,
                     voucher_date=form.cleaned_data["invoice_date"],
-                    with_gst=with_gst,
+                    tax_kind=tax_kind,
                 )
             except ValidationError as exc:
                 messages.error(request, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
@@ -1757,11 +1772,15 @@ def report_register(request):
     title = dict(REGISTER_TABS)[vtype]
     series = None
     if vtype == VOUCHER_SALES:
-        series = SERIES_GST if invoice_kind == SALES_INVOICE_GST else SERIES_NGST
+        series = {
+            SALES_INVOICE_GST: SERIES_GST,
+            SALES_INVOICE_GST_B2C: SERIES_GST_B2C,
+            SALES_INVOICE_NGST: SERIES_NGST,
+        }.get(invoice_kind, SERIES_GST)
         title = f"{title} — {dict(SALES_INVOICE_TABS)[invoice_kind]}"
     rows = book_register_rows(voucher_type=vtype, date_from=date_from, date_to=date_to, series=series)
     if vtype == VOUCHER_SALES:
-        column_totals = sales_register_totals(rows, gst=invoice_kind == SALES_INVOICE_GST)
+        column_totals = sales_register_totals(rows, gst=invoice_kind != SALES_INVOICE_NGST)
         total = column_totals["total"]
     else:
         column_totals = {}

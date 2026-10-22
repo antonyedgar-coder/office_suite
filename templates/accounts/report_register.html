@@ -43,7 +43,7 @@
   </div>
   <div class="card p-3">
     <div class="table-responsive">
-      {% if vtype == 'sales' and invoice_kind == 'gst' %}
+      {% if vtype == 'sales' and invoice_kind == 'gst' or vtype == 'sales' and invoice_kind == 'gst_b2c' %}
         <table class="table table-sm mb-0">
           <thead>
             <tr>

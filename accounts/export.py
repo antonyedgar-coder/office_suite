@@ -1194,7 +1194,7 @@ def _sales_ngst_row_cells(row: dict) -> list:
 
 
 def _register_layout(invoice_kind: str = "") -> dict:
-    if invoice_kind == "gst":
+    if invoice_kind in ("gst", "gst_b2c"):
         return {
             "headers": SALES_GST_HEADERS,
             "cells": _sales_gst_row_cells,

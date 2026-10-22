@@ -21,6 +21,8 @@ from .models import (
     SERIES_GST,
     SERIES_JV,
     SERIES_NGST,
+    series_for_sales_tax_kind,
+    sales_series_uses_gst,
     SERIES_PUR,
     SERIES_CV,
     SERIES_PV,
@@ -68,9 +70,9 @@ def money(value) -> Decimal:
     return Decimal(value or 0).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
-def default_series_for_type(voucher_type: str, *, with_gst: bool = False) -> str:
+def default_series_for_type(voucher_type: str, *, with_gst: bool = False, tax_kind: str | None = None) -> str:
     if voucher_type == VOUCHER_SALES:
-        return SERIES_GST if with_gst else SERIES_NGST
+        return series_for_sales_tax_kind(tax_kind, with_gst=with_gst)
     return {
         VOUCHER_PURCHASE: SERIES_PUR,
         VOUCHER_RECEIPT: SERIES_RV,
@@ -1361,7 +1363,7 @@ def sales_invoice_document(voucher: Voucher) -> dict:
     settings = get_site_settings()
     buyer_gstin = (getattr(buyer, "gstin", None) or "").strip().upper() if buyer else ""
     state_code = gstin_state_code(buyer_gstin)
-    is_gst = voucher.series == SERIES_GST or bool(tax_rows)
+    is_gst = sales_series_uses_gst(voucher.series) or bool(tax_rows)
     logo_url = reverse("site_logo") if getattr(settings, "logo", None) else ""
     return {
         "title": "TAX INVOICE" if is_gst else "INVOICE",
@@ -1479,6 +1481,7 @@ def post_voucher(
     series: str | None = None,
     number: str | None = None,
     with_gst: bool = False,
+    tax_kind: str | None = None,
     tasks=None,
     receipt_items=None,
     on_behalf_of=None,
@@ -1487,7 +1490,7 @@ def post_voucher(
     skip_recovery_assignment: bool = False,
 ) -> Voucher:
     cleaned = _validate_lines(lines)
-    series = series or default_series_for_type(voucher_type, with_gst=with_gst)
+    series = series or default_series_for_type(voucher_type, with_gst=with_gst, tax_kind=tax_kind)
     requested = (number or "").strip()
     if requested:
         if len(requested) > 40:
@@ -1826,6 +1829,7 @@ def create_sales_invoice_for_party_items(
     recoveries=None,
     voucher_date=None,
     with_gst: bool | None = None,
+    tax_kind: str | None = None,
 ) -> Voucher:
     tasks = list(tasks or [])
     recoveries = list(recoveries or [])
@@ -1845,7 +1849,10 @@ def create_sales_invoice_for_party_items(
     for task in tasks:
         if party_client_id and task.client_id != party_client_id:
             raise ValidationError("Selected rows belong to more than one client.")
-    use_gst = _invoice_use_gst(party=party, tasks=tasks, with_gst=with_gst)
+    if tax_kind:
+        use_gst = sales_series_uses_gst(series_for_sales_tax_kind(tax_kind))
+    else:
+        use_gst = _invoice_use_gst(party=party, tasks=tasks, with_gst=with_gst)
     items = [_fee_item_for_task(task, use_gst=use_gst) for task in tasks]
     seen_recoveries = set()
     for row in recoveries:
@@ -1880,6 +1887,7 @@ def create_sales_invoice_for_party_items(
         lines=lines,
         actor=actor,
         with_gst=use_gst,
+        tax_kind=tax_kind,
         tasks=tasks,
         recovery_items=items,
     )
@@ -2009,6 +2017,7 @@ def create_invoices_from_unbilled_keys(
     actor,
     voucher_date=None,
     with_gst: bool = False,
+    tax_kind: str | None = None,
 ) -> list[Voucher]:
     seen: set[str] = set()
     unique_keys = []
@@ -2058,6 +2067,7 @@ def create_invoices_from_unbilled_keys(
                 recoveries=bucket["recoveries"],
                 voucher_date=voucher_date,
                 with_gst=with_gst,
+                tax_kind=tax_kind,
             )
         )
     return created
@@ -2184,7 +2194,7 @@ def book_register_rows(*, voucher_type: str, date_from=None, date_to=None, serie
         qs = qs.filter(date__gte=date_from)
     if date_to:
         qs = qs.filter(date__lte=date_to)
-    sales_gst = voucher_type == VOUCHER_SALES and series == SERIES_GST
+    sales_gst = voucher_type == VOUCHER_SALES and sales_series_uses_gst(series)
     sales_ngst = voucher_type == VOUCHER_SALES and series == SERIES_NGST
     rows = []
     for voucher in qs:

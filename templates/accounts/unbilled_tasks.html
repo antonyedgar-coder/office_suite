@@ -2,7 +2,7 @@
 {% block title %}Bill not raised — CA Office Suite{% endblock %}
 {% block page_title %}Bill not raised{% endblock %}
 {% block content %}
-  {% include "includes/page_header.html" with title="Bill not raised" subtitle="Raise fees and reimbursed expenses from this list. Rows for the same client go on one invoice. A separate invoice is created only when another client is also selected. GST vs non-GST uses separate number series." %}
+  {% include "includes/page_header.html" with title="Bill not raised" subtitle="Raise fees and reimbursed expenses from this list. Rows for the same client go on one invoice. A separate invoice is created only when another client is also selected. GST-B2B, GST-B2C, and Non-GST use separate number series." %}
   <form id="unbilled-search-form" method="get" class="d-none"></form>
   <form method="post">
     {% csrf_token %}
@@ -20,7 +20,7 @@
         />
       </div>
       <div class="col-md-3"><label class="form-label" for="{{ form.invoice_date.id_for_label }}">Invoice date</label>{{ form.invoice_date }}</div>
-      <div class="col-md-3"><label class="form-label" for="{{ form.with_gst.id_for_label }}">Series</label>{{ form.with_gst }}</div>
+      <div class="col-md-3"><label class="form-label" for="{{ form.invoice_type.id_for_label }}">Series</label>{{ form.invoice_type }}</div>
       <div class="col-md-3 d-flex gap-2">
         <button class="btn btn-outline-secondary" type="submit" form="unbilled-search-form">Search</button>
         <button class="btn btn-primary" type="submit">Create invoice</button>

@@ -15,6 +15,7 @@ from .models import (
     MAIN_HEAD_CHOICES,
     SERIES_CHOICES,
     SERIES_GST,
+    SERIES_GST_B2C,
     SERIES_NGST,
     VOUCHER_SALES,
     VOUCHER_TABS,
@@ -409,6 +410,13 @@ _TYPE_BY_TAB = {label.lower(): key for key, label in VOUCHER_TABS}
 _TYPE_ALIASES = {
     "gst": VOUCHER_SALES,
     "gst invoice": VOUCHER_SALES,
+    "gst-b2b": VOUCHER_SALES,
+    "gst b2b": VOUCHER_SALES,
+    "gstb2b": VOUCHER_SALES,
+    "gst-b2c": VOUCHER_SALES,
+    "gst b2c": VOUCHER_SALES,
+    "gstb2c": VOUCHER_SALES,
+    "b2c": VOUCHER_SALES,
     "non gst": VOUCHER_SALES,
     "non-gst": VOUCHER_SALES,
     "ngst": VOUCHER_SALES,
@@ -425,6 +433,13 @@ _TYPE_ALIASES = {
 _TYPE_SERIES_HINTS = {
     "gst": SERIES_GST,
     "gst invoice": SERIES_GST,
+    "gst-b2b": SERIES_GST,
+    "gst b2b": SERIES_GST,
+    "gstb2b": SERIES_GST,
+    "gst-b2c": SERIES_GST_B2C,
+    "gst b2c": SERIES_GST_B2C,
+    "gstb2c": SERIES_GST_B2C,
+    "b2c": SERIES_GST_B2C,
     "non gst": SERIES_NGST,
     "non-gst": SERIES_NGST,
     "ngst": SERIES_NGST,
@@ -461,7 +476,18 @@ def _resolve_series(v: str) -> str | None:
     s = (v or "").strip()
     if not s:
         return None
-    key = _SERIES_BY_KEY.get(s.lower()) or _SERIES_BY_LABEL.get(s.lower())
+    key = (
+        _SERIES_BY_KEY.get(s.lower())
+        or _SERIES_BY_LABEL.get(s.lower())
+        or {
+            "gst-b2c": SERIES_GST_B2C,
+            "gst b2c": SERIES_GST_B2C,
+            "b2c": SERIES_GST_B2C,
+            "gst-b2b": SERIES_GST,
+            "gst b2b": SERIES_GST,
+            "b2b": SERIES_GST,
+        }.get(s.lower())
+    )
     if not key:
         labels = ", ".join(code for code, _label in SERIES_CHOICES)
         raise ValueError(f"SERIES must be one of: {labels}.")
@@ -595,7 +621,7 @@ def parse_voucher_books_csv(csv_bytes: bytes) -> tuple[list[ParsedRow], list[str
         if series is None:
             series = _TYPE_SERIES_HINTS.get((raw_type or "").strip().lower())
         if voucher_type == VOUCHER_SALES and not series:
-            errors.append("SERIES is required for Sales (GST or NGST).")
+            errors.append("SERIES is required for Sales (GST, GSTB2C, or NGST).")
         elif series is None and voucher_type:
             from .services import default_series_for_type
 

@@ -268,7 +268,7 @@ class InvoicePartyForm(forms.Form):
         widget=forms.HiddenInput(attrs={"id": "id_party"}),
     )
     tax_kind = forms.ChoiceField(
-        choices=(("gst", "GST"), ("ngst", "NON GST")),
+        choices=(("gst", "GST-B2B"), ("gst_b2c", "GST-B2C"), ("ngst", "NON GST")),
         widget=forms.HiddenInput(),
         initial="ngst",
         required=False,
@@ -377,14 +377,14 @@ class UnbilledInvoiceForm(forms.Form):
     invoice_date = forms.DateField(
         widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
     )
-    with_gst = forms.TypedChoiceField(
+    invoice_type = forms.ChoiceField(
         choices=(
-            ("1", "GST series"),
-            ("0", "Non-GST series"),
+            ("gst", "GST-B2B"),
+            ("gst_b2c", "GST-B2C"),
+            ("ngst", "Non-GST"),
         ),
-        coerce=str,
         widget=forms.Select(attrs={"class": "form-select"}),
-        initial="1",
+        initial="gst",
     )
 
     def __init__(self, *args, **kwargs):

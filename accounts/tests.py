@@ -14,6 +14,7 @@ from tasks.services import complete_task, create_task_from_master, submit_task, 
 from accounts.forms import AccountForm, InvoiceItemForm, InvoicePartyForm, JournalLineFormSet
 from accounts.models import (
     SERIES_GST,
+    SERIES_GST_B2C,
     SERIES_NGST,
     SERIES_PUR,
     VOUCHER_TABS,
@@ -948,7 +949,54 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(n1, "GST/2026/10/00001")
         self.assertEqual(n2, "NGST/2026/10/00001")
         self.assertEqual(n3, "GST/2026/10/00002")
+        self.assertEqual(allocate_voucher_number(SERIES_GST_B2C, d), "GSTB2C/2026/10/00001")
         self.assertEqual(allocate_voucher_number(SERIES_PUR, d), "PUR/2026/10/00001")
+
+    def test_sales_gst_b2c_uses_separate_series(self):
+        income = _posting_ledgers()
+        income.gst_rate = Decimal("18.00")
+        income.save(update_fields=["gst_rate"])
+        SiteSettings.objects.update_or_create(
+            pk=1,
+            defaults={"gstin": "32AAAAA0000A1Z5", "address": "Trivandrum"},
+        )
+        buyer = sync_client_account(self.client_row)
+        form = InvoicePartyForm(voucher_type="sales")
+        self.assertEqual(
+            [key for key, _label in form.fields["tax_kind"].choices],
+            ["gst", "gst_b2c", "ngst"],
+        )
+        lines = build_invoice_lines(
+            voucher_type="sales",
+            party=buyer,
+            items=[{"account": income, "amount": Decimal("1000.00")}],
+            with_gst=True,
+        )
+        voucher = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 15),
+            lines=lines,
+            actor=self.admin,
+            tax_kind="gst_b2c",
+        )
+        self.assertEqual(voucher.series, SERIES_GST_B2C)
+        self.assertTrue(voucher.number.startswith("GSTB2C/"))
+        b2b = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 15),
+            lines=lines,
+            actor=self.admin,
+            tax_kind="gst",
+        )
+        self.assertEqual(b2b.series, SERIES_GST)
+        self.assertTrue(b2b.number.startswith("GST/"))
+        b2c_rows = book_register_rows(
+            voucher_type="sales",
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+            series=SERIES_GST_B2C,
+        )
+        self.assertEqual([row["number"] for row in b2c_rows], [voucher.number])
 
     def test_sales_and_purchase_party_amounts(self):
         income = _posting_ledgers()
@@ -1887,6 +1935,31 @@ class LegacyVoucherBooksImportTests(TestCase):
         self.assertEqual(receipt.series, "RV")
         self.assertEqual(gst.lines.count(), 3)
         self.assertEqual(ngst.lines.count(), 2)
+
+    def test_import_gst_b2c_uses_own_series(self):
+        from accounts.csv_import import grouped_voucher_books, parse_voucher_books_csv
+        from accounts.services import import_legacy_vouchers
+
+        csv_bytes = (
+            "DATE,VOUCHER_TYPE,NUMBER,NARRATION,ACCOUNT,DEBIT,CREDIT,SERIES\r\n"
+            "03-04-2026,GST-B2C,12,Walk-in,ABC Traders,590.00,,GSTB2C\r\n"
+            "03-04-2026,GST-B2C,12,Walk-in,Professional income,,500.00,GSTB2C\r\n"
+            "03-04-2026,GST-B2C,12,Walk-in,GST output,,90.00,GSTB2C\r\n"
+            "03-04-2026,GST,12,B2B fees,ABC Traders,1180.00,,GST\r\n"
+            "03-04-2026,GST,12,B2B fees,Professional income,,1000.00,GST\r\n"
+            "03-04-2026,GST,12,B2B fees,GST output,,180.00,GST\r\n"
+        ).encode("utf-8")
+        rows, errors = parse_voucher_books_csv(csv_bytes)
+        self.assertEqual(errors, [])
+        self.assertTrue(all(not r.errors for r in rows))
+        self.assertEqual(len(grouped_voucher_books(rows)), 2)
+        created = import_legacy_vouchers(rows=rows, actor=self.admin)
+        self.assertEqual(created, 2)
+        b2c = Voucher.objects.get(number="12", voucher_type="sales", series=SERIES_GST_B2C)
+        b2b = Voucher.objects.get(number="12", voucher_type="sales", series=SERIES_GST)
+        self.assertEqual(b2c.date, date(2026, 4, 3))
+        self.assertEqual(b2b.lines.count(), 3)
+        self.assertEqual(InvoiceNumberSeq.objects.count(), 0)
 
     def test_same_number_same_type_is_still_rejected(self):
         from accounts.csv_import import parse_voucher_books_csv
@@ -3095,7 +3168,7 @@ class PaymentRecoveryTests(TestCase):
             {
                 "item": f"recovery:{pending['id']}",
                 "invoice_date": "2026-07-12",
-                "with_gst": "0",
+                "invoice_type": "ngst",
             },
         )
         self.assertEqual(response.status_code, 302)

@@ -56,9 +56,11 @@ REGISTER_TABS = [
     (VOUCHER_DEBIT_NOTE, "DN Register"),
 ]
 SALES_INVOICE_GST = "gst"
+SALES_INVOICE_GST_B2C = "gst_b2c"
 SALES_INVOICE_NGST = "ngst"
 SALES_INVOICE_TABS = [
-    (SALES_INVOICE_GST, "GST Invoice"),
+    (SALES_INVOICE_GST, "GST-B2B Invoice"),
+    (SALES_INVOICE_GST_B2C, "GST-B2C Invoice"),
     (SALES_INVOICE_NGST, "Non GST Invoice"),
 ]
 SALES_INVOICE_KEYS = {key for key, _ in SALES_INVOICE_TABS}
@@ -66,6 +68,7 @@ VOUCHER_TYPE_KEYS = {key for key, _ in VOUCHER_TYPE_CHOICES}
 REGISTER_TYPE_KEYS = {key for key, _ in REGISTER_TABS}
 
 SERIES_GST = "GST"
+SERIES_GST_B2C = "GSTB2C"
 SERIES_NGST = "NGST"
 SERIES_PUR = "PUR"
 SERIES_RV = "RV"
@@ -75,7 +78,8 @@ SERIES_JV = "JV"
 SERIES_CN = "CN"
 SERIES_DN = "DN"
 SERIES_CHOICES = [
-    (SERIES_GST, "GST invoice"),
+    (SERIES_GST, "GST-B2B invoice"),
+    (SERIES_GST_B2C, "GST-B2C invoice"),
     (SERIES_NGST, "Non-GST invoice"),
     (SERIES_PUR, "Purchase"),
     (SERIES_RV, "Receipt"),
@@ -85,6 +89,33 @@ SERIES_CHOICES = [
     (SERIES_CN, "Credit note"),
     (SERIES_DN, "Debit note"),
 ]
+GST_SALES_SERIES = frozenset({SERIES_GST, SERIES_GST_B2C})
+SALES_TAX_KIND_GST = "gst"
+SALES_TAX_KIND_GST_B2C = "gst_b2c"
+SALES_TAX_KIND_NGST = "ngst"
+
+
+def series_for_sales_tax_kind(tax_kind: str | None, *, with_gst: bool = False) -> str:
+    kind = (tax_kind or "").strip().lower().replace(" ", "").replace("_", "-")
+    if kind in {"gst-b2c", "gstb2c", "b2c"}:
+        return SERIES_GST_B2C
+    if kind in {"gst", "gst-b2b", "gstb2b", "b2b"}:
+        return SERIES_GST
+    if kind in {"ngst", "nongst", "non-gst"}:
+        return SERIES_NGST
+    return SERIES_GST if with_gst else SERIES_NGST
+
+
+def tax_kind_for_sales_series(series: str | None) -> str:
+    if series == SERIES_GST_B2C:
+        return SALES_TAX_KIND_GST_B2C
+    if series == SERIES_GST:
+        return SALES_TAX_KIND_GST
+    return SALES_TAX_KIND_NGST
+
+
+def sales_series_uses_gst(series: str | None) -> bool:
+    return series in GST_SALES_SERIES
 
 
 class AccountGroup(models.Model):

@@ -32,7 +32,7 @@
       .invoice-buyer-col { flex: 1 1 auto; min-width: 12rem; }
       .invoice-gst-col { flex: 0 0 16rem; min-width: 14rem; }
       .invoice-tax-tabs { display: inline-flex; width: auto; }
-      .invoice-tax-tabs .nav-link { min-width: 7.5rem; text-align: center; cursor: pointer; }
+      .invoice-tax-tabs .nav-link { min-width: 6.25rem; text-align: center; cursor: pointer; }
       .invoice-lines-overflow { overflow: visible !important; }
       .invoice-account-float {
         position: fixed;
@@ -200,7 +200,10 @@
           <label class="form-label">Invoice type</label>
           <ul class="nav nav-tabs invoice-tax-tabs mb-0" role="tablist">
             <li class="nav-item">
-              <button type="button" class="nav-link js-tax-tab" data-tax="gst" role="tab">GST</button>
+              <button type="button" class="nav-link js-tax-tab" data-tax="gst" role="tab">GST-B2B</button>
+            </li>
+            <li class="nav-item">
+              <button type="button" class="nav-link js-tax-tab" data-tax="gst_b2c" role="tab">GST-B2C</button>
             </li>
             <li class="nav-item">
               <button type="button" class="nav-link js-tax-tab" data-tax="ngst" role="tab">NON GST</button>
@@ -351,7 +354,7 @@
       }
       function gstSelected() {
         var el = taxKindInput();
-        return el ? el.value === "gst" : false;
+        return el ? (el.value === "gst" || el.value === "gst_b2c") : false;
       }
       function syncTaxTabs() {
         var el = taxKindInput();
