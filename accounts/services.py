@@ -2448,10 +2448,23 @@ def _pnl_blank_line() -> dict:
         "inner_display": "",
         "outer_display": "",
         "indent": 0,
+        "expandable": False,
+        "group_id": None,
+        "children": [],
     }
 
 
-def _pnl_line(kind: str, name: str, *, inner=None, outer=None, indent=0) -> dict:
+def _pnl_line(
+    kind: str,
+    name: str,
+    *,
+    inner=None,
+    outer=None,
+    indent=0,
+    expandable: bool = False,
+    group_id=None,
+    children=None,
+) -> dict:
     def cell(value):
         if value is None:
             return None, ""
@@ -2468,6 +2481,9 @@ def _pnl_line(kind: str, name: str, *, inner=None, outer=None, indent=0) -> dict
         "inner_display": inner_disp,
         "outer_display": outer_disp,
         "indent": indent,
+        "expandable": expandable,
+        "group_id": group_id,
+        "children": children or [],
     }
 
 
@@ -2571,6 +2587,32 @@ def _pnl_block_lines(title: str, items: list[dict]) -> tuple[list[dict], Decimal
     return lines, total
 
 
+def _pnl_account_group_lines(title: str, items: list[dict], *, group_id) -> tuple[list[dict], Decimal]:
+    """Always show the Account Group total; ledgers stay collapsed until expanded."""
+    items = [item for item in items if money(item.get("amount"))]
+    items.sort(key=lambda item: item["name"].lower())
+    if not items:
+        return [], Decimal("0.00")
+    total = money(sum((item["amount"] for item in items), Decimal("0.00")))
+    children = [
+        _pnl_line("ledger", item["name"], inner=item["amount"], indent=1)
+        for item in items
+    ]
+    return (
+        [
+            _pnl_line(
+                "header",
+                title,
+                outer=total,
+                expandable=True,
+                group_id=group_id,
+                children=children,
+            )
+        ],
+        total,
+    )
+
+
 def _pnl_pair_rows(left_lines: list[dict], right_lines: list[dict], left_total, right_total) -> list[dict]:
     size = max(len(left_lines), len(right_lines))
     left_lines = left_lines + [_pnl_blank_line() for _ in range(size - len(left_lines))]
@@ -2594,6 +2636,7 @@ def profit_and_loss(*, date_from=None, date_to=None):
     rows_income = []
     rows_expenses = []
     buckets = defaultdict(lambda: defaultdict(list))
+    direct_income_blocks = {}
     opening_stock = Decimal("0.00")
     closing_stock = Decimal("0.00")
     for acc in accounts:
@@ -2614,6 +2657,11 @@ def profit_and_loss(*, date_from=None, date_to=None):
         amount = _pnl_nominal_amount(row, expense=expense, date_from=date_from)
         if amount <= 0:
             continue
+        if bucket == "direct_income":
+            account_group = acc.group
+            block = direct_income_blocks.setdefault(account_group.pk, {"group": account_group, "items": []})
+            block["items"].append({"name": acc.name, "amount": amount})
+            continue
         group = _pnl_block_group(acc)
         title = group.name if not group.is_main_head() else ""
         buckets[bucket][title].append({"name": acc.name, "amount": amount})
@@ -2627,6 +2675,24 @@ def profit_and_loss(*, date_from=None, date_to=None):
             total += amount
         return lines, total
 
+    def collect_direct_income() -> tuple[list[dict], Decimal]:
+        lines = []
+        total = Decimal("0.00")
+        blocks = sorted(
+            direct_income_blocks.values(),
+            key=lambda block: (block["group"].name or "").lower(),
+        )
+        for block in blocks:
+            group = block["group"]
+            block_lines, amount = _pnl_account_group_lines(
+                group.name,
+                block["items"],
+                group_id=group.pk,
+            )
+            lines.extend(block_lines)
+            total += amount
+        return lines, total
+
     trading_left, purchase = collect("purchase")
     if opening_stock:
         trading_left.insert(0, _pnl_line("ledger", "Opening Stock", outer=opening_stock))
@@ -2634,7 +2700,7 @@ def profit_and_loss(*, date_from=None, date_to=None):
     trading_left.extend(direct_exp_lines)
     trading_left_total = money(opening_stock + purchase + direct_exp)
 
-    trading_right, direct_income = collect("direct_income")
+    trading_right, direct_income = collect_direct_income()
     if closing_stock:
         trading_right.append(_pnl_line("ledger", "Closing Stock", outer=closing_stock))
     trading_right_total = money(direct_income + closing_stock)

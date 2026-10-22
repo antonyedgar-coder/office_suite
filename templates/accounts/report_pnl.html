@@ -59,9 +59,27 @@
       border-bottom: 1px solid #111;
     }
     table.pnl-table .pnl-spacer td { height: 1rem; }
+    .pnl-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.25rem;
+      height: 1.25rem;
+      margin-right: 0.3rem;
+      vertical-align: middle;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--app-primary);
+      line-height: 1;
+    }
+    .pnl-toggle:hover { color: var(--app-primary-hover); }
+    .pnl-child-name { padding-left: 1.7rem !important; }
     @media print {
       .no-print, .sidebar, .topbar, aside, .offcanvas, .btn { display: none !important; }
       .app-shell, .content { display: block !important; width: 100% !important; padding: 0 !important; }
+      .js-pnl-child { display: table-row !important; }
+      .pnl-toggle { display: none !important; }
     }
   </style>
 {% endblock %}
@@ -115,10 +133,33 @@
               <td class="pnl-name">{{ row.left.name }}</td>
               <td class="pnl-amt text-end mono">{{ row.left.inner_display }}</td>
               <td class="pnl-amt pnl-amt-outer text-end mono">{{ row.left.outer_display }}</td>
-              <td class="pnl-name pnl-split {% if row.right.kind == 'header' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">{{ row.right.name }}</td>
+              <td class="pnl-name pnl-split {% if row.right.kind == 'header' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">
+                {% if row.right.expandable %}
+                  <button
+                    type="button"
+                    class="pnl-toggle js-pnl-toggle"
+                    data-group-id="{{ row.right.group_id }}"
+                    aria-expanded="false"
+                    aria-label="Show ledgers in {{ row.right.name }}"
+                  >
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                  </button>
+                {% endif %}
+                {{ row.right.name }}
+              </td>
               <td class="pnl-amt text-end mono">{{ row.right.inner_display }}</td>
               <td class="pnl-amt pnl-amt-outer text-end mono">{{ row.right.outer_display }}</td>
             </tr>
+            {% for child in row.right.children %}
+              <tr class="pnl-ledger js-pnl-child" data-group-id="{{ row.right.group_id }}" hidden>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td class="pnl-name pnl-split pnl-child-name">{{ child.name }}</td>
+                <td class="pnl-amt text-end mono">{{ child.inner_display }}</td>
+                <td class="pnl-amt pnl-amt-outer text-end mono"></td>
+              </tr>
+            {% endfor %}
           {% endfor %}
           <tr class="pnl-spacer">
             <td></td><td></td><td></td>
@@ -139,4 +180,21 @@
       </table>
     </div>
   </div>
+{% endblock %}
+{% block extra_js %}
+  <script>
+    document.querySelectorAll(".js-pnl-toggle").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var groupId = btn.getAttribute("data-group-id");
+        var open = btn.getAttribute("aria-expanded") === "true";
+        var next = !open;
+        btn.setAttribute("aria-expanded", next ? "true" : "false");
+        var icon = btn.querySelector("i");
+        if (icon) icon.className = next ? "bi bi-dash-lg" : "bi bi-plus-lg";
+        document.querySelectorAll('.js-pnl-child[data-group-id="' + groupId + '"]').forEach(function (row) {
+          row.hidden = !next;
+        });
+      });
+    });
+  </script>
 {% endblock %}

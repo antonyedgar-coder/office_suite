@@ -342,11 +342,22 @@ BS_AMOUNT_FORMAT = "#,##0.00;(#,##0.00)"
 
 def _pnl_side_cells(side: dict) -> list:
     side = side or {}
+    indent = int(side.get("indent") or 0)
+    name = f'{"  " * indent}{side.get("name") or ""}'
     return [
-        side.get("name") or "",
+        name,
         _amount_or_blank(side.get("inner")),
         _amount_or_blank(side.get("outer")),
     ]
+
+
+def _pnl_child_export_lines(item: dict) -> list[tuple[list, str]]:
+    lines = []
+    for child in (item.get("right") or {}).get("children") or []:
+        lines.append((["", None, None] + _pnl_side_cells(child), child.get("kind") or "ledger"))
+    for child in (item.get("left") or {}).get("children") or []:
+        lines.append((_pnl_side_cells(child) + ["", None, None], child.get("kind") or "ledger"))
+    return lines
 
 
 def _pnl_export_lines(data: dict) -> list[tuple[list, str]]:
@@ -354,10 +365,12 @@ def _pnl_export_lines(data: dict) -> list[tuple[list, str]]:
     for item in data.get("trading_rows") or []:
         kind = "trading-total" if item.get("left", {}).get("kind") == "total" else item.get("left", {}).get("kind") or ""
         lines.append((_pnl_side_cells(item.get("left")) + _pnl_side_cells(item.get("right")), kind))
+        lines.extend(_pnl_child_export_lines(item))
     lines.append((["", None, None, "", None, None], "spacer"))
     for item in data.get("pnl_rows") or []:
         kind = "final-total" if item.get("left", {}).get("kind") == "total" else item.get("left", {}).get("kind") or ""
         lines.append((_pnl_side_cells(item.get("left")) + _pnl_side_cells(item.get("right")), kind))
+        lines.extend(_pnl_child_export_lines(item))
     return lines
 
 

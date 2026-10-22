@@ -2348,8 +2348,15 @@ class ProfitAndLossFormatTests(TestCase):
         self.assertIn("Direct Expenses", trading_left)
         self.assertIn("Gross Profit C/f", trading_left)
         self.assertIn("Direct Income", trading_right)
-        self.assertIn("Sales", trading_right)
+        self.assertNotIn("Sales", trading_right)
         self.assertIn("Closing Stock", trading_right)
+        direct_income = next(row for row in data["trading_rows"] if row["right"]["name"] == "Direct Income")
+        self.assertTrue(direct_income["right"]["expandable"])
+        self.assertEqual(direct_income["right"]["outer"], Decimal("10000.00"))
+        self.assertEqual(
+            [child["name"] for child in direct_income["right"]["children"]],
+            ["Sales"],
+        )
         gp = next(row for row in data["trading_rows"] if row["left"]["name"] == "Gross Profit C/f")
         self.assertEqual(gp["left"]["outer"], Decimal("1000.00"))
         totals = data["trading_rows"][-1]
@@ -2375,6 +2382,49 @@ class ProfitAndLossFormatTests(TestCase):
             {"Freight": Decimal("1000.00"), "Customs Duty": Decimal("500.00")},
         )
         self.assertEqual(direct_ledgers[-1]["left"]["outer"], Decimal("1500.00"))
+
+    def test_direct_income_groups_at_account_group_level(self):
+        income = AccountGroup.objects.get(system_key="income")
+        direct_inc = AccountGroup.objects.get(name="Direct Income", parent=income)
+        audit = _pnl_group("Audit & Assurance", direct_inc)
+        accounting = _pnl_group("Accounting Services", direct_inc)
+        concurrent = Account.objects.create(name="Concurrent Audit", group=audit)
+        internal = Account.objects.create(name="Internal Audit", group=audit)
+        monthly = Account.objects.create(name="Accounting Services - Monthly", group=accounting)
+        post_voucher(
+            voucher_type="journal",
+            voucher_date=date(2026, 6, 1),
+            lines=[
+                {"account": self.cash, "debit": Decimal("473000.00"), "credit": Decimal("0.00")},
+                {"account": concurrent, "debit": Decimal("0.00"), "credit": Decimal("107000.00")},
+                {"account": internal, "debit": Decimal("0.00"), "credit": Decimal("296000.00")},
+                {"account": monthly, "debit": Decimal("0.00"), "credit": Decimal("70000.00")},
+            ],
+            actor=self.admin,
+        )
+        data = profit_and_loss(date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
+        trading_right = [row["right"]["name"] for row in data["trading_rows"]]
+        self.assertIn("Accounting Services", trading_right)
+        self.assertIn("Audit & Assurance", trading_right)
+        self.assertIn("Direct Income", trading_right)
+        self.assertNotIn("Concurrent Audit", trading_right)
+        self.assertNotIn("Internal Audit", trading_right)
+        self.assertNotIn("Accounting Services - Monthly", trading_right)
+        audit_row = next(row for row in data["trading_rows"] if row["right"]["name"] == "Audit & Assurance")
+        self.assertTrue(audit_row["right"]["expandable"])
+        self.assertEqual(audit_row["right"]["outer"], Decimal("403000.00"))
+        self.assertEqual(
+            [child["name"] for child in audit_row["right"]["children"]],
+            ["Concurrent Audit", "Internal Audit"],
+        )
+        accounting_row = next(
+            row for row in data["trading_rows"] if row["right"]["name"] == "Accounting Services"
+        )
+        self.assertEqual(accounting_row["right"]["outer"], Decimal("70000.00"))
+        self.assertEqual(
+            [child["name"] for child in accounting_row["right"]["children"]],
+            ["Accounting Services - Monthly"],
+        )
 
     def test_livestock_debtor_is_not_closing_stock(self):
         from accounts.services import ensure_sundry_debtors_group, profit_and_loss
@@ -2403,7 +2453,7 @@ class ProfitAndLossFormatTests(TestCase):
             company_name="Test Firm",
         )
         values = [cell.value for row in load_workbook(BytesIO(xlsx)).active.iter_rows() for cell in row]
-        self.assertIn("Sales", values)
+        self.assertTrue(any(isinstance(value, str) and value.strip() == "Sales" for value in values))
         self.assertIn("Gross Profit C/f", values)
         pdf = profit_and_loss_pdf_bytes(
             data,
