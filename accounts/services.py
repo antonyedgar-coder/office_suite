@@ -2304,7 +2304,13 @@ def _tb_group_display_rows(ledger_rows: list[dict]) -> list[dict]:
             roots.append(group)
     for child_list in children.values():
         child_list.sort(key=lambda item: item.name.lower())
-    roots.sort(key=lambda item: item.name.lower())
+    head_order = {
+        HEAD_LIABILITIES: 0,
+        HEAD_ASSETS: 1,
+        HEAD_INCOME: 2,
+        HEAD_EXPENSES: 3,
+    }
+    roots.sort(key=lambda item: (head_order.get(item.resolved_main_head(), 99), item.name.lower()))
     for group_id in by_group:
         by_group[group_id].sort(key=lambda item: item["account"].name.lower())
 
@@ -2475,16 +2481,21 @@ def _pnl_nominal_amount(row: dict, *, expense: bool, date_from=None) -> Decimal:
     return money(credit) - money(debit)
 
 
+_STOCK_WORD_RE = re.compile(r"(?<![a-z])(?:stock|inventory)(?![a-z])", re.I)
+
+
 def _is_stock_account(account: Account) -> bool:
+    """True only for asset stock/inventory ledgers, not names that merely contain those letters."""
     if account.group.resolved_main_head() != HEAD_ASSETS:
         return False
-    names = [account.name.lower(), account.group.name.lower()]
+    names = [account.name or "", account.group.name or ""]
     node = account.group.parent
     while node:
-        names.append(node.name.lower())
+        names.append(node.name or "")
         node = node.parent
-    blob = " ".join(names)
-    return "stock" in blob or "inventory" in blob
+    if any((name or "").strip().lower() == "sundry debtors" for name in names[1:]):
+        return False
+    return any(_STOCK_WORD_RE.search(name) for name in names)
 
 
 def _pnl_bucket(account: Account) -> str:

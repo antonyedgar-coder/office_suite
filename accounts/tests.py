@@ -2111,6 +2111,34 @@ class TrialBalanceReportTests(TestCase):
         self.assertIn("js-tb-toggle", template)
         self.assertIn("bi-plus-lg", template)
 
+    def test_group_wise_heads_are_liabilities_assets_income_expenses(self):
+        income = AccountGroup.objects.get(system_key="income")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        liabilities = AccountGroup.objects.get(system_key="liabilities")
+        Account.objects.create(
+            name="TB Fees Inc",
+            group=income,
+            opening_balance=Decimal("10.00"),
+        )
+        Account.objects.create(
+            name="TB Rent Exp",
+            group=expenses,
+            opening_balance=Decimal("5.00"),
+        )
+        Account.objects.create(
+            name="TB Capital",
+            group=liabilities,
+            opening_balance=Decimal("15.00"),
+        )
+        data = trial_balance(
+            date_from=self.date_from,
+            date_to=self.date_to,
+            report=TB_REPORT_GROUP,
+            fmt=TB_FORMAT_TB,
+        )
+        heads = [row["name"] for row in data["rows"] if row["indent"] == 0]
+        self.assertEqual(heads[:4], ["Liabilities", "Assets", "Income", "Expenses"])
+
     def test_ledger_wise_is_alphabetical_with_group_column(self):
         data = trial_balance(
             date_from=self.date_from,
@@ -2347,6 +2375,21 @@ class ProfitAndLossFormatTests(TestCase):
             {"Freight": Decimal("1000.00"), "Customs Duty": Decimal("500.00")},
         )
         self.assertEqual(direct_ledgers[-1]["left"]["outer"], Decimal("1500.00"))
+
+    def test_livestock_debtor_is_not_closing_stock(self):
+        from accounts.services import ensure_sundry_debtors_group, profit_and_loss
+
+        debtor = Account.objects.create(
+            name="MAZHAITHULI LIVESTOCK FARMER PRODUCER COMPANY LIMITED",
+            group=ensure_sundry_debtors_group(),
+            opening_balance=Decimal("37540.00"),
+        )
+        data = profit_and_loss(date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
+        trading_right = [row["right"]["name"] for row in data["trading_rows"]]
+        self.assertIn("Closing Stock", trading_right)
+        closing = next(row for row in data["trading_rows"] if row["right"]["name"] == "Closing Stock")
+        self.assertEqual(closing["right"]["outer"], Decimal("5000.00"))
+        self.assertNotEqual(closing["right"]["outer"], debtor.opening_balance)
 
     def test_excel_and_pdf_export(self):
         from io import BytesIO
