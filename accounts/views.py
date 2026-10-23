@@ -1,3 +1,4 @@
+from calendar import monthrange
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -5,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import DecimalField, Q, Sum, Value
+from django.db.models import DecimalField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
@@ -74,6 +75,7 @@ from .models import (
     Account,
     AccountGroup,
     Voucher,
+    VoucherLine,
 )
 from .export import (
     billwise_outstanding_excel_response,
@@ -985,13 +987,47 @@ def _voucher_type(request) -> str:
     return raw if raw in VOUCHER_TYPE_KEYS else VOUCHER_SALES
 
 
-def _voucher_register_qs(vtype: str):
-    amount_field = DecimalField(max_digits=14, decimal_places=2)
-    return (
+def _month_bounds(day):
+    start = day.replace(day=1)
+    end = day.replace(day=monthrange(day.year, day.month)[1])
+    return start, end
+
+
+def _latest_voucher_month(vtype: str):
+    latest = (
         Voucher.objects.filter(voucher_type=vtype)
-        .annotate(amount=Coalesce(Sum("lines__debit"), Value(Decimal("0.00"), output_field=amount_field)))
         .order_by("-date", "-id")
+        .values_list("date", flat=True)
+        .first()
     )
+    return _month_bounds(latest or timezone.localdate())
+
+
+def _voucher_register_qs(vtype: str, *, date_from=None, date_to=None):
+    amount_field = DecimalField(max_digits=14, decimal_places=2)
+    zero = Value(Decimal("0.00"), output_field=amount_field)
+    qs = Voucher.objects.filter(voucher_type=vtype)
+    if date_from:
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+    qs = qs.annotate(
+        amount=Coalesce(Sum("lines__debit"), zero),
+        debit_amount=Coalesce(Sum("lines__debit"), zero),
+        credit_amount=Coalesce(Sum("lines__credit"), zero),
+    )
+    if vtype == VOUCHER_SALES:
+        qs = qs.annotate(
+            client_name=Coalesce(
+                Subquery(
+                    VoucherLine.objects.filter(voucher_id=OuterRef("pk"), debit__gt=0)
+                    .order_by("pk")
+                    .values("account__name")[:1]
+                ),
+                Value(""),
+            )
+        )
+    return qs.order_by("-date", "-id")
 
 
 @login_required
@@ -1005,8 +1041,12 @@ def voucher_list(request):
                 return redirect(f"{reverse('accounts_voucher_list')}?type={tabs[0][0]}")
         raise PermissionDenied
     export = (request.GET.get("export") or "").strip().lower()
-    rows = _voucher_register_qs(vtype)
+    date_from = date_to = None
     list_title = dict(VOUCHER_TYPE_CHOICES)[vtype]
+    if vtype == VOUCHER_SALES:
+        date_from, date_to = _latest_voucher_month(vtype)
+        list_title = f"{list_title} — {date_from.strftime('%B %Y')}"
+    rows = _voucher_register_qs(vtype, date_from=date_from, date_to=date_to)
     if export == "pdf":
         if not can_print_voucher(request.user, vtype):
             raise PermissionDenied

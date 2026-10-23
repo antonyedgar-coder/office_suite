@@ -255,10 +255,23 @@ def payment_account_ledgers():
     return non_cash_ledgers().exclude(pk__in=debtor_ids)
 
 
+def pure_agent_ledgers():
+    """Active ledgers marked Pure agent."""
+    return Account.objects.filter(is_active=True, is_pure_agent=True).order_by("name")
+
+
+def sales_account_ledgers():
+    """Sales Account tab: Task Master ledgers plus Pure agent recoveries."""
+    ids = set(task_master_ledgers().values_list("pk", flat=True)) | set(
+        pure_agent_ledgers().values_list("pk", flat=True)
+    )
+    return Account.objects.filter(is_active=True, pk__in=ids).order_by("name")
+
+
 def line_account_ledgers(voucher_type: str | None):
     """Account-tab ledgers for invoice-style vouchers."""
     if voucher_type == VOUCHER_SALES:
-        return task_master_ledgers()
+        return sales_account_ledgers()
     if voucher_type == VOUCHER_RECEIPT:
         return receipt_account_ledgers()
     if voucher_type == VOUCHER_PAYMENT:

@@ -1059,6 +1059,7 @@ def ledger_pdf_response(
 
 
 VOUCHER_LIST_HEADERS = ["Date", "Voucher No", "Narration", "Amount"]
+SALES_VOUCHER_LIST_HEADERS = ["Date", "Voucher No", "Client name", "Narration", "Debit", "Credit"]
 
 
 def _voucher_list_filename(voucher_type: str) -> str:
@@ -1078,13 +1079,22 @@ def voucher_register_pdf_bytes(
     vouchers,
     *,
     title: str = "Vouchers",
+    voucher_type: str = "",
     company_name: str = "",
     company_address: str = "",
 ) -> bytes:
     page_w, page_h = 595.0, 842.0
     margin = 36.0
     inner_w = page_w - 2 * margin
-    col_widths = [72.0, 110.0, inner_w - 72.0 - 110.0 - 80.0, 80.0]
+    sales_layout = voucher_type == "sales"
+    if sales_layout:
+        headers = SALES_VOUCHER_LIST_HEADERS
+        col_widths = [68.0, 88.0, 120.0, inner_w - 68.0 - 88.0 - 120.0 - 70.0 - 70.0, 70.0, 70.0]
+        amounts_from = 4
+    else:
+        headers = VOUCHER_LIST_HEADERS
+        col_widths = [72.0, 110.0, inner_w - 72.0 - 110.0 - 80.0, 80.0]
+        amounts_from = 3
     row_h = 14.0
     pages: list[list[str]] = []
     ops: list[str] = []
@@ -1106,7 +1116,7 @@ def voucher_register_pdf_bytes(
             ops.append(_pdf_text(margin, y, title, size=11, bold=True))
             y -= 16
         y = _draw_table_row(
-            ops, margin, y, VOUCHER_LIST_HEADERS, col_widths, row_h, bold=True, fill=True, amounts_from=3
+            ops, margin, y, headers, col_widths, row_h, bold=True, fill=True, amounts_from=amounts_from
         )
         y -= 2
 
@@ -1114,14 +1124,24 @@ def voucher_register_pdf_bytes(
     for voucher in vouchers:
         if y - row_h < margin + 20:
             new_page()
-        values = [
-            _fmt_date(getattr(voucher, "date", None)),
-            getattr(voucher, "number", "") or "",
-            getattr(voucher, "narration", "") or "",
-            _voucher_list_amount(voucher),
-        ]
+        if sales_layout:
+            values = [
+                _fmt_date(getattr(voucher, "date", None)),
+                getattr(voucher, "number", "") or "",
+                getattr(voucher, "client_name", "") or "",
+                getattr(voucher, "narration", "") or "",
+                getattr(voucher, "debit_amount", None) if getattr(voucher, "debit_amount", None) is not None else _voucher_list_amount(voucher),
+                getattr(voucher, "credit_amount", None) if getattr(voucher, "credit_amount", None) is not None else _voucher_list_amount(voucher),
+            ]
+        else:
+            values = [
+                _fmt_date(getattr(voucher, "date", None)),
+                getattr(voucher, "number", "") or "",
+                getattr(voucher, "narration", "") or "",
+                _voucher_list_amount(voucher),
+            ]
         display = [_pdf_cell_text(value) for value in values]
-        y = _draw_table_row(ops, margin, y, display, col_widths, row_h, amounts_from=3)
+        y = _draw_table_row(ops, margin, y, display, col_widths, row_h, amounts_from=amounts_from)
     pages.append(ops)
     return _build_pdf(pages, page_w, page_h)
 
@@ -1137,6 +1157,7 @@ def voucher_register_pdf_response(
     payload = voucher_register_pdf_bytes(
         vouchers,
         title=title,
+        voucher_type=voucher_type,
         company_name=company_name,
         company_address=company_address,
     )

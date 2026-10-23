@@ -381,6 +381,51 @@ class AccountsModuleTests(TestCase):
         self.assertTrue(response.content.startswith(b"%PDF"))
         self.assertIn(voucher.number.encode(), response.content)
 
+    def test_sales_voucher_list_is_latest_month_with_client_and_totals(self):
+        from accounts.views import _latest_voucher_month, _voucher_register_qs
+
+        seed_chart_of_accounts()
+        income = AccountGroup.objects.get(system_key="income")
+        assets = AccountGroup.objects.get(system_key="assets")
+        fees = Account.objects.create(name="List fees", group=income)
+        party = Account.objects.create(name="Pearl Generators List", group=assets)
+        older = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 9, 10),
+            narration="September sale",
+            lines=[
+                {"account": party, "debit": Decimal("1180.00"), "credit": Decimal("0.00")},
+                {"account": fees, "debit": Decimal("0.00"), "credit": Decimal("1180.00")},
+            ],
+            actor=self.admin,
+        )
+        latest = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 7),
+            narration="October sale",
+            lines=[
+                {"account": party, "debit": Decimal("2360.00"), "credit": Decimal("0.00")},
+                {"account": fees, "debit": Decimal("0.00"), "credit": Decimal("2360.00")},
+            ],
+            actor=self.admin,
+        )
+        date_from, date_to = _latest_voucher_month("sales")
+        self.assertEqual(date_from, date(2026, 10, 1))
+        self.assertEqual(date_to, date(2026, 10, 31))
+        rows = list(_voucher_register_qs("sales", date_from=date_from, date_to=date_to))
+        self.assertEqual([row.pk for row in rows], [latest.pk])
+        self.assertEqual(rows[0].client_name, "Pearl Generators List")
+        self.assertEqual(rows[0].debit_amount, Decimal("2360.00"))
+        self.assertEqual(rows[0].credit_amount, Decimal("2360.00"))
+        self.assertNotIn(older.pk, [row.pk for row in rows])
+        from accounts.export import voucher_register_pdf_bytes
+
+        pdf = voucher_register_pdf_bytes(rows, title="Sales invoice — October 2026", voucher_type="sales")
+        self.assertIn(b"Client name", pdf)
+        self.assertIn(b"Pearl Generators List", pdf)
+        self.assertIn(b"Debit", pdf)
+        self.assertIn(b"Credit", pdf)
+
     def test_book_register_lists_and_exports(self):
         seed_chart_of_accounts()
         assets = AccountGroup.objects.get(system_key="assets")
@@ -1426,7 +1471,7 @@ class AccountsModuleTests(TestCase):
         self.assertIn(buyer_sub.name, names)
         self.assertNotIn(other.name, names)
 
-    def test_sales_account_tab_is_task_master_ledgers_only(self):
+    def test_sales_account_tab_is_task_master_and_pure_agent_ledgers(self):
         seed_chart_of_accounts()
         income = AccountGroup.objects.get(system_key="income")
         expenses = AccountGroup.objects.get(system_key="expenses")
@@ -1437,11 +1482,17 @@ class AccountsModuleTests(TestCase):
         )
         master_ledger = Account.objects.create(name=self.master.name, group=income)
         task_named = Account.objects.create(name="GSTR-1 Apr 2026", group=master_group)
+        recovery = Account.objects.create(
+            name="MCA payment recovery",
+            group=expenses,
+            is_pure_agent=True,
+        )
         rent = Account.objects.create(name="Office rent sales", group=expenses)
         income_other = Account.objects.create(name="Professional income", group=income)
         names = set(InvoiceItemForm(voucher_type="sales").fields["account"].queryset.values_list("name", flat=True))
         self.assertIn(master_ledger.name, names)
         self.assertIn(task_named.name, names)
+        self.assertIn(recovery.name, names)
         self.assertNotIn(rent.name, names)
         self.assertNotIn(income_other.name, names)
         self.assertEqual(
@@ -1526,6 +1577,9 @@ class AccountsModuleTests(TestCase):
         )
         doc = sales_invoice_document(voucher)
         self.assertEqual(doc["title"], "TAX INVOICE")
+        self.assertEqual(doc["company_name"], "Test Firm")
+        self.assertEqual(doc["company_address"], "Trivandrum")
+        self.assertEqual(doc["company_gstin"], "32AAAAA0000A1Z5")
         self.assertEqual(len(doc["items"]), 1)
         self.assertEqual(doc["items"][0]["amount"], Decimal("1000.00"))
         self.assertEqual([row["label"] for row in doc["tax_rows"]], ["CGST 9%", "SGST 9%"])

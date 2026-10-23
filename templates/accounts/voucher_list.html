@@ -23,8 +23,16 @@
           <tr>
             <th>Date</th>
             <th>Voucher No</th>
+            {% if vtype == "sales" %}
+              <th>Client name</th>
+            {% endif %}
             <th>Narration</th>
-            <th class="text-end">Amount</th>
+            {% if vtype == "sales" %}
+              <th class="text-end">Debit</th>
+              <th class="text-end">Credit</th>
+            {% else %}
+              <th class="text-end">Amount</th>
+            {% endif %}
             <th></th>
           </tr>
         </thead>
@@ -33,8 +41,16 @@
             <tr>
               <td>{{ v.date|date:"d-m-Y" }}</td>
               <td><a href="{% url 'accounts_voucher_detail' v.pk %}">{{ v.number }}</a></td>
+              {% if vtype == "sales" %}
+                <td>{{ v.client_name|default:"—" }}</td>
+              {% endif %}
               <td>{{ v.narration|default:"—" }}</td>
-              <td class="text-end mono">{{ v.amount }}</td>
+              {% if vtype == "sales" %}
+                <td class="text-end mono">{{ v.debit_amount }}</td>
+                <td class="text-end mono">{{ v.credit_amount }}</td>
+              {% else %}
+                <td class="text-end mono">{{ v.amount }}</td>
+              {% endif %}
               <td class="text-nowrap text-end">
                 {% if can_change %}
                   <a href="{% url 'accounts_voucher_edit' v.pk %}">Edit</a>
@@ -49,7 +65,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="5" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
+            <tr><td colspan="{% if vtype == 'sales' %}7{% else %}5{% endif %}" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
           {% endfor %}
         </tbody>
       </table>
