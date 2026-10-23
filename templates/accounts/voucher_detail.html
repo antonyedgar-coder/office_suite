@@ -3,7 +3,7 @@
 {% block page_title %}{{ obj.number }}{% endblock %}
 {% block content %}
   {% include "accounts/_voucher_type_tabs.html" %}
-  <p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.date }} · {{ obj.series }}</p>
+  <p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.date|date:"d-m-Y" }} · {{ obj.series }}</p>
   {% if obj.narration %}<p>{{ obj.narration }}</p>{% endif %}
   {% if obj.on_behalf_of %}
     <p>On behalf of: {{ obj.on_behalf_of.name }}{% if obj.on_behalf_task %} · Task: {{ obj.on_behalf_task.display_title }} ({{ obj.on_behalf_task.period_key }}){% endif %}</p>

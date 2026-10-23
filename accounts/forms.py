@@ -188,7 +188,10 @@ class VoucherForm(forms.ModelForm):
         fields = ["voucher_type", "date", "narration", "on_behalf_of", "on_behalf_task"]
         widgets = {
             "voucher_type": forms.Select(attrs={"class": "form-select"}),
-            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "date": forms.DateInput(
+                format="%d-%m-%Y",
+                attrs={"class": "form-control", "placeholder": "DD-MM-YYYY"},
+            ),
             "narration": forms.TextInput(attrs={"class": "form-control"}),
             "on_behalf_of": forms.HiddenInput(attrs={"id": "id_on_behalf_of"}),
             "on_behalf_task": forms.HiddenInput(attrs={"id": "id_on_behalf_task"}),
@@ -200,6 +203,7 @@ class VoucherForm(forms.ModelForm):
         from .services import sundry_debtors_ledgers
 
         super().__init__(*args, **kwargs)
+        self.fields["date"].input_formats = ["%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y"]
         self.fields["voucher_type"].choices = VOUCHER_TYPE_CHOICES
         self.fields["on_behalf_of"].queryset = sundry_debtors_ledgers()
         self.fields["on_behalf_of"].required = False

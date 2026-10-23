@@ -249,6 +249,18 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(voucher.debit_total(), Decimal("75.00"))
         self.assertEqual(voucher.credit_total(), Decimal("75.00"))
 
+    def test_voucher_date_uses_day_month_year(self):
+        from accounts.forms import VoucherForm
+
+        form = VoucherForm(data={"voucher_type": "journal", "date": "22-10-2026", "narration": ""})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["date"], date(2026, 10, 22))
+        rendered = VoucherForm()
+        rendered.fields["date"].initial = date(2026, 10, 22)
+        html = str(rendered["date"])
+        self.assertIn('value="22-10-2026"', html)
+        self.assertIn("DD-MM-YYYY", html)
+
     def test_vouchers_can_be_deleted(self):
         seed_chart_of_accounts()
         assets = AccountGroup.objects.get(system_key="assets")
