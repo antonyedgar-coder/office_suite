@@ -2357,6 +2357,11 @@ class ProfitAndLossFormatTests(TestCase):
             [child["name"] for child in direct_income["right"]["children"]],
             ["Sales"],
         )
+        sales = Account.objects.get(name="Sales")
+        self.assertEqual(direct_income["right"]["children"][0]["account_id"], sales.pk)
+        freight_row = next(row for row in data["trading_rows"] if row["left"]["name"] == "Freight")
+        self.assertEqual(freight_row["left"]["account_id"], Account.objects.get(name="Freight").pk)
+        self.assertIsNone(direct_income["right"]["account_id"])
         gp = next(row for row in data["trading_rows"] if row["left"]["name"] == "Gross Profit C/f")
         self.assertEqual(gp["left"]["outer"], Decimal("1000.00"))
         totals = data["trading_rows"][-1]
@@ -2425,6 +2430,11 @@ class ProfitAndLossFormatTests(TestCase):
             [child["name"] for child in accounting_row["right"]["children"]],
             ["Accounting Services - Monthly"],
         )
+        self.assertEqual(
+            [child["account_id"] for child in audit_row["right"]["children"]],
+            [concurrent.pk, internal.pk],
+        )
+        self.assertEqual(accounting_row["right"]["children"][0]["account_id"], monthly.pk)
 
     def test_livestock_debtor_is_not_closing_stock(self):
         from accounts.services import ensure_sundry_debtors_group, profit_and_loss
@@ -2557,6 +2567,10 @@ class BalanceSheetFormatTests(TestCase):
         self.assertEqual(np_row["left"]["inner"], Decimal("500.00"))
         cash_row = next(row for row in data["statement_rows"] if row["right"]["name"] == "Till cash BS")
         self.assertEqual(cash_row["right"]["indent"], 1)
+        self.assertEqual(cash_row["right"]["account_id"], Account.objects.get(name="Till cash BS").pk)
+        self.assertIsNone(np_row["left"]["account_id"])
+        furniture_row = next(row for row in data["statement_rows"] if row["right"]["name"] == "Furniture")
+        self.assertEqual(furniture_row["right"]["account_id"], Account.objects.get(name="Furniture").pk)
         hdfc_row = next(row for row in data["statement_rows"] if row["right"]["name"] == "HDFC Bank BS")
         self.assertEqual(hdfc_row["right"]["indent"], 2)
         bank_row = next(row for row in data["statement_rows"] if row["right"]["name"] == "Bank Accounts")
@@ -2733,6 +2747,16 @@ class LedgerFormatTests(TestCase):
         self.assertEqual(_ledger_back_url("/accounts/vouchers/"), "")
         self.assertEqual(_ledger_back_url("https://example.com/accounts/reports/ledger/"), "")
 
+    def test_report_return_url_allows_pnl_and_balance_sheet(self):
+        from accounts.views import _report_return_url
+
+        pnl = f"{reverse('accounts_profit_loss')}?date_from=2026-04-01&date_to=2026-10-16"
+        bs = f"{reverse('accounts_balance_sheet')}?date_to=2026-10-16"
+        self.assertEqual(_report_return_url(pnl), pnl)
+        self.assertEqual(_report_return_url(bs), bs)
+        self.assertEqual(_report_return_url("/accounts/vouchers/"), "")
+        self.assertEqual(_report_return_url("https://example.com/accounts/reports/profit-loss/"), "")
+
     def test_all_ledger_groups_by_parent_and_exports(self):
         from io import BytesIO
         from openpyxl import load_workbook
@@ -2905,6 +2929,29 @@ class ClientLedgerBackfillTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Account.objects.filter(client=approved).exists())
+
+
+class ReportLedgerNavigationTests(SimpleTestCase):
+    def test_templates_and_script_support_keyboard_drilldown(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        base = Path(settings.BASE_DIR)
+        pnl = (base / "templates/accounts/report_pnl.html").read_text(encoding="utf-8")
+        bs = (base / "templates/accounts/report_balance_sheet.html").read_text(encoding="utf-8")
+        ledger = (base / "templates/accounts/report_ledger.html").read_text(encoding="utf-8")
+        script = (base / "static/js/report_ledger_nav.js").read_text(encoding="utf-8")
+        self.assertIn("js-report-ledger-nav", pnl)
+        self.assertIn("js-report-ledger-nav", bs)
+        self.assertIn("report_ledger_nav.js", pnl)
+        self.assertIn("report_ledger_nav.js", bs)
+        self.assertIn("ArrowLeft", script)
+        self.assertIn("ArrowRight", script)
+        self.assertIn("ArrowDown", script)
+        self.assertIn('params.set("next"', script)
+        self.assertIn("Escape", ledger)
+        self.assertIn("report_return_url", ledger)
 
 
 class LedgerAccountPickerTests(TestCase):

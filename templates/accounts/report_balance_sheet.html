@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Balance Sheet — CA Office Suite{% endblock %}
 {% block page_title %}Balance Sheet{% endblock %}
 {% block extra_head %}
@@ -55,9 +56,19 @@
     }
     table.pnl-table .bs-indent-1 { padding-left: 1.35rem !important; }
     table.pnl-table .bs-indent-2 { padding-left: 2.5rem !important; }
+    .report-ledger {
+      cursor: pointer;
+      border-radius: 2px;
+      padding: 0 0.15rem;
+    }
+    .report-ledger.is-selected {
+      background: #cfe2ff;
+      outline: 1px solid #0d6efd;
+    }
     @media print {
       .no-print, .sidebar, .topbar, aside, .offcanvas, .btn { display: none !important; }
       .app-shell, .content { display: block !important; width: 100% !important; padding: 0 !important; }
+      .report-ledger.is-selected { background: transparent; outline: 0; }
     }
   </style>
 {% endblock %}
@@ -90,7 +101,12 @@
     {% if company_address %}<p class="pnl-address">{{ company_address }}</p>{% endif %}
     <p class="pnl-title">Balance Sheet as on {{ as_on|date:"d-m-Y" }}</p>
     <div class="table-responsive">
-      <table class="pnl-table">
+      <table
+        class="pnl-table js-report-ledger-nav"
+        data-ledger-url="{{ ledger_url }}"
+        data-date-from="{{ date_from|date:'Y-m-d' }}"
+        data-date-to="{{ date_to|date:'Y-m-d' }}"
+      >
         <thead>
           <tr>
             <th class="pnl-name">Liabilities</th>
@@ -104,10 +120,10 @@
         <tbody>
           {% for row in data.statement_rows %}
             <tr class="pnl-{{ row.left.kind }}{% if row.left.kind == 'total' %} pnl-final-total{% endif %}">
-              <td class="pnl-name bs-indent-{{ row.left.indent|default:0 }} {% if row.left.kind == 'header' or row.left.kind == 'subheader' or row.left.kind == 'balancing' or row.left.kind == 'total' %}fw-bold{% endif %}">{{ row.left.name }}</td>
+              <td class="pnl-name bs-indent-{{ row.left.indent|default:0 }} {% if row.left.kind == 'header' or row.left.kind == 'subheader' or row.left.kind == 'balancing' or row.left.kind == 'total' %}fw-bold{% endif %}">{% include "accounts/_report_ledger_name.html" with line=row.left col=0 %}</td>
               <td class="pnl-amt text-end mono">{{ row.left.inner_display }}</td>
               <td class="pnl-amt text-end mono">{{ row.left.outer_display }}</td>
-              <td class="pnl-name pnl-split bs-indent-{{ row.right.indent|default:0 }} {% if row.right.kind == 'header' or row.right.kind == 'subheader' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">{{ row.right.name }}</td>
+              <td class="pnl-name pnl-split bs-indent-{{ row.right.indent|default:0 }} {% if row.right.kind == 'header' or row.right.kind == 'subheader' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">{% include "accounts/_report_ledger_name.html" with line=row.right col=1 %}</td>
               <td class="pnl-amt text-end mono">{{ row.right.inner_display }}</td>
               <td class="pnl-amt text-end mono">{{ row.right.outer_display }}</td>
             </tr>
@@ -116,4 +132,7 @@
       </table>
     </div>
   </div>
+{% endblock %}
+{% block extra_js %}
+  <script src="{% static 'js/report_ledger_nav.js' %}?v=1"></script>
 {% endblock %}

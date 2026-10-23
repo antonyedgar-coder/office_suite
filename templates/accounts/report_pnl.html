@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Profit and Loss — CA Office Suite{% endblock %}
 {% block page_title %}Profit and Loss{% endblock %}
 {% block extra_head %}
@@ -75,11 +76,21 @@
     }
     .pnl-toggle:hover { color: var(--app-primary-hover); }
     .pnl-child-name { padding-left: 1.7rem !important; }
+    .report-ledger {
+      cursor: pointer;
+      border-radius: 2px;
+      padding: 0 0.15rem;
+    }
+    .report-ledger.is-selected {
+      background: #cfe2ff;
+      outline: 1px solid #0d6efd;
+    }
     @media print {
       .no-print, .sidebar, .topbar, aside, .offcanvas, .btn { display: none !important; }
       .app-shell, .content { display: block !important; width: 100% !important; padding: 0 !important; }
       .js-pnl-child { display: table-row !important; }
       .pnl-toggle { display: none !important; }
+      .report-ledger.is-selected { background: transparent; outline: 0; }
     }
   </style>
 {% endblock %}
@@ -116,7 +127,12 @@
     {% if company_address %}<p class="pnl-address">{{ company_address }}</p>{% endif %}
     <p class="pnl-title">Profit and Loss Account from {{ date_from|date:"d-m-Y" }} to {{ date_to|date:"d-m-Y" }}</p>
     <div class="table-responsive">
-      <table class="pnl-table">
+      <table
+        class="pnl-table js-report-ledger-nav"
+        data-ledger-url="{{ ledger_url }}"
+        data-date-from="{{ date_from|date:'Y-m-d' }}"
+        data-date-to="{{ date_to|date:'Y-m-d' }}"
+      >
         <thead>
           <tr>
             <th class="pnl-name">Particulars</th>
@@ -130,7 +146,7 @@
         <tbody>
           {% for row in data.trading_rows %}
             <tr class="pnl-{{ row.left.kind }}{% if row.left.kind == 'total' %} pnl-trading-total{% endif %}">
-              <td class="pnl-name">{{ row.left.name }}</td>
+              <td class="pnl-name">{% include "accounts/_report_ledger_name.html" with line=row.left col=0 %}</td>
               <td class="pnl-amt text-end mono">{{ row.left.inner_display }}</td>
               <td class="pnl-amt pnl-amt-outer text-end mono">{{ row.left.outer_display }}</td>
               <td class="pnl-name pnl-split {% if row.right.kind == 'header' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">
@@ -145,7 +161,7 @@
                     <i class="bi bi-plus-lg" aria-hidden="true"></i>
                   </button>
                 {% endif %}
-                {{ row.right.name }}
+                {% include "accounts/_report_ledger_name.html" with line=row.right col=1 %}
               </td>
               <td class="pnl-amt text-end mono">{{ row.right.inner_display }}</td>
               <td class="pnl-amt pnl-amt-outer text-end mono">{{ row.right.outer_display }}</td>
@@ -155,7 +171,7 @@
                 <td></td>
                 <td></td>
                 <td></td>
-                <td class="pnl-name pnl-split pnl-child-name">{{ child.name }}</td>
+                <td class="pnl-name pnl-split pnl-child-name">{% include "accounts/_report_ledger_name.html" with line=child col=1 %}</td>
                 <td class="pnl-amt text-end mono">{{ child.inner_display }}</td>
                 <td class="pnl-amt pnl-amt-outer text-end mono"></td>
               </tr>
@@ -168,10 +184,10 @@
           </tr>
           {% for row in data.pnl_rows %}
             <tr class="pnl-{{ row.left.kind }}{% if row.left.kind == 'total' %} pnl-final-total{% endif %}">
-              <td class="pnl-name">{{ row.left.name }}</td>
+              <td class="pnl-name">{% include "accounts/_report_ledger_name.html" with line=row.left col=0 %}</td>
               <td class="pnl-amt text-end mono">{{ row.left.inner_display }}</td>
               <td class="pnl-amt pnl-amt-outer text-end mono">{{ row.left.outer_display }}</td>
-              <td class="pnl-name pnl-split {% if row.right.kind == 'header' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">{{ row.right.name }}</td>
+              <td class="pnl-name pnl-split {% if row.right.kind == 'header' or row.right.kind == 'balancing' or row.right.kind == 'total' %}fw-bold{% endif %}">{% include "accounts/_report_ledger_name.html" with line=row.right col=1 %}</td>
               <td class="pnl-amt text-end mono">{{ row.right.inner_display }}</td>
               <td class="pnl-amt pnl-amt-outer text-end mono">{{ row.right.outer_display }}</td>
             </tr>
@@ -182,6 +198,7 @@
   </div>
 {% endblock %}
 {% block extra_js %}
+  <script src="{% static 'js/report_ledger_nav.js' %}?v=1"></script>
   <script>
     document.querySelectorAll(".js-pnl-toggle").forEach(function (btn) {
       btn.addEventListener("click", function () {

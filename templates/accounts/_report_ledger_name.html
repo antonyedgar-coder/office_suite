@@ -1,0 +1,10 @@
+{% if line.account_id %}
+  <span
+    class="js-report-ledger report-ledger"
+    tabindex="-1"
+    data-account-id="{{ line.account_id }}"
+    data-col="{{ col }}"
+  >{{ line.name }}</span>
+{% else %}
+  {{ line.name }}
+{% endif %}

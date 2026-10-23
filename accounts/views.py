@@ -10,7 +10,7 @@ from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -1374,6 +1374,28 @@ def _ledger_back_url(next_url: str) -> str:
     return raw
 
 
+_REPORT_RETURN_NAMES = frozenset(
+    {
+        "accounts_profit_loss",
+        "accounts_balance_sheet",
+    }
+)
+
+
+def _report_return_url(next_url: str) -> str:
+    raw = (next_url or "").strip()
+    if not raw.startswith("/") or raw.startswith("//"):
+        return ""
+    path = raw.split("?", 1)[0]
+    try:
+        match = resolve(path)
+    except Resolver404:
+        return ""
+    if match.url_name not in _REPORT_RETURN_NAMES:
+        return ""
+    return raw
+
+
 @login_required
 @require_POST
 def voucher_delete(request, pk: int):
@@ -1630,6 +1652,7 @@ def report_profit_loss(request):
             "company_address": company_address,
             "excel_url": f"{reverse('accounts_profit_loss')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_profit_loss')}?{query}&export=pdf",
+            "ledger_url": reverse("accounts_ledger"),
         },
     )
 
@@ -1672,6 +1695,9 @@ def report_balance_sheet(request):
             "company_address": company_address,
             "excel_url": f"{reverse('accounts_balance_sheet')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_balance_sheet')}?{query}&export=pdf",
+            "ledger_url": reverse("accounts_ledger"),
+            "date_from": financial_year_start(date_to),
+            "date_to": date_to,
         },
     )
 
@@ -1737,6 +1763,7 @@ def report_ledger(request):
             "account": account,
             "all_ledgers": all_ledgers,
             "ledger_return_url": request.get_full_path(),
+            "report_return_url": _report_return_url(request.GET.get("next") or ""),
             "excel_url": f"{reverse('accounts_ledger')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_ledger')}?{query}&export=pdf",
         },

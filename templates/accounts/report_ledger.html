@@ -16,9 +16,17 @@
       <label class="form-label" for="{{ form.date_to.id_for_label }}">To date</label>
       {{ form.date_to }}
     </div>
+    {% if report_return_url %}
+      <input type="hidden" name="next" value="{{ report_return_url }}">
+    {% endif %}
     <div class="col-auto">
       <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
     </div>
+    {% if report_return_url %}
+    <div class="col-auto">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ report_return_url }}">Back to report</a>
+    </div>
+    {% endif %}
     {% if account or all_ledgers %}
     <div class="col-auto">
       <div class="dropdown">
@@ -126,4 +134,14 @@
 {% endblock %}
 {% block extra_js %}
   <script src="{% static 'js/filtered_select.js' %}?v=1"></script>
+  {% if report_return_url %}
+  <script>
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.target && event.target.closest && event.target.closest(".filtered-select.is-open")) return;
+      event.preventDefault();
+      window.location.href = "{{ report_return_url|escapejs }}";
+    });
+  </script>
+  {% endif %}
 {% endblock %}

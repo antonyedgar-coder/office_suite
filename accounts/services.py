@@ -2451,6 +2451,7 @@ def _pnl_blank_line() -> dict:
         "expandable": False,
         "group_id": None,
         "children": [],
+        "account_id": None,
     }
 
 
@@ -2464,6 +2465,7 @@ def _pnl_line(
     expandable: bool = False,
     group_id=None,
     children=None,
+    account_id=None,
 ) -> dict:
     def cell(value):
         if value is None:
@@ -2484,6 +2486,7 @@ def _pnl_line(
         "expandable": expandable,
         "group_id": group_id,
         "children": children or [],
+        "account_id": account_id,
     }
 
 
@@ -2555,10 +2558,24 @@ def _pnl_block_lines(title: str, items: list[dict]) -> tuple[list[dict], Decimal
         return [], Decimal("0.00")
     total = money(sum((item["amount"] for item in items), Decimal("0.00")))
     if len(items) == 1 and (not title or title.lower() == items[0]["name"].lower()):
-        return [_pnl_line("ledger", items[0]["name"], outer=items[0]["amount"])], total
+        return [
+            _pnl_line(
+                "ledger",
+                items[0]["name"],
+                outer=items[0]["amount"],
+                account_id=items[0].get("account_id"),
+            )
+        ], total
     if not title:
         return (
-            [_pnl_line("ledger", items[0]["name"], outer=items[0]["amount"])]
+            [
+                _pnl_line(
+                    "ledger",
+                    items[0]["name"],
+                    outer=items[0]["amount"],
+                    account_id=items[0].get("account_id"),
+                )
+            ]
             if len(items) == 1
             else [
                 _pnl_line(
@@ -2566,6 +2583,7 @@ def _pnl_block_lines(title: str, items: list[dict]) -> tuple[list[dict], Decimal
                     item["name"],
                     inner=item["amount"],
                     outer=total if index == len(items) - 1 else None,
+                    account_id=item.get("account_id"),
                 )
                 for index, item in enumerate(items)
             ],
@@ -2573,7 +2591,14 @@ def _pnl_block_lines(title: str, items: list[dict]) -> tuple[list[dict], Decimal
         )
     lines = [_pnl_line("header", title)]
     if len(items) == 1:
-        lines.append(_pnl_line("ledger", items[0]["name"], outer=items[0]["amount"]))
+        lines.append(
+            _pnl_line(
+                "ledger",
+                items[0]["name"],
+                outer=items[0]["amount"],
+                account_id=items[0].get("account_id"),
+            )
+        )
     else:
         for index, item in enumerate(items):
             lines.append(
@@ -2582,6 +2607,7 @@ def _pnl_block_lines(title: str, items: list[dict]) -> tuple[list[dict], Decimal
                     item["name"],
                     inner=item["amount"],
                     outer=total if index == len(items) - 1 else None,
+                    account_id=item.get("account_id"),
                 )
             )
     return lines, total
@@ -2595,7 +2621,13 @@ def _pnl_account_group_lines(title: str, items: list[dict], *, group_id) -> tupl
         return [], Decimal("0.00")
     total = money(sum((item["amount"] for item in items), Decimal("0.00")))
     children = [
-        _pnl_line("ledger", item["name"], inner=item["amount"], indent=1)
+        _pnl_line(
+            "ledger",
+            item["name"],
+            inner=item["amount"],
+            indent=1,
+            account_id=item.get("account_id"),
+        )
         for item in items
     ]
     return (
@@ -2660,11 +2692,11 @@ def profit_and_loss(*, date_from=None, date_to=None):
         if bucket == "direct_income":
             account_group = acc.group
             block = direct_income_blocks.setdefault(account_group.pk, {"group": account_group, "items": []})
-            block["items"].append({"name": acc.name, "amount": amount})
+            block["items"].append({"name": acc.name, "amount": amount, "account_id": acc.pk})
             continue
         group = _pnl_block_group(acc)
         title = group.name if not group.is_main_head() else ""
-        buckets[bucket][title].append({"name": acc.name, "amount": amount})
+        buckets[bucket][title].append({"name": acc.name, "amount": amount, "account_id": acc.pk})
 
     def collect(bucket: str) -> tuple[list[dict], Decimal]:
         lines = []
@@ -2764,7 +2796,7 @@ def _bs_fmt_amount(value) -> tuple[Decimal | None, str]:
     return amount, f"{amount:,.2f}"
 
 
-def _bs_line(kind: str, name: str, *, inner=None, outer=None, indent=0) -> dict:
+def _bs_line(kind: str, name: str, *, inner=None, outer=None, indent=0, account_id=None) -> dict:
     inner_amt, inner_disp = _bs_fmt_amount(inner)
     outer_amt, outer_disp = _bs_fmt_amount(outer)
     return {
@@ -2775,6 +2807,7 @@ def _bs_line(kind: str, name: str, *, inner=None, outer=None, indent=0) -> dict:
         "inner_display": inner_disp,
         "outer_display": outer_disp,
         "indent": indent,
+        "account_id": account_id,
     }
 
 
@@ -2848,7 +2881,15 @@ def _bs_build_side(items: list[dict], *, asset: bool) -> tuple[list[dict], Decim
             ),
         ):
             kind = "balancing" if ledger["name"].lower() in ("net profit", "net loss") else "ledger"
-            lines.append(_bs_line(kind, ledger["name"], inner=ledger["amount"], indent=1))
+            lines.append(
+                _bs_line(
+                    kind,
+                    ledger["name"],
+                    inner=ledger["amount"],
+                    indent=1,
+                    account_id=None if kind == "balancing" else ledger.get("account_id"),
+                )
+            )
         group_items = sorted(slot["groups"].items(), key=lambda pair: pair[0].name.lower())
         for account_group, ledgers in group_items:
             ledgers = sorted(ledgers, key=lambda row: row["name"].lower())
@@ -2857,7 +2898,15 @@ def _bs_build_side(items: list[dict], *, asset: bool) -> tuple[list[dict], Decim
                 continue
             lines.append(_bs_line("subheader", account_group.name, outer=group_total, indent=1))
             for ledger in ledgers:
-                lines.append(_bs_line("ledger", ledger["name"], inner=ledger["amount"], indent=2))
+                lines.append(
+                    _bs_line(
+                        "ledger",
+                        ledger["name"],
+                        inner=ledger["amount"],
+                        indent=2,
+                        account_id=ledger.get("account_id"),
+                    )
+                )
         grand += slot["total"]
     return lines, money(grand)
 
@@ -2887,6 +2936,7 @@ def balance_sheet(*, date_to=None):
                     "amount": amount,
                     "parent": _bs_parent_of(acc),
                     "account_group": group if group.is_account_group() else None,
+                    "account_id": acc.pk,
                 }
             )
         elif head == HEAD_LIABILITIES:
@@ -2901,6 +2951,7 @@ def balance_sheet(*, date_to=None):
                     "amount": amount,
                     "parent": _bs_parent_of(acc),
                     "account_group": group if group.is_account_group() else None,
+                    "account_id": acc.pk,
                 }
             )
 
