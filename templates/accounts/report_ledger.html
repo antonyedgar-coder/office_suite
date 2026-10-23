@@ -2,6 +2,12 @@
 {% load static %}
 {% block title %}Ledger — CA Office Suite{% endblock %}
 {% block page_title %}Ledger{% endblock %}
+{% block extra_head %}
+  <style>
+    .js-ledger-entry { cursor: pointer; }
+    .js-ledger-entry.is-selected td { background: #cfe2ff; }
+  </style>
+{% endblock %}
 {% block content %}
   <form method="get" class="row g-2 mb-3 align-items-end">
     <div class="col-12 col-md-4">
@@ -68,7 +74,10 @@
             </thead>
             <tbody>
               {% for row in section.rows %}
-                <tr class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}">
+                <tr
+                  class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}{% if row.voucher %} js-ledger-entry{% endif %}"
+                  {% if row.voucher %}tabindex="-1" data-open-url="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}"{% endif %}
+                >
                   <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
                   <td>
                     {% if row.voucher %}
@@ -109,7 +118,10 @@
           </thead>
           <tbody>
             {% for row in rows %}
-              <tr class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}">
+              <tr
+                class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}{% if row.voucher %} js-ledger-entry{% endif %}"
+                {% if row.voucher %}tabindex="-1" data-open-url="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}"{% endif %}
+              >
                 <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
                 <td>
                   {% if row.voucher %}
@@ -134,6 +146,56 @@
 {% endblock %}
 {% block extra_js %}
   <script src="{% static 'js/filtered_select.js' %}?v=1"></script>
+  <script>
+    (function () {
+      function rows() {
+        return Array.prototype.slice.call(document.querySelectorAll(".js-ledger-entry"));
+      }
+      function select(row) {
+        if (!row) return;
+        rows().forEach(function (item) { item.classList.remove("is-selected"); });
+        row.classList.add("is-selected");
+        if (row.focus) row.focus({ preventScroll: false });
+        if (row.scrollIntoView) row.scrollIntoView({ block: "nearest" });
+      }
+      function openRow(row) {
+        if (row && row.getAttribute("data-open-url")) {
+          window.location.href = row.getAttribute("data-open-url");
+        }
+      }
+      function typingTarget(el) {
+        return Boolean(el && el.closest && el.closest("input, select, textarea, button, a, .filtered-select, .dropdown"));
+      }
+      document.addEventListener("click", function (event) {
+        var row = event.target.closest && event.target.closest(".js-ledger-entry");
+        if (row) select(row);
+      });
+      document.addEventListener("dblclick", function (event) {
+        var row = event.target.closest && event.target.closest(".js-ledger-entry");
+        if (row) openRow(row);
+      });
+      document.addEventListener("keydown", function (event) {
+        if (typingTarget(event.target)) return;
+        var list = rows();
+        if (!list.length) return;
+        var current = document.querySelector(".js-ledger-entry.is-selected");
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          if (!current) {
+            select(list[0]);
+            return;
+          }
+          var next = list[list.indexOf(current) + (event.key === "ArrowDown" ? 1 : -1)];
+          if (next) select(next);
+          return;
+        }
+        if (event.key === "Enter" && current) {
+          event.preventDefault();
+          openRow(current);
+        }
+      });
+    })();
+  </script>
   {% if report_return_url %}
   <script>
     document.addEventListener("keydown", function (event) {

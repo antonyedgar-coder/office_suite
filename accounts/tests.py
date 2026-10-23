@@ -2675,7 +2675,7 @@ class LedgerFormatTests(TestCase):
         self.assertEqual(entry["debit"], Decimal("100.00"))
         self.assertEqual(entry["credit"], Decimal("0.00"))
 
-    def test_compound_voucher_splits_each_counterpart_row(self):
+    def test_compound_voucher_shows_this_ledger_amount_and_opposite_party(self):
         bank = Account.objects.create(name="HDFC Ledger", group=self.cash.group)
         voucher = post_voucher(
             voucher_type="journal",
@@ -2693,11 +2693,63 @@ class LedgerFormatTests(TestCase):
             for row in ledger_lines(self.party, date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
             if row.get("voucher") and row["voucher"].pk == voucher.pk
         ]
-        self.assertEqual([row["ledger_account"] for row in rows], ["Cash", "HDFC Ledger"])
-        self.assertEqual([row["number"] for row in rows], [voucher.number, voucher.number])
-        self.assertEqual(rows[0]["credit"], Decimal("100.00"))
-        self.assertEqual(rows[1]["credit"], Decimal("50.00"))
-        self.assertTrue(all(row["debit"] == Decimal("0.00") for row in rows))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ledger_account"], "Cash")
+        self.assertEqual(rows[0]["credit"], Decimal("150.00"))
+        self.assertEqual(rows[0]["debit"], Decimal("0.00"))
+        cash_rows = [
+            row
+            for row in ledger_lines(self.cash, date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
+            if row.get("voucher") and row["voucher"].pk == voucher.pk
+        ]
+        self.assertEqual(len(cash_rows), 1)
+        self.assertEqual(cash_rows[0]["ledger_account"], "Antony Edgar Ledger")
+        self.assertEqual(cash_rows[0]["debit"], Decimal("100.00"))
+
+    def test_gst_sales_ledger_hides_same_side_tax_lines(self):
+        income = AccountGroup.objects.get(system_key="income")
+        liabilities = AccountGroup.objects.get(system_key="liabilities")
+        fees = Account.objects.create(name="GST Monthly Fees", group=_pnl_group("Direct Income", income))
+        cgst = Account.objects.create(name="CGST Output 9%", group=_pnl_group("Duties and Taxes", liabilities))
+        sgst = Account.objects.create(name="SGST Output 9%", group=cgst.group)
+        voucher = post_voucher(
+            voucher_type="journal",
+            voucher_date=date(2026, 10, 7),
+            lines=[
+                {"account": self.party, "debit": Decimal("1180.00"), "credit": Decimal("0.00")},
+                {"account": fees, "debit": Decimal("0.00"), "credit": Decimal("1000.00")},
+                {"account": cgst, "debit": Decimal("0.00"), "credit": Decimal("90.00")},
+                {"account": sgst, "debit": Decimal("0.00"), "credit": Decimal("90.00")},
+            ],
+            actor=self.admin,
+        )
+        fee_rows = [
+            row
+            for row in ledger_lines(fees, date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
+            if row.get("voucher") and row["voucher"].pk == voucher.pk
+        ]
+        self.assertEqual(len(fee_rows), 1)
+        self.assertEqual(fee_rows[0]["ledger_account"], "Antony Edgar Ledger")
+        self.assertEqual(fee_rows[0]["credit"], Decimal("1000.00"))
+        self.assertEqual(fee_rows[0]["debit"], Decimal("0.00"))
+        names = [row["ledger_account"] for row in fee_rows]
+        self.assertNotIn("CGST Output 9%", names)
+        self.assertNotIn("SGST Output 9%", names)
+        party_rows = [
+            row
+            for row in ledger_lines(self.party, date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
+            if row.get("voucher") and row["voucher"].pk == voucher.pk
+        ]
+        self.assertEqual(len(party_rows), 1)
+        self.assertEqual(party_rows[0]["ledger_account"], "GST Monthly Fees")
+        self.assertEqual(party_rows[0]["debit"], Decimal("1180.00"))
+        cgst_rows = [
+            row
+            for row in ledger_lines(cgst, date_from=date(2026, 4, 1), date_to=date(2026, 10, 16))
+            if row.get("voucher") and row["voucher"].pk == voucher.pk
+        ]
+        self.assertEqual(cgst_rows[0]["ledger_account"], "Antony Edgar Ledger")
+        self.assertEqual(cgst_rows[0]["credit"], Decimal("90.00"))
 
     def test_excel_and_pdf_export(self):
         from io import BytesIO
@@ -2952,6 +3004,10 @@ class ReportLedgerNavigationTests(SimpleTestCase):
         self.assertIn('params.set("next"', script)
         self.assertIn("Escape", ledger)
         self.assertIn("report_return_url", ledger)
+        self.assertIn("js-ledger-entry", ledger)
+        voucher = (base / "templates/accounts/voucher_detail.html").read_text(encoding="utf-8")
+        self.assertIn("Escape", voucher)
+        self.assertIn("back_to_ledger", voucher)
 
 
 class LedgerAccountPickerTests(TestCase):

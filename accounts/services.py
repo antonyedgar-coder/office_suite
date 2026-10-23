@@ -3012,6 +3012,28 @@ def _ledger_row(*, kind, date=None, number="", ledger_account="", narration="", 
     }
 
 
+def _ledger_counterpart_name(this_line, voucher_lines, account_pk: int) -> str:
+    """Name the opposite-side ledger; ignore same-side tax/split lines."""
+    this_debit = money(this_line.debit)
+    this_credit = money(this_line.credit)
+    want_debit = this_credit > 0 and this_debit == 0
+    want_credit = this_debit > 0 and this_credit == 0
+    opposites = []
+    for other in voucher_lines:
+        if other.account_id == account_pk:
+            continue
+        other_debit = money(other.debit)
+        other_credit = money(other.credit)
+        if want_debit and other_debit > 0:
+            opposites.append((other_debit, other.account.name))
+        elif want_credit and other_credit > 0:
+            opposites.append((other_credit, other.account.name))
+    if not opposites:
+        return ""
+    opposites.sort(key=lambda item: (-item[0], (item[1] or "").lower()))
+    return opposites[0][1]
+
+
 def ledger_lines(account: Account, *, date_from=None, date_to=None):
     dr_open, cr_open = opening_debit_credit(account)
     running = dr_open - cr_open
@@ -3047,54 +3069,19 @@ def ledger_lines(account: Account, *, date_from=None, date_to=None):
         qs = qs.filter(voucher__date__gte=date_from)
     if date_to:
         qs = qs.filter(voucher__date__lte=date_to)
-    seen = set()
     for line in qs:
-        if line.voucher_id in seen:
-            continue
-        seen.add(line.voucher_id)
-        counterparts = {}
-        order = []
-        for other in line.voucher.lines.all():
-            if other.account_id == account.pk:
-                continue
-            if other.account_id not in counterparts:
-                counterparts[other.account_id] = {
-                    "name": other.account.name,
-                    "debit": Decimal("0.00"),
-                    "credit": Decimal("0.00"),
-                }
-                order.append(other.account_id)
-            counterparts[other.account_id]["debit"] += money(other.debit)
-            counterparts[other.account_id]["credit"] += money(other.credit)
-        if not order:
-            debit = money(line.debit)
-            credit = money(line.credit)
-            rows.append(
-                _ledger_row(
-                    kind="entry",
-                    date=line.voucher.date,
-                    number=line.voucher.number,
-                    narration=line.voucher.narration,
-                    debit=debit,
-                    credit=credit,
-                    voucher=line.voucher,
-                )
+        rows.append(
+            _ledger_row(
+                kind="entry",
+                date=line.voucher.date,
+                number=line.voucher.number,
+                ledger_account=_ledger_counterpart_name(line, line.voucher.lines.all(), account.pk),
+                narration=line.voucher.narration,
+                debit=money(line.debit),
+                credit=money(line.credit),
+                voucher=line.voucher,
             )
-            continue
-        for account_id in order:
-            other = counterparts[account_id]
-            rows.append(
-                _ledger_row(
-                    kind="entry",
-                    date=line.voucher.date,
-                    number=line.voucher.number,
-                    ledger_account=other["name"],
-                    narration=line.voucher.narration,
-                    debit=other["credit"],
-                    credit=other["debit"],
-                    voucher=line.voucher,
-                )
-            )
+        )
     total_debit = money(sum((row["debit"] for row in rows), Decimal("0.00")))
     total_credit = money(sum((row["credit"] for row in rows), Decimal("0.00")))
     closing = money(total_debit - total_credit)

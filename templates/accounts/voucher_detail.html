@@ -73,3 +73,15 @@
     {% endif %}
   </p>
 {% endblock %}
+{% block extra_js %}
+  {% if back_to_ledger %}
+  <script>
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.target && event.target.closest && event.target.closest("input, select, textarea, .dropdown")) return;
+      event.preventDefault();
+      window.location.href = "{{ back_to_ledger|escapejs }}";
+    });
+  </script>
+  {% endif %}
+{% endblock %}
