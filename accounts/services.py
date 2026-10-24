@@ -2337,12 +2337,6 @@ def _tb_group_display_rows(ledger_rows: list[dict]) -> list[dict]:
 
     def add_group(group: AccountGroup, indent: int):
         amounts = _tb_sum_amounts(subtree_ledgers(group))
-        od, oc = _net_debit_credit(amounts["opening_debit"], amounts["opening_credit"])
-        cd, cc = _net_debit_credit(amounts["closing_debit"], amounts["closing_credit"])
-        amounts["opening_debit"] = od
-        amounts["opening_credit"] = oc
-        amounts["closing_debit"] = cd
-        amounts["closing_credit"] = cc
         direct = by_group.get(group.pk, [])
         display.append(
             {
@@ -2430,6 +2424,39 @@ def trial_balance(
         "show_opening": show_opening,
         "show_transactions": show_transactions,
     }
+
+
+def trial_balance_drill(group: AccountGroup, *, date_from=None, date_to=None, fmt=TB_FORMAT_TB) -> dict:
+    """Account groups under a primary, or ledgers under an account group, that have a balance."""
+    data = trial_balance(date_from=date_from, date_to=date_to, report=TB_REPORT_GROUP, fmt=fmt)
+    if group.is_account_group():
+        source = [
+            row
+            for row in data["rows"]
+            if row.get("kind") == "ledger" and row.get("parent_group_id") == group.pk
+        ]
+        level = "ledgers"
+    else:
+        source = [
+            row
+            for row in data["rows"]
+            if row.get("is_header") and getattr(row.get("group"), "parent_id", None) == group.pk
+        ]
+        level = "primary_groups" if group.is_main_head() else "account_groups"
+    rows = []
+    for row in source:
+        item = dict(row)
+        item["indent"] = 0
+        item["collapsed"] = False
+        item["parent_group_id"] = None
+        item["expandable"] = False
+        rows.append(item)
+    drilled = dict(data)
+    drilled["rows"] = rows
+    drilled["totals"] = _tb_sum_amounts(rows)
+    drilled["show_group_column"] = False
+    drilled["drill_level"] = level
+    return drilled
 
 
 def _sum_closing_by_head(head: str, *, date_to=None) -> Decimal:

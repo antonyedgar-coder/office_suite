@@ -129,6 +129,7 @@ from .services import (
     TB_REPORT_GROUP,
     financial_year_start,
     trial_balance,
+    trial_balance_drill,
 )
 
 
@@ -1418,6 +1419,8 @@ _REPORT_RETURN_NAMES = frozenset(
     {
         "accounts_profit_loss",
         "accounts_balance_sheet",
+        "accounts_trial_balance",
+        "accounts_trial_balance_group",
     }
 )
 
@@ -1582,12 +1585,57 @@ def _trial_balance_selection(request):
     fmt = initial["report_format"]
     get_data = request.GET.copy()
     get_data.pop("export", None)
+    get_data.pop("next", None)
     if get_data and form.is_valid():
         date_from = form.cleaned_data.get("date_from") or date_from
         date_to = form.cleaned_data.get("date_to") or date_to
         report = form.cleaned_data.get("tb_report") or report
         fmt = form.cleaned_data.get("report_format") or fmt
     return form, date_from, date_to, report, fmt
+
+
+def _tb_query(date_from, date_to, report, fmt) -> str:
+    return urlencode(
+        {
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "tb_report": report,
+            "report_format": fmt,
+        }
+    )
+
+
+def _tb_row_open_path(row, date_from, date_to, report, fmt) -> str:
+    account = row.get("account")
+    if account is not None:
+        query = urlencode(
+            {
+                "account": account.pk,
+                "date_from": date_from.isoformat(),
+                "date_to": date_to.isoformat(),
+            }
+        )
+        return f"{reverse('accounts_ledger')}?{query}"
+    group_id = row.get("group_id")
+    if group_id:
+        return f"{reverse('accounts_trial_balance_group', args=[group_id])}?{_tb_query(date_from, date_to, report, fmt)}"
+    return ""
+
+
+def _annotate_tb_open_urls(rows, date_from, date_to, report, fmt):
+    for row in rows:
+        row["open_url"] = _tb_row_open_path(row, date_from, date_to, report, fmt)
+
+
+def _tb_empty_colspan(data) -> int:
+    colspan = 3
+    if data["show_group_column"]:
+        colspan += 1
+    if data["show_opening"]:
+        colspan += 2
+    if data["show_transactions"]:
+        colspan += 2
+    return colspan
 
 
 @require_perm("accounts.view_accounts_reports")
@@ -1609,21 +1657,8 @@ def report_trial_balance(request):
             date_to=date_to,
             company_name=get_site_settings().company_name,
         )
-    empty_colspan = 3
-    if data["show_group_column"]:
-        empty_colspan += 1
-    if data["show_opening"]:
-        empty_colspan += 2
-    if data["show_transactions"]:
-        empty_colspan += 2
-    query = urlencode(
-        {
-            "date_from": date_from.isoformat(),
-            "date_to": date_to.isoformat(),
-            "tb_report": report,
-            "report_format": fmt,
-        }
-    )
+    query = _tb_query(date_from, date_to, report, fmt)
+    _annotate_tb_open_urls(data["rows"], date_from, date_to, report, fmt)
     return render(
         request,
         "accounts/report_trial_balance.html",
@@ -1634,9 +1669,38 @@ def report_trial_balance(request):
             "data": data,
             "rows": data["rows"],
             "totals": data["totals"],
-            "empty_colspan": empty_colspan,
+            "empty_colspan": _tb_empty_colspan(data),
             "excel_url": f"{reverse('accounts_trial_balance')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_trial_balance')}?{query}&export=pdf",
+        },
+    )
+
+
+@require_perm("accounts.view_accounts_reports")
+def report_trial_balance_group(request, pk: int):
+    group = get_object_or_404(AccountGroup.objects.select_related("parent"), pk=pk, is_active=True)
+    form, date_from, date_to, report, fmt = _trial_balance_selection(request)
+    data = trial_balance_drill(group, date_from=date_from, date_to=date_to, fmt=fmt)
+    query = _tb_query(date_from, date_to, report, fmt)
+    _annotate_tb_open_urls(data["rows"], date_from, date_to, report, fmt)
+    return_url = _report_return_url(request.GET.get("next") or "")
+    if not return_url:
+        return_url = f"{reverse('accounts_trial_balance')}?{query}"
+    return render(
+        request,
+        "accounts/report_trial_balance.html",
+        {
+            "form": form,
+            "form_action": reverse("accounts_trial_balance_group", args=[group.pk]),
+            "date_from": date_from,
+            "date_to": date_to,
+            "data": data,
+            "rows": data["rows"],
+            "totals": data["totals"],
+            "empty_colspan": _tb_empty_colspan(data),
+            "drill_group": group,
+            "drill_level": data["drill_level"],
+            "return_url": return_url,
         },
     )
 

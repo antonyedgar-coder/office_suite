@@ -77,6 +77,7 @@ from accounts.services import (
     sales_register_totals,
     profit_and_loss,
     trial_balance,
+    trial_balance_drill,
 )
 
 User = get_user_model()
@@ -2161,7 +2162,10 @@ class TrialBalanceReportTests(TestCase):
         self.assertFalse(parent_row["expandable"])
         self.assertEqual(group_row["kind"], "account_group")
         self.assertTrue(group_row["expandable"])
-        self.assertEqual(parent_row["closing_debit"], Decimal("1200.00"))
+        self.assertEqual(parent_row["closing_debit"], Decimal("1350.00"))
+        self.assertEqual(parent_row["closing_credit"], Decimal("150.00"))
+        self.assertEqual(group_row["closing_debit"], Decimal("1350.00"))
+        self.assertEqual(group_row["closing_credit"], Decimal("150.00"))
         alpha = next(row for row in data["rows"] if row["name"] == "Alpha Bank TB")
         self.assertTrue(alpha["collapsed"])
         self.assertEqual(alpha["parent_group_id"], self.bank_group.pk)
@@ -2176,6 +2180,82 @@ class TrialBalanceReportTests(TestCase):
         )
         self.assertIn("js-tb-toggle", template)
         self.assertIn("bi-plus-lg", template)
+
+    def test_drill_lists_account_groups_then_ledgers_with_both_balances(self):
+        empty_group = AccountGroup(
+            name="Empty Accounts TB",
+            parent=self.parent,
+            main_head="assets",
+        )
+        empty_group.full_clean()
+        empty_group.save()
+        Account.objects.create(name="Quiet Bank TB", group=empty_group, opening_balance=Decimal("0.00"))
+
+        primary = trial_balance_drill(
+            self.parent,
+            date_from=self.date_from,
+            date_to=self.date_to,
+            fmt=TB_FORMAT_TB,
+        )
+        names = [row["name"] for row in primary["rows"]]
+        self.assertEqual(primary["drill_level"], "account_groups")
+        self.assertEqual(names, ["Bank Accounts TB"])
+        bank = primary["rows"][0]
+        self.assertEqual(bank["closing_debit"], Decimal("1350.00"))
+        self.assertEqual(bank["closing_credit"], Decimal("150.00"))
+        self.assertEqual(primary["totals"]["closing_debit"], Decimal("1350.00"))
+        self.assertEqual(primary["totals"]["closing_credit"], Decimal("150.00"))
+
+        ledgers = trial_balance_drill(
+            self.bank_group,
+            date_from=self.date_from,
+            date_to=self.date_to,
+            fmt=TB_FORMAT_TB,
+        )
+        self.assertEqual(ledgers["drill_level"], "ledgers")
+        self.assertEqual([row["name"] for row in ledgers["rows"]], ["Alpha Bank TB", "Beta Bank TB"])
+        self.assertEqual(ledgers["rows"][0]["closing_credit"], Decimal("150.00"))
+        self.assertEqual(ledgers["rows"][1]["closing_debit"], Decimal("1350.00"))
+
+        assets = AccountGroup.objects.get(system_key="assets")
+        heads = trial_balance_drill(assets, date_from=self.date_from, date_to=self.date_to, fmt=TB_FORMAT_TB)
+        self.assertEqual(heads["drill_level"], "primary_groups")
+        self.assertIn("Current Assets TB", [row["name"] for row in heads["rows"]])
+
+    def test_group_drill_pages_open_the_next_level_for_the_same_period(self):
+        from accounts.views import _annotate_tb_open_urls
+
+        data = trial_balance(
+            date_from=self.date_from,
+            date_to=self.date_to,
+            report=TB_REPORT_GROUP,
+            fmt=TB_FORMAT_TB,
+        )
+        _annotate_tb_open_urls(data["rows"], self.date_from, self.date_to, TB_REPORT_GROUP, TB_FORMAT_TB)
+        alpha = next(row for row in data["rows"] if row["name"] == "Alpha Bank TB")
+        bank = next(row for row in data["rows"] if row["name"] == "Bank Accounts TB")
+        primary_row = next(row for row in data["rows"] if row["name"] == "Current Assets TB")
+        self.assertIn(f"account={self.alpha.pk}", alpha["open_url"])
+        self.assertIn("date_from=2026-04-01", alpha["open_url"])
+        self.assertIn("date_to=2026-10-16", alpha["open_url"])
+        self.assertIn(reverse("accounts_ledger"), alpha["open_url"])
+        group_path = reverse("accounts_trial_balance_group", args=[self.bank_group.pk])
+        primary_path = reverse("accounts_trial_balance_group", args=[self.parent.pk])
+        self.assertTrue(bank["open_url"].startswith(group_path))
+        self.assertTrue(primary_row["open_url"].startswith(primary_path))
+
+        primary = trial_balance_drill(self.parent, date_from=self.date_from, date_to=self.date_to, fmt=TB_FORMAT_TB)
+        _annotate_tb_open_urls(primary["rows"], self.date_from, self.date_to, TB_REPORT_GROUP, TB_FORMAT_TB)
+        self.assertTrue(primary["rows"][0]["open_url"].startswith(group_path))
+
+        ledgers = trial_balance_drill(
+            self.bank_group, date_from=self.date_from, date_to=self.date_to, fmt=TB_FORMAT_TB
+        )
+        _annotate_tb_open_urls(ledgers["rows"], self.date_from, self.date_to, TB_REPORT_GROUP, TB_FORMAT_TB)
+        opened = {row["name"]: row["open_url"] for row in ledgers["rows"]}
+        self.assertIn(f"account={self.alpha.pk}", opened["Alpha Bank TB"])
+        self.assertIn(f"account={self.beta.pk}", opened["Beta Bank TB"])
+        self.assertNotIn("tb_report", opened["Alpha Bank TB"])
 
     def test_group_wise_heads_are_liabilities_assets_income_expenses(self):
         income = AccountGroup.objects.get(system_key="income")
@@ -2281,6 +2361,8 @@ class TrialBalanceReportTests(TestCase):
         self.assertEqual(pdf_res.status_code, 200)
         self.assertEqual(pdf_res["Content-Type"], "application/pdf")
         _assert_pdf_structure(self, pdf_res.content)
+        self.assertIn(b"/F2 12.0 Tf", pdf_res.content)
+        self.assertNotIn(b"0.91 0.92 0.93 rg", pdf_res.content)
 
 
 def _pnl_group(name, parent):
@@ -2870,8 +2952,12 @@ class LedgerFormatTests(TestCase):
 
         pnl = f"{reverse('accounts_profit_loss')}?date_from=2026-04-01&date_to=2026-10-16"
         bs = f"{reverse('accounts_balance_sheet')}?date_to=2026-10-16"
+        tb = f"{reverse('accounts_trial_balance')}?date_from=2026-04-01&date_to=2026-10-16"
+        group = f"{reverse('accounts_trial_balance_group', args=[self.party.group_id])}?date_from=2026-04-01"
         self.assertEqual(_report_return_url(pnl), pnl)
         self.assertEqual(_report_return_url(bs), bs)
+        self.assertEqual(_report_return_url(tb), tb)
+        self.assertEqual(_report_return_url(group), group)
         self.assertEqual(_report_return_url("/accounts/vouchers/"), "")
         self.assertEqual(_report_return_url("https://example.com/accounts/reports/profit-loss/"), "")
 
@@ -3059,11 +3145,17 @@ class ReportLedgerNavigationTests(SimpleTestCase):
         pnl = (base / "templates/accounts/report_pnl.html").read_text(encoding="utf-8")
         bs = (base / "templates/accounts/report_balance_sheet.html").read_text(encoding="utf-8")
         ledger = (base / "templates/accounts/report_ledger.html").read_text(encoding="utf-8")
+        tb = (base / "templates/accounts/report_trial_balance.html").read_text(encoding="utf-8")
         script = (base / "static/js/report_ledger_nav.js").read_text(encoding="utf-8")
+        tb_script = (base / "static/js/tb_row_nav.js").read_text(encoding="utf-8")
         self.assertIn("js-report-ledger-nav", pnl)
         self.assertIn("js-report-ledger-nav", bs)
         self.assertIn("report_ledger_nav.js", pnl)
         self.assertIn("report_ledger_nav.js", bs)
+        self.assertIn("js-tb-nav", tb)
+        self.assertIn("tb_row_nav.js", tb)
+        self.assertIn("Escape", tb)
+        self.assertIn('event.key === "Enter"', tb_script)
         self.assertIn("ArrowLeft", script)
         self.assertIn("ArrowRight", script)
         self.assertIn("ArrowDown", script)

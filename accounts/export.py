@@ -180,16 +180,19 @@ def trial_balance_pdf_bytes(
     subtitle = tb_export_title(data)
     period = " to ".join(part for part in (_fmt_date(date_from), _fmt_date(date_to)) if part)
     inner_w = page_w - 2 * margin
-    name_w = 220.0 if data.get("show_group_column") else 260.0
-    group_w = 110.0 if data.get("show_group_column") else 0.0
     amount_count = len(headers) - (2 if data.get("show_group_column") else 1)
-    amount_w = (inner_w - name_w - group_w) / max(amount_count, 1)
+    amount_w = 92.0
+    group_w = 96.0 if data.get("show_group_column") else 0.0
+    name_w = inner_w - group_w - amount_w * amount_count
     col_widths = [name_w]
+    amount_from = 1
     if data.get("show_group_column"):
         col_widths.append(group_w)
+        amount_from = 2
     col_widths.extend([amount_w] * amount_count)
 
-    row_h = 14.0
+    cell_size = 12.0
+    row_h = 21.0
     top_y = page_h - margin
     pages: list[list[str]] = []
     ops: list[str] = []
@@ -201,25 +204,36 @@ def trial_balance_pdf_bytes(
             pages.append(ops)
         ops = []
         y = top_y
-        ops.append(_pdf_text(margin, y - 2, title, size=13, bold=True))
-        y -= 16
-        ops.append(_pdf_text(margin, y, subtitle, size=10, bold=True))
-        y -= 13
+        ops.append(_pdf_text(margin, y - 2, title, size=19.5, bold=True))
+        y -= 24
+        ops.append(_pdf_text(margin, y, subtitle, size=15, bold=True))
+        y -= 18
         if period:
-            ops.append(_pdf_text(margin, y, period, size=9))
-            y -= 14
-        y = _draw_table_row(ops, margin, y, headers, col_widths, row_h, bold=True, fill=True)
+            ops.append(_pdf_text(margin, y, period, size=13.5))
+            y -= 18
+        y = _draw_tb_pdf_row(
+            ops, margin, y, headers, col_widths, row_h, bold=True, amounts_from=amount_from, size=cell_size
+        )
         y -= 2
 
     new_page()
     for index, values in enumerate(rows):
-        if y - row_h < margin + 20:
+        if y - row_h < margin + 24:
             new_page()
         kind = header_kinds[index] if index < len(header_kinds) else ""
-        fill = kind in ("parent", "account_group", "total")
         bold = kind in ("parent", "account_group", "total")
         display = [_pdf_cell_text(value) for value in values]
-        y = _draw_table_row(ops, margin, y, display, col_widths, row_h, bold=bold, fill=fill, amounts_from=1)
+        y = _draw_tb_pdf_row(
+            ops,
+            margin,
+            y,
+            display,
+            col_widths,
+            row_h,
+            bold=bold,
+            amounts_from=amount_from,
+            size=cell_size,
+        )
     pages.append(ops)
     return _build_pdf(pages, page_w, page_h)
 
@@ -269,6 +283,29 @@ def _pdf_escape(text: str) -> str:
 def _pdf_text(x: float, y: float, text: str, *, size=8, bold=False) -> str:
     font = "F2" if bold else "F1"
     return f"BT /{font} {size:.1f} Tf {x:.2f} {y:.2f} Td ({_pdf_escape(text)}) Tj ET"
+
+
+def _draw_tb_pdf_row(ops, left, y, values, widths, height, *, bold=False, amounts_from=1, size=12):
+    """Name stays plain. Amount columns are right-aligned, vertically centred, and ruled top and bottom."""
+    x = left
+    text_y = y - height + (height - size) / 2 + size * 0.22
+    char_w = size * 0.5
+    for index, (value, width) in enumerate(zip(values, widths)):
+        if index >= amounts_from:
+            ops.append("0 0 0 RG 0.6 w")
+            ops.append(f"{x:.2f} {y:.2f} m {x + width:.2f} {y:.2f} l S")
+            ops.append(f"{x:.2f} {y - height:.2f} m {x + width:.2f} {y - height:.2f} l S")
+        text = str(value or "")
+        max_chars = max(int(width / char_w), 6)
+        if len(text) > max_chars:
+            text = text[: max_chars - 1] + "..."
+        if index >= amounts_from:
+            approx = min(len(text) * char_w, width - 6)
+            ops.append(_pdf_text(x + width - 4 - approx, text_y, text, size=size, bold=bold))
+        else:
+            ops.append(_pdf_text(x + 3, text_y, text, size=size, bold=bold))
+        x += width
+    return y - height
 
 
 def _draw_table_row(ops, left, y, values, widths, height, *, bold=False, fill=False, amounts_from=1):

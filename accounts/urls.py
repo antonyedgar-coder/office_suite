@@ -60,6 +60,11 @@ urlpatterns = [
     path("vouchers/<int:pk>/invoice/", views.sales_invoice_print, name="accounts_sales_invoice_print"),
     path("unbilled/", views.unbilled_tasks, name="accounts_unbilled_tasks"),
     path("reports/trial-balance/", views.report_trial_balance, name="accounts_trial_balance"),
+    path(
+        "reports/trial-balance/group/<int:pk>/",
+        views.report_trial_balance_group,
+        name="accounts_trial_balance_group",
+    ),
     path("reports/profit-loss/", views.report_profit_loss, name="accounts_profit_loss"),
     path("reports/balance-sheet/", views.report_balance_sheet, name="accounts_balance_sheet"),
     path("reports/ledger/", views.report_ledger, name="accounts_ledger"),

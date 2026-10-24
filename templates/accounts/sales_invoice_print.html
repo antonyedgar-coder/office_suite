@@ -8,47 +8,25 @@
     max-width: 210mm;
     margin: 0 auto;
     background: #fff;
-    padding: 0.75rem 0.5rem 1rem;
-    color: #111;
-    font-size: 0.92rem;
+    padding: 1.25rem 1.5rem 1.5rem;
   }
   .invoice-heading {
-    font-size: 1.65rem;
+    font-size: 1.75rem;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
     text-align: center;
-    margin: 0 0 0.65rem;
+    margin: 0 0 1.25rem;
   }
-  table.invoice-grid {
-    width: 100%;
-    border-collapse: collapse;
-    background: #fff;
-  }
-  table.invoice-grid th,
-  table.invoice-grid td {
-    border: 1px solid #111;
-    padding: 0.28rem 0.45rem;
-    vertical-align: top;
-  }
-  table.invoice-grid .firm-name,
-  table.invoice-grid .buyer-name { font-weight: 700; }
-  table.invoice-grid .meta-label { white-space: nowrap; }
-  table.invoice-grid .col-sno { width: 3.2rem; text-align: center; }
-  table.invoice-grid .col-hsn { width: 8.5rem; }
-  table.invoice-grid .col-amt { width: 8.5rem; }
-  table.invoice-grid thead th {
-    font-weight: 700;
-    text-align: left;
-    background: #fff;
-  }
-  table.invoice-grid .num { text-align: right; font-variant-numeric: tabular-nums; }
-  table.invoice-grid .item-note { font-size: 0.82rem; margin-top: 0.1rem; }
-  table.invoice-grid .grand td { font-weight: 700; }
-  table.invoice-grid .plain td { border-left: 1px solid #111; border-right: 1px solid #111; }
+  .invoice-firm { font-size: 1.25rem; font-weight: 700; }
+  .invoice-meta td { padding: 0.15rem 0.5rem 0.15rem 0; vertical-align: top; }
+  .invoice-sheet table.invoice-lines th,
+  .invoice-sheet table.invoice-lines td { padding: 0.4rem 0.5rem; }
+  .invoice-words { font-size: 0.92rem; }
+  .invoice-note { font-size: 0.8rem; color: #5c6478; }
   @media print {
     .no-print, .sidebar, .topbar, aside, .sidebar-collapse-toggle, .offcanvas, .btn { display: none !important; }
     .app-shell, .content, .container { display: block !important; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
-    .invoice-sheet { max-width: none; padding: 0; }
+    .invoice-sheet { max-width: none; }
   }
 </style>
 {% endblock %}
@@ -59,109 +37,77 @@
   </div>
   <div class="invoice-sheet">
     <h1 class="invoice-heading">{{ invoice.title }}</h1>
-    <table class="invoice-grid">
-      <colgroup>
-        <col class="col-sno">
-        <col>
-        <col class="col-hsn">
-        <col class="col-amt">
-      </colgroup>
-      <tbody>
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        {% if invoice.logo_url %}
+          <img src="{{ invoice.logo_url }}" alt="" style="max-height:48px" class="mb-2" />
+        {% endif %}
+        <div class="invoice-firm">{{ invoice.company_name|default:"—" }}</div>
+        {% if invoice.company_address %}<div>{{ invoice.company_address }}</div>{% endif %}
+        {% if invoice.company_gstin %}<div>GSTIN: <span class="mono">{{ invoice.company_gstin }}</span></div>{% endif %}
+      </div>
+      <div class="text-end">
+        <table class="invoice-meta ms-auto">
+          <tr><td class="text-secondary">Invoice no.</td><td class="mono">{{ invoice.number }}</td></tr>
+          <tr><td class="text-secondary">Date</td><td>{{ invoice.date|date:"d-m-Y" }}</td></tr>
+          {% if invoice.is_gst and invoice.place_of_supply %}
+            <tr><td class="text-secondary">Place of supply</td><td>{{ invoice.place_of_supply }}</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+    <div class="mb-3">
+      <div class="text-secondary small">Bill to</div>
+      <div class="fw-semibold">{{ invoice.buyer_name|default:"—" }}</div>
+      {% if invoice.buyer_address %}<div>{{ invoice.buyer_address }}</div>{% endif %}
+      {% if invoice.buyer_gstin %}<div>GSTIN: <span class="mono">{{ invoice.buyer_gstin }}</span></div>{% endif %}
+    </div>
+    <table class="table table-sm invoice-lines">
+      <thead>
         <tr>
-          <td colspan="2" class="firm-name">
-            {% if invoice.logo_url %}
-              <img src="{{ invoice.logo_url }}" alt="" style="max-height:36px; display:block; margin-bottom:0.25rem" />
-            {% endif %}
-            {{ invoice.company_name|default:"—" }}
-          </td>
-          <td class="meta-label">Invoice no.</td>
-          <td class="mono">{{ invoice.number }}</td>
-        </tr>
-        <tr>
-          <td colspan="2">{{ invoice.company_address|default:"" }}</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td colspan="2">{% if invoice.company_gstin %}GSTIN: <span class="mono">{{ invoice.company_gstin }}</span>{% endif %}</td>
-          <td class="meta-label">Date</td>
-          <td>{{ invoice.date|date:"d-m-Y" }}</td>
-        </tr>
-        <tr>
-          <td colspan="2">Bill to</td>
-          <td class="meta-label">{% if invoice.is_gst %}Place of supply{% endif %}</td>
-          <td>{% if invoice.is_gst %}{{ invoice.place_of_supply }}{% endif %}</td>
-        </tr>
-        <tr>
-          <td colspan="2" class="buyer-name">{{ invoice.buyer_name|default:"—" }}</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td colspan="2">{{ invoice.buyer_address|default:"" }}</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td colspan="2">{% if invoice.buyer_gstin %}GSTIN: <span class="mono">{{ invoice.buyer_gstin }}</span>{% endif %}</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <th class="col-sno">S.NO</th>
+          <th style="width:3rem">#</th>
           <th>Particulars</th>
-          <th>HSN / SAC</th>
-          <th class="num">Amount</th>
+          <th style="width:8rem">HSN / SAC</th>
+          <th class="text-end" style="width:9rem">Amount</th>
         </tr>
+      </thead>
+      <tbody>
         {% for item in invoice.items %}
           <tr>
-            <td class="col-sno">{{ forloop.counter }}</td>
+            <td>{{ forloop.counter }}</td>
             <td>
               {{ item.description }}
-              {% if item.is_pure_agent %}<div class="item-note">Recovered at actuals — Rule 33. No GST.</div>{% endif %}
+              {% if item.is_pure_agent %}<div class="small text-secondary">Recovered at actuals — Rule 33. No GST.</div>{% endif %}
             </td>
-            <td class="mono">{{ item.hsn|default:"-" }}</td>
-            <td class="num mono">{{ item.amount_display }}</td>
+            <td class="mono">{{ item.hsn|default:"—" }}</td>
+            <td class="text-end mono">{{ item.amount_display }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="4">No line items.</td></tr>
+          <tr><td colspan="4" class="text-secondary">No line items.</td></tr>
         {% endfor %}
         <tr>
-          <td colspan="2"></td>
-          <td class="num">Total</td>
-          <td class="num mono">{{ invoice.taxable_total_display }}</td>
+          <td colspan="3" class="text-end">Total</td>
+          <td class="text-end mono">{{ invoice.taxable_total_display }}</td>
         </tr>
         {% for tax in invoice.tax_rows %}
           <tr>
-            <td colspan="2"></td>
-            <td class="num">{{ tax.label }}</td>
-            <td class="num mono">{{ tax.amount_display }}</td>
+            <td colspan="3" class="text-end">{{ tax.label }}</td>
+            <td class="text-end mono">{{ tax.amount_display }}</td>
           </tr>
         {% endfor %}
-        <tr class="grand">
-          <td colspan="2"></td>
-          <td class="num">Grand total</td>
-          <td class="num mono">{{ invoice.grand_total_display }}</td>
-        </tr>
         <tr>
-          <td colspan="4"><strong>Amount in words:</strong> {{ invoice.amount_in_words }}</td>
-        </tr>
-        {% if invoice.narration %}
-          <tr>
-            <td colspan="4"><strong>Narration:</strong> {{ invoice.narration }}</td>
-          </tr>
-        {% endif %}
-        {% if invoice.tasks %}
-          <tr>
-            <td colspan="4">Task:
-              {% for t in invoice.tasks %}{{ t.display_title }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            </td>
-          </tr>
-        {% endif %}
-        <tr>
-          <td colspan="4">This is a computer-generated invoice.</td>
+          <th colspan="3" class="text-end">Grand total</th>
+          <th class="text-end mono">{{ invoice.grand_total_display }}</th>
         </tr>
       </tbody>
     </table>
+    <p class="invoice-words mb-2"><strong>Amount in words:</strong> {{ invoice.amount_in_words }}</p>
+    {% if invoice.narration %}<p class="mb-2"><strong>Narration:</strong> {{ invoice.narration }}</p>{% endif %}
+    {% if invoice.tasks %}
+      <p class="invoice-note mb-2">Task:
+        {% for t in invoice.tasks %}{{ t.display_title }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </p>
+    {% endif %}
+    <p class="invoice-note mb-0">This is a computer-generated invoice.</p>
   </div>
 {% endblock %}

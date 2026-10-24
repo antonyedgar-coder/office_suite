@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Trial Balance — CA Office Suite{% endblock %}
-{% block page_title %}Trial Balance{% endblock %}
+{% load static %}
+{% block title %}{% if drill_group %}{{ drill_group.name }}{% else %}Trial Balance{% endif %} — CA Office Suite{% endblock %}
+{% block page_title %}{% if drill_group %}{{ drill_group.name }}{% else %}Trial Balance{% endif %}{% endblock %}
 {% block extra_head %}
   <style>
     .tb-indent-0 { padding-left: 0.5rem !important; }
@@ -30,14 +31,18 @@
     }
     .tb-toggle:hover { color: var(--app-primary-hover); }
     .tb-toggle-spacer { visibility: hidden; }
+    .tb-report tr.js-tb-row { cursor: pointer; }
+    .tb-report tr.js-tb-row.is-selected td { background: #cfe2ff; }
     @media print {
       .tb-ledger-row { display: table-row !important; }
       .tb-toggle { display: none; }
+      .tb-report tr.js-tb-row.is-selected td { background: transparent; }
     }
   </style>
 {% endblock %}
 {% block content %}
-  <form method="get" class="row g-2 mb-3 align-items-end">
+  <form method="get" action="{{ form_action|default:'' }}" class="row g-2 mb-3 align-items-end">
+    {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
     <div class="col-6 col-md-2">
       <label class="form-label" for="{{ form.date_from.id_for_label }}">From date</label>
       {{ form.date_from }}
@@ -57,6 +62,12 @@
     <div class="col-auto">
       <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
     </div>
+    {% if return_url %}
+    <div class="col-auto">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ return_url }}">Back</a>
+    </div>
+    {% endif %}
+    {% if not drill_group %}
     <div class="col-auto">
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -68,14 +79,21 @@
         </ul>
       </div>
     </div>
+    {% endif %}
   </form>
   {% if form.non_field_errors %}
     <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
   {% endif %}
-  <p class="text-secondary small mb-2">{{ date_from }} to {{ date_to }}</p>
+  <p class="text-secondary small mb-2">
+    {% if drill_level == "ledgers" %}Ledgers ·
+    {% elif drill_level == "account_groups" %}Account groups ·
+    {% elif drill_level == "primary_groups" %}Primary groups ·
+    {% endif %}
+    {{ date_from }} to {{ date_to }}
+  </p>
   <div class="card p-3">
     <div class="table-responsive">
-    <table class="table table-sm mb-0 tb-report">
+    <table class="table table-sm mb-0 tb-report js-tb-nav">
       <thead>
         <tr>
           <th>Particulars</th>
@@ -95,7 +113,8 @@
       <tbody>
         {% for row in rows %}
           <tr
-            class="tb-row-{{ row.kind }}{% if row.is_header %} fw-semibold{% endif %}{% if row.collapsed %} tb-ledger-row js-tb-ledger{% endif %}"
+            class="tb-row-{{ row.kind }}{% if row.is_header %} fw-semibold{% endif %}{% if row.collapsed %} tb-ledger-row js-tb-ledger{% endif %}{% if row.open_url %} js-tb-row{% endif %}"
+            {% if row.open_url %}tabindex="-1" data-open-url="{{ row.open_url }}"{% endif %}
             {% if row.parent_group_id %}data-group-id="{{ row.parent_group_id }}" hidden{% endif %}
           >
             <td class="tb-indent-{{ row.indent }}">
@@ -138,6 +157,7 @@
   </div>
 {% endblock %}
 {% block extra_js %}
+  <script src="{% static 'js/tb_row_nav.js' %}?v=1"></script>
   <script>
     document.querySelectorAll(".js-tb-toggle").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -153,4 +173,14 @@
       });
     });
   </script>
+  {% if return_url %}
+  <script>
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.target && event.target.closest && event.target.closest("input, select, textarea, .filtered-select.is-open")) return;
+      event.preventDefault();
+      window.location.href = "{{ return_url|escapejs }}";
+    });
+  </script>
+  {% endif %}
 {% endblock %}
