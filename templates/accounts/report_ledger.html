@@ -6,6 +6,7 @@
   <style>
     .js-ledger-entry { cursor: pointer; }
     .js-ledger-entry.is-selected td { background: #cfe2ff; }
+    .ledger-date { width: 15ch; min-width: 15ch; white-space: nowrap; }
   </style>
 {% endblock %}
 {% block content %}
@@ -59,12 +60,12 @@
         {% endifchanged %}
       {% endif %}
       <h6 class="mb-2">{{ section.account.name }}</h6>
-      <div class="card p-3 mb-3">
+      <div class="card report-sheet p-3 mb-3">
         <div class="table-responsive">
           <table class="table table-sm mb-0">
             <thead>
               <tr>
-                <th>Date</th>
+                <th class="ledger-date">Date</th>
                 <th>Voucher No</th>
                 <th>Ledger account</th>
                 <th>Narration</th>
@@ -78,7 +79,7 @@
                   class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}{% if row.voucher %} js-ledger-entry{% endif %}"
                   {% if row.voucher %}tabindex="-1" data-open-url="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}"{% endif %}
                 >
-                  <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
+                  <td class="ledger-date">{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
                   <td>
                     {% if row.voucher %}
                       <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}">{{ row.number }}</a>
@@ -103,12 +104,12 @@
     {% endfor %}
   {% elif account %}
     <h6 class="mb-3">{{ account.name }}</h6>
-    <div class="card p-3">
+    <div class="card report-sheet p-3">
       <div class="table-responsive">
         <table class="table table-sm mb-0">
           <thead>
             <tr>
-              <th>Date</th>
+              <th class="ledger-date">Date</th>
               <th>Voucher No</th>
               <th>Ledger account</th>
               <th>Narration</th>
@@ -122,7 +123,7 @@
                 class="{% if row.kind == 'total' or row.kind == 'closing' %}fw-bold{% endif %}{% if row.voucher %} js-ledger-entry{% endif %}"
                 {% if row.voucher %}tabindex="-1" data-open-url="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}"{% endif %}
               >
-                <td>{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
+                <td class="ledger-date">{% if row.date %}{{ row.date|date:"d-m-Y" }}{% endif %}</td>
                 <td>
                   {% if row.voucher %}
                     <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}?next={{ ledger_return_url|urlencode }}">{{ row.number }}</a>

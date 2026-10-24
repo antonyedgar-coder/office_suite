@@ -2925,6 +2925,11 @@ class LedgerFormatTests(TestCase):
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertIn(b"Cash", pdf)
         self.assertIn(b"Closing Balance", pdf)
+        self.assertIn(b"Voucher No", pdf)
+        self.assertNotIn(b"Narration", pdf)
+        self.assertNotIn(b"Receipt from party", pdf)
+        self.assertIn("Narration", values)
+        self.assertIn("Receipt from party", values)
         self.client.force_login(self.admin)
         xlsx_res = self.client.get(
             reverse("accounts_ledger"),

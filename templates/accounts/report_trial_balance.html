@@ -8,9 +8,9 @@
     .tb-indent-1 { padding-left: 1.5rem !important; }
     .tb-indent-2 { padding-left: 2.75rem !important; }
     .tb-indent-3 { padding-left: 4rem !important; }
-    .tb-row-parent { background: #e9ecef; }
-    .tb-row-account_group { background: #f3f4f6; }
-    .tb-row-ledger td { background: transparent; }
+    .report-sheet .tb-row-parent > td { background: #f1f3f6; }
+    .report-sheet .tb-row-account_group > td { background: #fbfcfd; }
+    .report-sheet .tb-row-ledger > td { background: #f8f9fb; }
     .tb-report th, .tb-report .mono { white-space: nowrap; }
     .tb-toggle,
     .tb-toggle-spacer {
@@ -91,7 +91,7 @@
     {% endif %}
     {{ date_from }} to {{ date_to }}
   </p>
-  <div class="card p-3">
+  <div class="card report-sheet p-3">
     <div class="table-responsive">
     <table class="table table-sm mb-0 tb-report js-tb-nav">
       <thead>

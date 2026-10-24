@@ -809,6 +809,7 @@ def bs_pdf_response(
 
 
 LEDGER_HEADERS = ["Date", "Voucher No", "Ledger account", "Narration", "Debit", "Credit"]
+LEDGER_PDF_HEADERS = ["Date", "Voucher No", "Ledger account", "Debit", "Credit"]
 
 
 def _ledger_filename(account, date_from, date_to, ext: str, *, all_ledgers=False) -> str:
@@ -828,6 +829,16 @@ def _ledger_row_cells(row: dict) -> list:
         row.get("number") or "",
         row.get("ledger_account") or "",
         row.get("narration") or "",
+        _amount_or_blank(row.get("debit")),
+        _amount_or_blank(row.get("credit")),
+    ]
+
+
+def _ledger_pdf_row_cells(row: dict) -> list:
+    return [
+        _fmt_date(row.get("date")),
+        row.get("number") or "",
+        row.get("ledger_account") or "",
         _amount_or_blank(row.get("debit")),
         _amount_or_blank(row.get("credit")),
     ]
@@ -969,7 +980,11 @@ def ledger_pdf_bytes(
     page_w, page_h = 842.0, 595.0
     margin = 36.0
     inner_w = page_w - 2 * margin
-    col_widths = [70.0, 110.0, 150.0, inner_w - 70.0 - 110.0 - 150.0 - 160.0, 80.0, 80.0]
+    date_w = 70.0
+    voucher_w = 110.0 * 0.6
+    amount_w = 80.0
+    ledger_w = inner_w - date_w - voucher_w - amount_w * 2
+    col_widths = [date_w, voucher_w, ledger_w, amount_w, amount_w]
     row_h = 14.0
     pages: list[list[str]] = []
     ops: list[str] = []
@@ -995,7 +1010,7 @@ def ledger_pdf_bytes(
         if period:
             ops.append(_pdf_text(margin, y, period, size=9))
             y -= 14
-        y = _draw_table_row(ops, margin, y, LEDGER_HEADERS, col_widths, row_h, bold=True, fill=True, amounts_from=4)
+        y = _draw_table_row(ops, margin, y, LEDGER_PDF_HEADERS, col_widths, row_h, bold=True, fill=True, amounts_from=3)
         y -= 2
 
     def write_items(items):
@@ -1003,7 +1018,7 @@ def ledger_pdf_bytes(
         for item in items:
             if y - row_h < margin + 20:
                 new_page()
-            values = _ledger_row_cells(item)
+            values = _ledger_pdf_row_cells(item)
             display = [_pdf_cell_text(value) for value in values]
             bold = item.get("kind") in ("closing", "total")
             y = _draw_table_row(
@@ -1015,7 +1030,7 @@ def ledger_pdf_bytes(
                 row_h,
                 bold=bold,
                 fill=item.get("kind") == "total",
-                amounts_from=4,
+                amounts_from=3,
             )
 
     new_page()

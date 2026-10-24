@@ -360,6 +360,16 @@ body {
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
 
+.report-sheet {
+  background: #f8f9fb;
+  --bs-card-bg: #f8f9fb;
+  --bs-table-bg: #f8f9fb;
+}
+
+.report-sheet .table > :not(caption) > * > * {
+  background-color: #f8f9fb;
+}
+
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
