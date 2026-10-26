@@ -38,6 +38,46 @@
             <div class="text-danger small">{{ form.address.errors }}</div>
           {% endif %}
         </div>
+        <div class="col-12">
+          <hr class="my-1" />
+          <div class="fw-semibold mb-1">Payment details</div>
+          <div class="form-field-hint mb-2">Printed on sales invoices so the client can pay. A UPI ID also adds a QR code.</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.bank_account_name.id_for_label }}">Account name</label>
+          {{ form.bank_account_name }}
+          {% if form.bank_account_name.errors %}
+            <div class="text-danger small">{{ form.bank_account_name.errors }}</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.bank_name.id_for_label }}">Bank</label>
+          {{ form.bank_name }}
+          {% if form.bank_name.errors %}
+            <div class="text-danger small">{{ form.bank_name.errors }}</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="{{ form.bank_account_number.id_for_label }}">Account number</label>
+          {{ form.bank_account_number }}
+          {% if form.bank_account_number.errors %}
+            <div class="text-danger small">{{ form.bank_account_number.errors }}</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="{{ form.bank_ifsc.id_for_label }}">IFSC</label>
+          {{ form.bank_ifsc }}
+          {% if form.bank_ifsc.errors %}
+            <div class="text-danger small">{{ form.bank_ifsc.errors }}</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="{{ form.upi_id.id_for_label }}">UPI ID</label>
+          {{ form.upi_id }}
+          {% if form.upi_id.errors %}
+            <div class="text-danger small">{{ form.upi_id.errors }}</div>
+          {% endif %}
+        </div>
         <div class="col-12 col-md-4">
           {% if settings.logo %}
             <label class="form-label">Current logo</label>

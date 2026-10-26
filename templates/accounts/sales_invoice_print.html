@@ -23,6 +23,7 @@
   .invoice-sheet table.invoice-lines td { padding: 0.4rem 0.5rem; }
   .invoice-words { font-size: 0.92rem; }
   .invoice-note { font-size: 0.8rem; color: #5c6478; }
+  .invoice-qr { width: 112px; height: 112px; }
   @media print {
     .no-print, .sidebar, .topbar, aside, .sidebar-collapse-toggle, .offcanvas, .btn { display: none !important; }
     .app-shell, .content, .container { display: block !important; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
@@ -102,6 +103,26 @@
       </tbody>
     </table>
     <p class="invoice-words mb-2"><strong>Amount in words:</strong> {{ invoice.amount_in_words }}</p>
+    {% if invoice.show_payment %}
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          {% if invoice.bank_account_number or invoice.bank_ifsc or invoice.bank_name or invoice.bank_account_name %}
+            <div class="fw-semibold mb-1">Bank details for payment</div>
+            {% if invoice.bank_account_name %}<div>Account name: {{ invoice.bank_account_name }}</div>{% endif %}
+            {% if invoice.bank_name %}<div>Bank: {{ invoice.bank_name }}</div>{% endif %}
+            {% if invoice.bank_account_number %}<div>A/c no: <span class="mono">{{ invoice.bank_account_number }}</span></div>{% endif %}
+            {% if invoice.bank_ifsc %}<div>IFSC: <span class="mono">{{ invoice.bank_ifsc }}</span></div>{% endif %}
+          {% endif %}
+          {% if invoice.upi_id %}<div{% if invoice.bank_account_number or invoice.bank_ifsc %} class="mt-1"{% endif %}>UPI: <span class="mono">{{ invoice.upi_id }}</span></div>{% endif %}
+        </div>
+        {% if invoice.payment_qr %}
+          <div class="text-center">
+            <img src="{{ invoice.payment_qr }}" alt="UPI QR code" class="invoice-qr" />
+            <div class="invoice-note">Scan to pay {{ invoice.grand_total_display }}</div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
     {% if invoice.narration %}<p class="mb-2"><strong>Narration:</strong> {{ invoice.narration }}</p>{% endif %}
     {% if invoice.tasks %}
       <p class="invoice-note mb-2">Task:

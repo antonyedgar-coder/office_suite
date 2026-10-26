@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -8,6 +10,9 @@ from .theme import DEFAULT_PRIMARY, DEFAULT_SIDEBAR, normalize_hex
 
 _LOGO_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "svg"})
 _LOGO_MAX_BYTES = 2 * 1024 * 1024
+_IFSC_RE = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$")
+_ACCOUNT_NO_RE = re.compile(r"^\d{6,20}$")
+_UPI_RE = re.compile(r"^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z][a-zA-Z0-9.\-]{1,63}$")
 
 
 class SiteSettingsForm(forms.ModelForm):
@@ -18,7 +23,19 @@ class SiteSettingsForm(forms.ModelForm):
 
     class Meta:
         model = SiteSettings
-        fields = ("company_name", "gstin", "address", "logo", "theme_primary", "theme_sidebar")
+        fields = (
+            "company_name",
+            "gstin",
+            "address",
+            "bank_account_name",
+            "bank_name",
+            "bank_account_number",
+            "bank_ifsc",
+            "upi_id",
+            "logo",
+            "theme_primary",
+            "theme_sidebar",
+        )
         widgets = {
             "company_name": forms.TextInput(
                 attrs={
@@ -39,6 +56,26 @@ class SiteSettingsForm(forms.ModelForm):
                     "class": "form-control",
                     "placeholder": "Office address",
                 }
+            ),
+            "bank_account_name": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Name on the bank account"}
+            ),
+            "bank_name": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "e.g. HDFC Bank"}
+            ),
+            "bank_account_number": forms.TextInput(
+                attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "Account number"}
+            ),
+            "bank_ifsc": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "maxlength": "11",
+                    "placeholder": "HDFC0001234",
+                    "style": "text-transform: uppercase;",
+                }
+            ),
+            "upi_id": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "firm@okhdfcbank"}
             ),
             "logo": forms.FileInput(
                 attrs={
@@ -76,6 +113,30 @@ class SiteSettingsForm(forms.ModelForm):
 
     def clean_gstin(self):
         return (self.cleaned_data.get("gstin") or "").strip().upper()
+
+    def clean_bank_account_name(self):
+        return (self.cleaned_data.get("bank_account_name") or "").strip()
+
+    def clean_bank_name(self):
+        return (self.cleaned_data.get("bank_name") or "").strip()
+
+    def clean_bank_account_number(self):
+        raw = re.sub(r"[\s\-]", "", self.cleaned_data.get("bank_account_number") or "")
+        if raw and not _ACCOUNT_NO_RE.match(raw):
+            raise ValidationError("Account number should be 6 to 20 digits.")
+        return raw
+
+    def clean_bank_ifsc(self):
+        raw = re.sub(r"\s", "", (self.cleaned_data.get("bank_ifsc") or "")).upper()
+        if raw and not _IFSC_RE.match(raw):
+            raise ValidationError("IFSC should be 11 characters, like HDFC0001234.")
+        return raw
+
+    def clean_upi_id(self):
+        raw = (self.cleaned_data.get("upi_id") or "").strip()
+        if raw and not _UPI_RE.match(raw):
+            raise ValidationError("Enter a UPI ID like firm@okhdfcbank.")
+        return raw
 
     def clean_theme_primary(self):
         raw = self.cleaned_data.get("theme_primary")

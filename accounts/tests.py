@@ -1598,6 +1598,22 @@ class AccountsModuleTests(TestCase):
         self.assertEqual([row["label"] for row in doc["tax_rows"]], ["CGST 9%", "SGST 9%"])
         self.assertEqual(doc["grand_total"], Decimal("1180.00"))
         self.assertEqual(amount_in_indian_words(Decimal("1180.00")), "Rupees One Thousand One Hundred Eighty Only")
+        self.assertFalse(doc["show_payment"])
+        self.assertEqual(doc["payment_qr"], "")
+        SiteSettings.objects.filter(pk=1).update(
+            bank_account_name="Test Firm",
+            bank_name="HDFC Bank",
+            bank_account_number="5010012345678",
+            bank_ifsc="HDFC0001234",
+            upi_id="firm@okhdfcbank",
+        )
+        paid = sales_invoice_document(voucher)
+        self.assertTrue(paid["show_payment"])
+        self.assertEqual(paid["bank_ifsc"], "HDFC0001234")
+        self.assertIn("pa=firm%40okhdfcbank", paid["payment_uri"])
+        self.assertIn("am=1180.00", paid["payment_uri"])
+        self.assertIn(f"tn={paid['number'].replace('/', '%2F')}", paid["payment_uri"])
+        self.assertTrue(paid["payment_qr"].startswith("data:image/svg+xml"))
 
     def test_receipt_debits_cash_mode_and_credits_accounts(self):
         seed_chart_of_accounts()
@@ -1727,7 +1743,7 @@ class AccountsModuleTests(TestCase):
             group=AccountGroup.objects.get(system_key="assets"),
         )
         self.assertEqual(outstanding_bills_for_account(other), [])
-        advance_rv = post_voucher(
+        plain_rv = post_voucher(
             voucher_type="receipt",
             voucher_date=date(2026, 10, 16),
             lines=build_receipt_lines(
@@ -1738,6 +1754,24 @@ class AccountsModuleTests(TestCase):
             receipt_items=[
                 {
                     "account": other,
+                    "amount": Decimal("250.00"),
+                    "bill_alloc": {"as_advance": True, "bills": [], "advance": "250.00"},
+                }
+            ],
+        )
+        self.assertFalse(ReceiptAllocation.objects.filter(receipt=plain_rv).exists())
+        advance_party = Account.objects.create(name="Advance debtor", group=buyer.group)
+        advance_rv = post_voucher(
+            voucher_type="receipt",
+            voucher_date=date(2026, 10, 17),
+            lines=build_receipt_lines(
+                mode=bank,
+                items=[{"account": advance_party, "amount": Decimal("250.00")}],
+            ),
+            actor=self.admin,
+            receipt_items=[
+                {
+                    "account": advance_party,
                     "amount": Decimal("250.00"),
                     "bill_alloc": {"as_advance": True, "bills": [], "advance": "250.00"},
                 }
@@ -1772,9 +1806,11 @@ class AccountsModuleTests(TestCase):
             main_head="assets",
         )
         bank = Account.objects.create(name="OB bank", group=cash_group)
+        from accounts.services import ensure_sundry_debtors_group
+
         party = Account.objects.create(
             name="Opening debtor",
-            group=assets,
+            group=ensure_sundry_debtors_group(),
             opening_balance=Decimal("500.00"),
         )
         bills = outstanding_bills_for_account(party)
@@ -2809,6 +2845,7 @@ class LedgerFormatTests(TestCase):
         self.assertEqual(entry["credit"], Decimal("100.00"))
         self.assertEqual(entry["debit"], Decimal("0.00"))
         self.assertEqual(entry["amount"], Decimal("100.00"))
+        self.assertEqual(entry["balance_display"], "100.00 Cr")
         closing = next(row for row in rows if row["kind"] == "closing")
         total = next(row for row in rows if row["kind"] == "total")
         self.assertEqual(closing["ledger_account"], "Closing Balance")
@@ -2822,6 +2859,11 @@ class LedgerFormatTests(TestCase):
         self.assertEqual(entry["ledger_account"], "Antony Edgar Ledger")
         self.assertEqual(entry["debit"], Decimal("100.00"))
         self.assertEqual(entry["credit"], Decimal("0.00"))
+        self.assertEqual(entry["balance_display"], "100.00 Dr")
+        closing = next(row for row in rows if row["kind"] == "closing")
+        self.assertEqual(closing["balance_display"], "100.00 Dr")
+        total = next(row for row in rows if row["kind"] == "total")
+        self.assertEqual(total["balance_display"], "")
 
     def test_compound_voucher_shows_this_ledger_amount_and_opposite_party(self):
         bank = Account.objects.create(name="HDFC Ledger", group=self.cash.group)

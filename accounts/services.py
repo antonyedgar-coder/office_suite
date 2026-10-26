@@ -902,6 +902,8 @@ def apply_receipt_allocations(receipt: Voucher, items: list[dict]) -> None:
         amount = money(raw.get("amount"))
         if not account or amount <= 0:
             continue
+        if not is_sundry_debtor(account) and not is_sundry_creditor(account):
+            continue
         payload = parse_receipt_allocation_payload(raw.get("bill_alloc"))
         against_type = VOUCHER_PURCHASE if is_sundry_creditor(account) else VOUCHER_SALES
         for row in resolve_receipt_allocations(
@@ -1374,6 +1376,7 @@ def sales_invoice_document(voucher: Voucher) -> dict:
         )
     grand = taxable + gst_total
     settings = get_site_settings()
+    payment = _invoice_payment(settings, amount=grand, number=voucher.number)
     buyer_gstin = (getattr(buyer, "gstin", None) or "").strip().upper() if buyer else ""
     state_code = gstin_state_code(buyer_gstin)
     is_gst = sales_series_uses_gst(voucher.series) or bool(tax_rows)
@@ -1401,6 +1404,29 @@ def sales_invoice_document(voucher: Voucher) -> dict:
         "grand_total_display": format_indian_money(grand),
         "amount_in_words": amount_in_indian_words(grand),
         "tasks": list(voucher.tasks.all()),
+        **payment,
+    }
+
+
+def _invoice_payment(settings, *, amount, number: str) -> dict:
+    from .upi import upi_payment_uri, upi_qr_data_uri
+
+    account_name = (getattr(settings, "bank_account_name", None) or "").strip()
+    bank_name = (getattr(settings, "bank_name", None) or "").strip()
+    account_number = (getattr(settings, "bank_account_number", None) or "").strip()
+    ifsc = (getattr(settings, "bank_ifsc", None) or "").strip().upper()
+    upi_id = (getattr(settings, "upi_id", None) or "").strip()
+    payee = account_name or (getattr(settings, "company_name", None) or "").strip()
+    uri = upi_payment_uri(vpa=upi_id, payee_name=payee, amount=amount, note=number) if upi_id else ""
+    return {
+        "bank_account_name": account_name,
+        "bank_name": bank_name,
+        "bank_account_number": account_number,
+        "bank_ifsc": ifsc,
+        "upi_id": upi_id,
+        "payment_uri": uri,
+        "payment_qr": upi_qr_data_uri(uri) if uri else "",
+        "show_payment": bool(account_number or ifsc or bank_name or account_name or upi_id),
     }
 
 
@@ -3049,7 +3075,34 @@ def _ledger_row(*, kind, date=None, number="", ledger_account="", narration="", 
         "credit": credit,
         "amount": debit or credit,
         "voucher": voucher,
+        "balance": None,
+        "balance_display": "",
     }
+
+
+def _format_running_balance(amount) -> str:
+    if amount is None:
+        return ""
+    amount = money(amount)
+    if amount > 0:
+        return f"{amount} Dr"
+    if amount < 0:
+        return f"{money(abs(amount))} Cr"
+    return "0.00"
+
+
+def _apply_running_balance(rows: list[dict]) -> None:
+    running = Decimal("0.00")
+    for row in rows:
+        kind = row.get("kind")
+        if kind in ("opening", "entry"):
+            running = money(running + money(row.get("debit")) - money(row.get("credit")))
+            row["balance"] = running
+        elif kind == "closing":
+            row["balance"] = running
+        else:
+            row["balance"] = None
+        row["balance_display"] = _format_running_balance(row["balance"])
 
 
 def _ledger_counterpart_name(this_line, voucher_lines, account_pk: int) -> str:
@@ -3148,6 +3201,7 @@ def ledger_lines(account: Account, *, date_from=None, date_to=None):
                 credit=money(total_credit + closing_credit),
             )
         )
+    _apply_running_balance(rows)
     return rows
 
 

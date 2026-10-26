@@ -182,6 +182,25 @@ class SiteSettings(models.Model):
         help_text="Office GSTIN. Sales invoices use the first two digits to choose CGST/SGST or IGST.",
     )
     address = models.CharField(max_length=255, blank=True)
+    bank_account_name = models.CharField(
+        "Account name",
+        max_length=120,
+        blank=True,
+        help_text="Beneficiary name printed on sales invoices.",
+    )
+    bank_name = models.CharField(max_length=80, blank=True)
+    bank_account_number = models.CharField(
+        "Account number",
+        max_length=20,
+        blank=True,
+    )
+    bank_ifsc = models.CharField("IFSC", max_length=11, blank=True)
+    upi_id = models.CharField(
+        "UPI ID",
+        max_length=100,
+        blank=True,
+        help_text="When set, sales invoices include a UPI QR for this ID.",
+    )
     logo = models.FileField(
         upload_to=site_settings_upload_to,
         blank=True,

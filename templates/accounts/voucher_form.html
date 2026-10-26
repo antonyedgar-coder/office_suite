@@ -219,7 +219,7 @@
         <p class="small text-secondary mb-1">Company GST No <span class="mono">{{ company_gstin|default:"—" }}</span>{% if company_address %} · {{ company_address }}{% endif %}</p>
         <p class="small text-secondary">Each account amount is credited. GST uses that account’s rate. Same first two GSTIN digits as the company GST No → CGST and SGST at half the rate. Different digits → IGST. Pure agent lines have no GST. The buyer is debited for amount plus GST.</p>
       {% elif vtype == 'receipt' %}
-        <p class="small text-secondary">The mode of receipt is debited for the total. Each account amount is credited. After you select an account, opening balance and outstanding bills are shown so you can knock off the receipt. If there are none, enter the amount as advance.</p>
+        <p class="small text-secondary">The mode of receipt is debited for the total. Each account amount is credited. When the account is a Sundry Debtor, outstanding bills are shown so you can knock off the receipt or enter the balance as advance.</p>
       {% elif vtype == 'payment' %}
         <p class="small text-secondary">The mode of payment is credited for the total. Each account amount is debited. Cash and cash equivalent ledgers are only used as the mode of payment. If you debit a pure-agent ledger (GST Payment, Income Tax, and similar), select the client this payment is for. Task is optional.</p>
       {% else %}
@@ -596,8 +596,20 @@
         var url = outstandingTpl.replace("/0/", "/" + hidden.value + "/").replace("/0?", "/" + hidden.value + "?");
         fetch(url, { headers: { Accept: "application/json" } })
           .then(function (r) { return r.json(); })
-          .then(function (data) { renderBillwise(row, data.bills || []); })
-          .catch(function () { renderBillwise(row, []); });
+          .then(function (data) {
+            if (data.party_kind !== "debtor") {
+              box.classList.add("d-none");
+              box.innerHTML = "";
+              writeAlloc(row, {});
+              return;
+            }
+            renderBillwise(row, data.bills || []);
+          })
+          .catch(function () {
+            box.classList.add("d-none");
+            box.innerHTML = "";
+            writeAlloc(row, {});
+          });
       }
       function applyKnockCap(inp) {
         var max = moneyNum(inp.getAttribute("data-outstanding"));

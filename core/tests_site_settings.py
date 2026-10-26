@@ -52,6 +52,41 @@ class SiteSettingsTests(TestCase):
         self.assertEqual(settings.gstin, "32AAAAA0000A1Z5")
         self.assertEqual(settings.address, "1 MG Road, Trivandrum")
 
+    def test_save_payment_details(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("site_settings_edit"),
+            {
+                "company_name": "Sharma & Associates",
+                "bank_account_name": "Sharma & Associates",
+                "bank_name": "HDFC Bank",
+                "bank_account_number": "50100 12345678",
+                "bank_ifsc": "hdfc0001234",
+                "upi_id": "sharma@okhdfcbank",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        settings = SiteSettings.load()
+        self.assertEqual(settings.bank_account_number, "5010012345678")
+        self.assertEqual(settings.bank_ifsc, "HDFC0001234")
+        self.assertEqual(settings.upi_id, "sharma@okhdfcbank")
+
+    def test_payment_details_reject_bad_ifsc_and_upi(self):
+        from core.forms import SiteSettingsForm
+
+        form = SiteSettingsForm(
+            data={
+                "company_name": "Sharma & Associates",
+                "bank_ifsc": "BAD",
+                "upi_id": "not-a-upi",
+                "bank_account_number": "12",
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("bank_ifsc", form.errors)
+        self.assertIn("upi_id", form.errors)
+        self.assertIn("bank_account_number", form.errors)
+
     def test_branding_in_context(self):
         from django.test import RequestFactory
 

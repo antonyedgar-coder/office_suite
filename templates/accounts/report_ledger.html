@@ -71,6 +71,7 @@
                 <th>Narration</th>
                 <th class="text-end">Debit</th>
                 <th class="text-end">Credit</th>
+                <th class="text-end">Balance</th>
               </tr>
             </thead>
             <tbody>
@@ -91,9 +92,10 @@
                   <td>{{ row.narration }}</td>
                   <td class="text-end mono">{% if row.debit %}{{ row.debit }}{% endif %}</td>
                   <td class="text-end mono">{% if row.credit %}{{ row.credit }}{% endif %}</td>
+                  <td class="text-end mono">{{ row.balance_display }}</td>
                 </tr>
               {% empty %}
-                <tr><td colspan="6" class="text-secondary">No entries.</td></tr>
+                <tr><td colspan="7" class="text-secondary">No entries.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -115,6 +117,7 @@
               <th>Narration</th>
               <th class="text-end">Debit</th>
               <th class="text-end">Credit</th>
+              <th class="text-end">Balance</th>
             </tr>
           </thead>
           <tbody>
@@ -135,9 +138,10 @@
                 <td>{{ row.narration }}</td>
                 <td class="text-end mono">{% if row.debit %}{{ row.debit }}{% endif %}</td>
                 <td class="text-end mono">{% if row.credit %}{{ row.credit }}{% endif %}</td>
+                <td class="text-end mono">{{ row.balance_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="text-secondary">No entries.</td></tr>
+              <tr><td colspan="7" class="text-secondary">No entries.</td></tr>
             {% endfor %}
           </tbody>
         </table>
