@@ -31,8 +31,28 @@
       .invoice-date-col { flex: 0 0 25%; max-width: 12rem; }
       .invoice-buyer-col { flex: 1 1 auto; min-width: 12rem; }
       .invoice-gst-col { flex: 0 0 16rem; min-width: 14rem; }
-      .invoice-tax-tabs { display: inline-flex; width: auto; }
-      .invoice-tax-tabs .nav-link { min-width: 6.25rem; text-align: center; cursor: pointer; }
+      .invoice-tax-tabs { display: inline-flex; width: auto; border-bottom-color: #198754; }
+      .invoice-tax-tabs .nav-link {
+        min-width: 6.25rem;
+        text-align: center;
+        cursor: pointer;
+        color: #fff;
+        background: #198754;
+        border-color: #198754;
+        margin-right: 0.35rem;
+      }
+      .invoice-tax-tabs .nav-link:hover,
+      .invoice-tax-tabs .nav-link:focus {
+        color: #fff;
+        background: #157347;
+        border-color: #146c43;
+      }
+      .invoice-tax-tabs .nav-link.active {
+        color: #fff;
+        background: #0f5132;
+        border-color: #0f5132 #0f5132 #fff;
+        font-weight: 600;
+      }
       .invoice-lines-overflow { overflow: visible !important; }
       .invoice-account-float {
         position: fixed;
