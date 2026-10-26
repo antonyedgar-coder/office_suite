@@ -249,6 +249,28 @@
               {% include "accounts/_invoice_item_row.html" with f=f vtype=vtype %}
             {% endfor %}
           </tbody>
+          {% if vtype == 'sales' %}
+          <tfoot id="sales-invoice-totals">
+            <tr class="js-sales-breakdown">
+              <td colspan="2" class="text-end text-secondary">Amount</td>
+              <td class="text-end mono" id="sales-amount-total">0.00</td>
+              <td class="js-gst-col" colspan="7"></td>
+              <td></td>
+            </tr>
+            <tr class="js-sales-breakdown">
+              <td colspan="2" class="text-end text-secondary">GST</td>
+              <td class="text-end mono" id="sales-gst-total">0.00</td>
+              <td class="js-gst-col" colspan="7"></td>
+              <td></td>
+            </tr>
+            <tr>
+              <th colspan="2" class="text-end">Invoice total</th>
+              <th class="text-end mono" id="sales-invoice-total">0.00</th>
+              <th class="js-gst-col" colspan="7"></th>
+              <th></th>
+            </tr>
+          </tfoot>
+          {% endif %}
         </table>
       </div>
       <template id="invoice-empty-row">
@@ -465,6 +487,34 @@
           el.style.display = showGst ? "" : "none";
         });
         form.querySelectorAll(".js-invoice-row").forEach(refreshRow);
+        refreshSalesTotal();
+      }
+
+      function refreshSalesTotal() {
+        var box = document.getElementById("sales-invoice-totals");
+        if (!box) return;
+        var amount = 0;
+        var gst = 0;
+        form.querySelectorAll("#invoice-lines-body .js-invoice-row").forEach(function (row) {
+          var amountEl = row.querySelector(".js-invoice-amount");
+          amount += Number(amountEl && amountEl.value ? amountEl.value : 0);
+          [".js-invoice-cgst", ".js-invoice-sgst", ".js-invoice-igst"].forEach(function (sel) {
+            var el = row.querySelector(sel);
+            gst += Number(el && el.value ? el.value : 0);
+          });
+        });
+        amount = Number(money(amount));
+        gst = Number(money(gst));
+        var amountOut = document.getElementById("sales-amount-total");
+        var gstOut = document.getElementById("sales-gst-total");
+        var totalOut = document.getElementById("sales-invoice-total");
+        if (amountOut) amountOut.textContent = money(amount);
+        if (gstOut) gstOut.textContent = money(gst);
+        if (totalOut) totalOut.textContent = money(amount + gst);
+        var showGst = gstSelected();
+        box.querySelectorAll(".js-sales-breakdown").forEach(function (row) {
+          row.style.display = showGst ? "" : "none";
+        });
       }
 
       function showPlusOnLastRow() {
@@ -655,6 +705,7 @@
         if (e.target.classList.contains("js-invoice-amount")) {
           var row = e.target.closest(".js-invoice-row");
           if (row) refreshRow(row);
+          refreshSalesTotal();
           if (row && isReceipt) {
             var box = billwiseBox(row);
             if (box && box._bills) renderBillwise(row, box._bills, false);
