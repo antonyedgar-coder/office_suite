@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ list_title }} — CA Office Suite{% endblock %}
 {% block page_title %}Vouchers{% endblock %}
+{% block extra_head %}
+  {% if vtype == "receipt" %}
+    <style>
+      .voucher-date { width: 15ch; min-width: 15ch; white-space: nowrap; }
+    </style>
+  {% endif %}
+{% endblock %}
 {% block content %}
   {% include "accounts/_voucher_type_tabs.html" %}
 
@@ -21,10 +28,12 @@
       <table class="table table-sm">
         <thead>
           <tr>
-            <th>Date</th>
+            <th{% if vtype == "receipt" %} class="voucher-date"{% endif %}>Date</th>
             <th>Voucher No</th>
             {% if vtype == "sales" %}
               <th>Client name</th>
+            {% elif vtype == "receipt" %}
+              <th>Payer Name</th>
             {% endif %}
             <th>Narration</th>
             {% if vtype == "sales" %}
@@ -39,10 +48,12 @@
         <tbody>
           {% for v in rows %}
             <tr>
-              <td>{{ v.date|date:"d-m-Y" }}</td>
+              <td{% if vtype == "receipt" %} class="voucher-date"{% endif %}>{{ v.date|date:"d-m-Y" }}</td>
               <td><a href="{% url 'accounts_voucher_detail' v.pk %}">{{ v.number }}</a></td>
               {% if vtype == "sales" %}
                 <td>{{ v.client_name|default:"—" }}</td>
+              {% elif vtype == "receipt" %}
+                <td>{{ v.payer_name|default:"—" }}</td>
               {% endif %}
               <td>{{ v.narration|default:"—" }}</td>
               {% if vtype == "sales" %}
@@ -65,7 +76,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="{% if vtype == 'sales' %}7{% else %}5{% endif %}" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
+            <tr><td colspan="{% if vtype == 'sales' %}7{% elif vtype == 'receipt' %}6{% else %}5{% endif %}" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
           {% endfor %}
         </tbody>
       </table>

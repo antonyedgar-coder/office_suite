@@ -24,6 +24,8 @@
   .invoice-words { font-size: 0.92rem; }
   .invoice-note { font-size: 0.8rem; color: #5c6478; }
   .invoice-qr { width: 112px; height: 112px; }
+  .invoice-signatory { margin-top: 2rem; font-weight: 700; }
+  .invoice-sign-gap { height: 3.25rem; }
   @media print {
     .no-print, .sidebar, .topbar, aside, .sidebar-collapse-toggle, .offcanvas, .btn { display: none !important; }
     .app-shell, .content, .container { display: block !important; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
@@ -129,6 +131,10 @@
         {% for t in invoice.tasks %}{{ t.display_title }}{% if not forloop.last %}, {% endif %}{% endfor %}
       </p>
     {% endif %}
-    <p class="invoice-note mb-0">This is a computer-generated invoice.</p>
+    <div class="invoice-signatory text-end">
+      {% if invoice.company_name %}<div>For {{ invoice.company_name }}</div>{% endif %}
+      <div class="invoice-sign-gap"></div>
+      <div>Authorized Signatory</div>
+    </div>
   </div>
 {% endblock %}

@@ -439,6 +439,38 @@ class AccountsModuleTests(TestCase):
         self.assertIn(b"Debit", pdf)
         self.assertIn(b"Credit", pdf)
 
+    def test_receipt_voucher_list_names_each_payer(self):
+        from accounts.services import build_receipt_lines, ensure_sundry_debtors_group
+        from accounts.views import _receipt_payer_name, _voucher_register_qs
+
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        cash_group = AccountGroup.objects.create(
+            name="Cash and Cash Equivalents",
+            parent=assets,
+            main_head="assets",
+        )
+        bank = Account.objects.create(name="Receipt list bank", group=cash_group)
+        debtors = ensure_sundry_debtors_group()
+        first = Account.objects.create(name="Antony Edgar", group=debtors)
+        second = Account.objects.create(name="Second Payer", group=debtors)
+        voucher = post_voucher(
+            voucher_type="receipt",
+            voucher_date=date(2026, 10, 22),
+            narration="Fees received",
+            lines=build_receipt_lines(
+                mode=bank,
+                items=[
+                    {"account": first, "amount": Decimal("300.00")},
+                    {"account": second, "amount": Decimal("200.00")},
+                ],
+            ),
+            actor=self.admin,
+        )
+        rows = list(_voucher_register_qs("receipt"))
+        self.assertEqual(rows[0].pk, voucher.pk)
+        self.assertEqual(_receipt_payer_name(rows[0]), "Antony Edgar, Second Payer")
+
     def test_book_register_lists_and_exports(self):
         seed_chart_of_accounts()
         assets = AccountGroup.objects.get(system_key="assets")

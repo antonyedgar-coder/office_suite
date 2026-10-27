@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import DecimalField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import DecimalField, OuterRef, Prefetch, Q, Subquery, Sum, Value
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
@@ -1028,7 +1028,28 @@ def _voucher_register_qs(vtype: str, *, date_from=None, date_to=None):
                 Value(""),
             )
         )
+    if vtype == VOUCHER_RECEIPT:
+        qs = qs.prefetch_related(
+            Prefetch(
+                "lines",
+                queryset=VoucherLine.objects.filter(credit__gt=0).select_related("account").order_by("pk"),
+                to_attr="payer_lines",
+            )
+        )
     return qs.order_by("-date", "-id")
+
+
+def _receipt_payer_name(voucher) -> str:
+    """Accounts credited on a receipt are the people who paid."""
+    lines = getattr(voucher, "payer_lines", None)
+    if lines is None:
+        lines = voucher.lines.select_related("account").filter(credit__gt=0).order_by("pk")
+    names = []
+    for line in lines:
+        name = (line.account.name if line.account_id else "").strip()
+        if name and name not in names:
+            names.append(name)
+    return ", ".join(names)
 
 
 @login_required
@@ -1048,6 +1069,10 @@ def voucher_list(request):
         date_from, date_to = _latest_voucher_month(vtype)
         list_title = f"{list_title} — {date_from.strftime('%B %Y')}"
     rows = _voucher_register_qs(vtype, date_from=date_from, date_to=date_to)
+    if vtype == VOUCHER_RECEIPT and export != "pdf":
+        rows = list(rows[:500])
+        for row in rows:
+            row.payer_name = _receipt_payer_name(row)
     if export == "pdf":
         if not can_print_voucher(request.user, vtype):
             raise PermissionDenied
