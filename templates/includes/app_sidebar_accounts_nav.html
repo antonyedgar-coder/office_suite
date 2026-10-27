@@ -14,7 +14,7 @@
       <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
     </button>
     <div id="nav-panel-{{ nav_prefix }}-accounts" class="nav-accordion-panel"{% if url_name not in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_billwise_outstanding' %} hidden{% endif %}>
-      {% if user.is_superuser or perms.accounts.view_voucher or perms.accounts.add_payment_voucher or perms.accounts.change_payment_voucher or perms.accounts.delete_payment_voucher or perms.accounts.print_payment_voucher %}
+      {% if user.is_superuser or perms.accounts.list_sales_voucher or perms.accounts.list_purchase_voucher or perms.accounts.list_receipt_voucher or perms.accounts.list_payment_voucher or perms.accounts.list_contra_voucher or perms.accounts.list_journal_voucher or perms.accounts.list_debit_note_voucher or perms.accounts.list_credit_note_voucher or perms.accounts.add_payment_voucher or perms.accounts.change_payment_voucher or perms.accounts.delete_payment_voucher or perms.accounts.print_payment_voucher %}
         <a class="nav-link {% if url_name in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print' %}active{% endif %}" href="{% url 'accounts_voucher_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Vouchers</span></a>
       {% endif %}
       {% if user.is_superuser or perms.accounts.post_voucher %}

@@ -1538,9 +1538,11 @@ def voucher_print(request, pk: int):
     )
 
 
-@require_perm("accounts.view_voucher")
+@login_required
 def sales_invoice_print(request, pk: int):
     obj = get_object_or_404(Voucher.objects.prefetch_related("lines__account", "tasks"), pk=pk)
+    if not can_view_voucher_type(request.user, VOUCHER_SALES):
+        raise PermissionDenied
     if obj.voucher_type != VOUCHER_SALES:
         messages.error(request, "Print layout is available for sales invoices.")
         return redirect("accounts_voucher_detail", pk=obj.pk)

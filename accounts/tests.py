@@ -3731,6 +3731,20 @@ class PaymentVoucherPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Voucher.objects.filter(number__startswith="PV/").exists())
 
+    def test_each_voucher_list_is_a_separate_activity(self):
+        from accounts.permissions import visible_voucher_tabs
+
+        sales = self._user_with("list_sales_voucher")
+        self.assertEqual(
+            visible_voucher_tabs(sales),
+            [("sales", "Sales")],
+        )
+        notes = self._user_with("list_debit_note_voucher", "list_credit_note_voucher")
+        self.assertEqual(
+            [code for code, _label in visible_voucher_tabs(notes)],
+            ["credit_note", "debit_note"],
+        )
+
     def test_payment_list_flags_follow_separate_perms(self):
         user = self._user_with("add_payment_voucher")
         flags = self.voucher_action_flags(user, "payment")

@@ -67,6 +67,14 @@ class DualListPermissionTests(TestCase):
             "change_payment_voucher": "Payment voucher | Change",
             "delete_payment_voucher": "Payment voucher | Delete",
             "print_payment_voucher": "Payment voucher | Print",
+            "list_sales_voucher": "Sales voucher | List",
+            "list_purchase_voucher": "Purchase voucher | List",
+            "list_receipt_voucher": "Receipt voucher | List",
+            "list_payment_voucher": "Payment voucher | List",
+            "list_contra_voucher": "Contra voucher | List",
+            "list_journal_voucher": "Journal voucher | List",
+            "list_debit_note_voucher": "Debit note | List",
+            "list_credit_note_voucher": "Credit note | List",
         }
         found = {
             perm.codename: perm.name
