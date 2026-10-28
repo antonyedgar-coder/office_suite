@@ -273,6 +273,13 @@ class Account(models.Model):
             self.gst_rate = None
         if not self.name:
             raise ValidationError({"name": "Account name is required."})
+        if self.group_id:
+            from .services import group_is_direct_income, ledger_name_matches_task
+
+            if group_is_direct_income(self.group) and not ledger_name_matches_task(self.name):
+                raise ValidationError(
+                    {"name": "Under Direct Income, the ledger name must match a task."}
+                )
 
     def is_debit_nature(self) -> bool:
         return self.group.is_debit_nature()

@@ -53,7 +53,6 @@ from accounts.services import (
     non_cash_ledgers,
     payment_account_ledgers,
     receipt_account_ledgers,
-    task_master_ledgers,
     outstanding_bills_for_account,
     outstanding_party_bills_for_note,
     outstanding_purchase_bills_for_account,
@@ -1354,6 +1353,80 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(task.bill_date, voucher.date)
         self.assertNotEqual(task.status, Task.STATUS_COMPLETE)
 
+    def test_task_master_backfill_creates_missing_direct_income_ledgers(self):
+        from accounts.services import backfill_task_master_ledgers
+
+        seed_chart_of_accounts()
+        income = AccountGroup.objects.get(system_key="income")
+        direct = AccountGroup.objects.create(name="Direct Income", parent=income, main_head="income")
+        gst = AccountGroup.objects.create(name="GST", parent=direct, main_head="income")
+        Account.objects.create(name="GSTR -1", group=gst)
+        refund_group = TaskGroup.objects.create(name="GST", sort_order=2)
+        TaskMaster.objects.create(
+            task_group=refund_group,
+            name="GST Refund",
+            is_recurring=False,
+            requires_verifier=True,
+            requires_document_checker=True,
+        )
+        TaskMaster.objects.create(
+            task_group=self.master.task_group,
+            name="GSTR-1",
+            is_recurring=False,
+            requires_verifier=True,
+            requires_document_checker=True,
+        )
+        preview = backfill_task_master_ledgers(dry_run=True)
+        self.assertIn("GST Refund", preview["pending"])
+        self.assertNotIn("GSTR-1", preview["pending"])
+        result = backfill_task_master_ledgers(dry_run=False)
+        self.assertEqual(result["created"], preview["pending"].__len__())
+        refund = Account.objects.get(name="GST Refund")
+        self.assertEqual(refund.group_id, gst.pk)
+        self.assertEqual(refund.primary_group().name, "Direct Income")
+        self.assertFalse(Account.objects.filter(name="GSTR-1").exists())
+        self.assertTrue(Account.objects.filter(name="GSTR -1").exists())
+        again = backfill_task_master_ledgers(dry_run=False)
+        self.assertEqual(again["created"], 0)
+
+    def test_direct_income_ledger_name_must_match_a_task(self):
+        seed_chart_of_accounts()
+        income = AccountGroup.objects.get(system_key="income")
+        direct = AccountGroup.objects.create(name="Direct Income", parent=income, main_head="income")
+        nested = AccountGroup.objects.create(name="GST", parent=direct, main_head="income")
+        indirect = AccountGroup.objects.create(name="Indirect Income", parent=income, main_head="income")
+        matched = AccountForm(
+            {
+                "name": self.master.name,
+                "primary_group": str(direct.pk),
+                "secondary_group": str(nested.pk),
+                "opening_balance": "0",
+                "is_active": "on",
+            }
+        )
+        self.assertTrue(matched.is_valid(), matched.errors)
+        rejected = AccountForm(
+            {
+                "name": "GST annual return filing",
+                "primary_group": str(direct.pk),
+                "secondary_group": "",
+                "opening_balance": "0",
+                "is_active": "on",
+            }
+        )
+        self.assertFalse(rejected.is_valid())
+        self.assertIn("must match a task", str(rejected.errors["name"]))
+        other_income = AccountForm(
+            {
+                "name": "Bank interest",
+                "primary_group": str(indirect.pk),
+                "secondary_group": "",
+                "opening_balance": "0",
+                "is_active": "on",
+            }
+        )
+        self.assertTrue(other_income.is_valid(), other_income.errors)
+
     def test_account_can_map_to_primary_group_only(self):
         seed_chart_of_accounts()
         assets = AccountGroup.objects.get(system_key="assets")
@@ -1516,34 +1589,33 @@ class AccountsModuleTests(TestCase):
         self.assertIn(buyer_sub.name, names)
         self.assertNotIn(other.name, names)
 
-    def test_sales_account_tab_is_task_master_and_pure_agent_ledgers(self):
+    def test_sales_account_tab_is_direct_indirect_income_and_pure_agent(self):
         seed_chart_of_accounts()
         income = AccountGroup.objects.get(system_key="income")
         expenses = AccountGroup.objects.get(system_key="expenses")
-        master_group = AccountGroup.objects.create(
-            name=self.master.name,
-            parent=income,
-            main_head="income",
-        )
-        master_ledger = Account.objects.create(name=self.master.name, group=income)
-        task_named = Account.objects.create(name="GSTR-1 Apr 2026", group=master_group)
+        direct = AccountGroup.objects.create(name="Direct Income", parent=income, main_head="income")
+        indirect = AccountGroup.objects.create(name="Indirect Income", parent=income, main_head="income")
+        fees_group = AccountGroup.objects.create(name="Audit fees", parent=direct, main_head="income")
+        interest_group = AccountGroup.objects.create(name="Interest", parent=indirect, main_head="income")
+        direct_ledger = Account.objects.create(name="Professional fees", group=direct)
+        nested_direct = Account.objects.create(name="Statutory audit", group=fees_group)
+        indirect_ledger = Account.objects.create(name="Bank interest", group=indirect)
+        nested_indirect = Account.objects.create(name="FD interest", group=interest_group)
         recovery = Account.objects.create(
             name="MCA payment recovery",
             group=expenses,
             is_pure_agent=True,
         )
         rent = Account.objects.create(name="Office rent sales", group=expenses)
-        income_other = Account.objects.create(name="Professional income", group=income)
+        other_income = Account.objects.create(name="Professional income", group=income)
         names = set(InvoiceItemForm(voucher_type="sales").fields["account"].queryset.values_list("name", flat=True))
-        self.assertIn(master_ledger.name, names)
-        self.assertIn(task_named.name, names)
+        self.assertIn(direct_ledger.name, names)
+        self.assertIn(nested_direct.name, names)
+        self.assertIn(indirect_ledger.name, names)
+        self.assertIn(nested_indirect.name, names)
         self.assertIn(recovery.name, names)
         self.assertNotIn(rent.name, names)
-        self.assertNotIn(income_other.name, names)
-        self.assertEqual(
-            set(task_master_ledgers().values_list("name", flat=True)),
-            {master_ledger.name, task_named.name},
-        )
+        self.assertNotIn(other_income.name, names)
 
     def test_receipt_account_tab_is_debtors_and_capital_only(self):
         seed_chart_of_accounts()

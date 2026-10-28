@@ -124,6 +124,7 @@ from .services import (
     sales_invoice_document,
     seed_chart_of_accounts,
     backfill_approved_client_ledgers,
+    backfill_task_master_ledgers,
     import_legacy_vouchers,
     sundry_debtors_ledgers,
     TB_FORMAT_TB,
@@ -2058,6 +2059,33 @@ def report_pending_recoveries(request):
     if not can_add_voucher(request.user, VOUCHER_SALES):
         raise PermissionDenied
     return redirect("accounts_unbilled_tasks")
+
+
+@login_required
+def sync_task_master_ledgers(request):
+    """Superuser one-time: create a Direct Income ledger for each Task Master."""
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    preview = backfill_task_master_ledgers(dry_run=True)
+    if request.method == "POST" and request.POST.get("confirm") == "1":
+        result = backfill_task_master_ledgers(dry_run=False)
+        messages.success(
+            request,
+            f"Created {result['created']} ledger(s). Already present {result['already_present']}.",
+        )
+        for row in result["errors"]:
+            messages.warning(request, row)
+        return redirect("accounts_account_list")
+    return render(
+        request,
+        "accounts/sync_task_master_ledgers.html",
+        {
+            "task_masters": preview["task_masters"],
+            "already_present": preview["already_present"],
+            "pending_count": len(preview["pending"]),
+            "pending_names": preview["pending"],
+        },
+    )
 
 
 @login_required

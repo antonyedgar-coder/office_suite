@@ -9,6 +9,7 @@
       <div class="d-flex flex-wrap gap-2">
         {% if request.user.is_superuser %}
           <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_sync_client_ledgers' %}">Create ledgers from Client Master</a>
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_sync_task_master_ledgers' %}">Create ledgers from Task Master</a>
         {% endif %}
         {% if perms.accounts.add_account %}
           <a class="btn btn-outline-primary btn-sm" href="{% url 'accounts_account_bulk_import' %}">Bulk upload (CSV)</a>

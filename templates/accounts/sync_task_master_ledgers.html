@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Task Master → ledgers — CA Office Suite{% endblock %}
+{% block page_title %}Create ledgers from Task Master{% endblock %}
+
+{% block content %}
+  <p class="mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts_account_list' %}"><i class="bi bi-arrow-left"></i> Account Ledger</a>
+  </p>
+  <div class="card p-3 mb-3">
+    <div class="fw-semibold mb-1">One-time backfill</div>
+    <div class="text-secondary small">
+      Creates an Account Ledger for each Task Master that does not already have one under
+      <strong>Direct Income</strong>. The ledger name is the Task Master name. The account group
+      is the Task Group. A ledger already under Direct Income with the same name is left as it is.
+      Opening balance stays zero.
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="fw-semibold mb-2">Current counts</div>
+    <div class="row g-2 small mb-3">
+      <div class="col-6 col-md-4">
+        <span class="text-secondary">Task masters</span>
+        <div class="mono fw-semibold">{{ task_masters }}</div>
+      </div>
+      <div class="col-6 col-md-4">
+        <span class="text-secondary">Already have a ledger</span>
+        <div class="mono fw-semibold">{{ already_present }}</div>
+      </div>
+      <div class="col-6 col-md-4">
+        <span class="text-secondary">Need a ledger</span>
+        <div class="mono fw-semibold">{{ pending_count }}</div>
+      </div>
+    </div>
+    {% if pending_names %}
+      <div class="small mb-3">
+        <div class="text-secondary mb-1">Ledgers to create</div>
+        <ul class="mb-0">
+          {% for name in pending_names %}
+            <li>{{ name }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="confirm" value="1" />
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary" {% if not pending_count %}disabled{% endif %} onclick="return confirm('Create the missing Direct Income ledgers from Task Master?');">
+          Create missing ledgers
+        </button>
+        <a class="btn btn-outline-secondary" href="{% url 'accounts_account_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -260,12 +260,56 @@ def pure_agent_ledgers():
     return Account.objects.filter(is_active=True, is_pure_agent=True).order_by("name")
 
 
+def _folded_label(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+
+
+def _ledger_match_key(value: str) -> str:
+    """Same ledger name, ignoring case, spaces, hyphens, and a leading zero in a number."""
+    text = re.sub(r"[^a-z0-9]+", "", (value or "").casefold())
+    return re.sub(r"0+(\d)", r"\1", text)
+
+
+def group_is_direct_income(group) -> bool:
+    """True when the ledger's primary group is Direct Income."""
+    if group is None or not getattr(group, "pk", None):
+        return False
+    if group.is_account_group():
+        primary = group.parent
+    elif group.is_parent_group():
+        primary = group
+    else:
+        return False
+    return bool(primary and _folded_label(primary.name) == "direct income")
+
+
+def ledger_name_matches_task(name: str) -> bool:
+    """True when the ledger name is the same as a task master or a task title."""
+    from tasks.models import Task, TaskMaster
+
+    key = _folded_label(name)
+    if not key:
+        return False
+    candidates = list(TaskMaster.objects.values_list("name", flat=True))
+    candidates.extend(Task.objects.exclude(title="").values_list("title", flat=True))
+    return any(_folded_label(item) == key for item in candidates)
+
+
 def sales_account_ledgers():
-    """Sales Account tab: Task Master ledgers plus Pure agent recoveries."""
-    ids = set(task_master_ledgers().values_list("pk", flat=True)) | set(
-        pure_agent_ledgers().values_list("pk", flat=True)
+    """Sales Account tab: Pure agent ledgers, and ledgers under Direct or Indirect Income."""
+    from django.db.models.functions import Lower
+
+    income_names = ("direct income", "indirect income")
+    income_q = Q()
+    for name in income_names:
+        income_q |= Q(_group_l=name) | Q(_parent_l=name)
+    return (
+        Account.objects.filter(is_active=True)
+        .annotate(_group_l=Lower("group__name"), _parent_l=Lower("group__parent__name"))
+        .filter(Q(is_pure_agent=True) | income_q)
+        .distinct()
+        .order_by("name")
     )
-    return Account.objects.filter(is_active=True, pk__in=ids).order_by("name")
 
 
 def line_account_ledgers(voucher_type: str | None):
@@ -1057,6 +1101,100 @@ def backfill_approved_client_ledgers(*, dry_run: bool = False) -> dict:
         "created": created,
         "updated": updated,
         "skipped_unapproved": skipped_unapproved,
+        "errors": errors,
+        "dry_run": dry_run,
+    }
+
+
+def ensure_direct_income_group() -> AccountGroup:
+    """Primary group Direct Income under the Income main head."""
+    seed_chart_of_accounts()
+    income = AccountGroup.objects.filter(system_key=SYSTEM_GROUP_INCOME).first()
+    if income is None:
+        raise ValidationError("Income main head is missing. Open Account groups once to seed the chart.")
+    existing = AccountGroup.parent_groups().filter(parent=income, name__iexact="Direct Income").first()
+    if existing is None:
+        existing = AccountGroup.parent_groups().filter(name__iexact="Direct Income").first()
+    if existing is not None:
+        return existing
+    group = AccountGroup(name="Direct Income", parent=income, main_head=income.resolved_main_head())
+    group.full_clean()
+    group.save()
+    return group
+
+
+def _account_group_under_direct_income(primary: AccountGroup, name: str) -> AccountGroup:
+    label = (name or "").strip()
+    if not label:
+        raise ValidationError("Task group name is required to place the ledger.")
+    found = (
+        AccountGroup.account_groups()
+        .filter(parent=primary, name__iexact=label)
+        .order_by("pk")
+        .first()
+    )
+    if found is not None:
+        return found
+    group = AccountGroup(name=label, parent=primary, main_head=primary.resolved_main_head())
+    group.full_clean()
+    group.save()
+    return group
+
+
+def _direct_income_ledgers():
+    return Account.objects.filter(
+        Q(group__name__iexact="Direct Income") | Q(group__parent__name__iexact="Direct Income")
+    )
+
+
+def backfill_task_master_ledgers(*, dry_run: bool = False) -> dict:
+    """One-time: one Direct Income ledger per Task Master.
+
+    The ledger uses the Task Master name. Its account group is the Task Group.
+    A ledger already under Direct Income with the same name is left as it is.
+    """
+    from tasks.models import TaskMaster
+
+    masters = list(
+        TaskMaster.objects.select_related("task_group").order_by("task_group__name", "name")
+    )
+    direct = None if dry_run else ensure_direct_income_group()
+    existing_keys = {_ledger_match_key(name) for name in _direct_income_ledgers().values_list("name", flat=True)}
+    pending: list[str] = []
+    created: list[str] = []
+    already = 0
+    errors: list[str] = []
+    for master in masters:
+        key = _ledger_match_key(master.name)
+        if not key:
+            errors.append(f"{master.pk}: Task Master has no name.")
+            continue
+        if key in existing_keys:
+            already += 1
+            continue
+        if dry_run:
+            pending.append(master.name)
+            existing_keys.add(key)
+            continue
+        try:
+            account_group = _account_group_under_direct_income(direct, master.task_group.name)
+            account = Account(
+                name=(master.name or "").strip(),
+                group=account_group,
+                is_active=bool(master.is_active),
+            )
+            account.full_clean()
+            account.save()
+            created.append(account.name)
+            existing_keys.add(key)
+        except ValidationError as exc:
+            errors.append(f"{master.name}: {exc}")
+    return {
+        "task_masters": len(masters),
+        "already_present": already,
+        "pending": pending,
+        "created": len(created),
+        "created_names": created,
         "errors": errors,
         "dry_run": dry_run,
     }

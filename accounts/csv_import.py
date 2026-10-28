@@ -346,6 +346,12 @@ def parse_account_ledgers_csv(csv_bytes: bytes) -> tuple[list[ParsedRow], list[s
         elif parent:
             group = parent
 
+        if parent and name:
+            from .services import group_is_direct_income, ledger_name_matches_task
+
+            if group_is_direct_income(parent) and not ledger_name_matches_task(name):
+                errors.append("Under Direct Income, NAME must match a task.")
+
         cleaned = {
             "name": name,
             "group": group,

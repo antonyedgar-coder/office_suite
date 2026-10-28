@@ -171,6 +171,10 @@ class AccountForm(forms.ModelForm):
             self.instance.group = secondary
         else:
             self.instance.group = primary
+        from .services import group_is_direct_income, ledger_name_matches_task
+
+        if group_is_direct_income(self.instance.group) and not ledger_name_matches_task(data.get("name") or ""):
+            self.add_error("name", "Under Direct Income, the ledger name must match a task.")
         return data
 
     def save(self, commit=True):

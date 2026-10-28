@@ -28,6 +28,11 @@ urlpatterns = [
         views.sync_client_ledgers,
         name="accounts_sync_client_ledgers",
     ),
+    path(
+        "ledgers/sync-task-masters/",
+        views.sync_task_master_ledgers,
+        name="accounts_sync_task_master_ledgers",
+    ),
     path("ledgers/", views.account_list, name="accounts_account_list"),
     path("ledgers/new/", views.account_create, name="accounts_account_create"),
     path("ledgers/bulk-upload/", views.account_bulk_import, name="accounts_account_bulk_import"),
