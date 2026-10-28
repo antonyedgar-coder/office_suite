@@ -46,6 +46,7 @@ urlpatterns = [
     path("ledgers/<int:pk>/outstanding/", views.account_outstanding, name="accounts_account_outstanding"),
     path("ledgers/<int:pk>/recovery-tasks/", views.account_recovery_tasks, name="accounts_account_recovery_tasks"),
     path("ledgers/<int:pk>/recoveries/", views.account_pending_recoveries, name="accounts_account_recoveries"),
+    path("ledgers/<int:pk>/advances/", views.account_pending_advances, name="accounts_account_advances"),
     path(
         "vouchers/legacy-import/",
         views.voucher_books_bulk_import,

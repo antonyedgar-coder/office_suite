@@ -105,7 +105,9 @@ from .services import (
     line_account_ledgers,
     money,
     outstanding_bills_for_account,
+    pending_advance_rows,
     pending_recovery_rows,
+    receipt_allocation_snapshot,
     outstanding_party_bills_for_note,
     build_unbilled_queue,
     create_invoices_from_unbilled_keys,
@@ -918,12 +920,19 @@ def account_outstanding(request, pk: int):
     else:
         bills = outstanding_bills_for_account(account, ignore_receipt_id=ignore_receipt_id)
         party_kind = "debtor" if is_sundry_debtor(account) else ""
+    snapshot = (
+        receipt_allocation_snapshot(receipt_id=ignore_receipt_id, party=account)
+        if ignore_receipt_id and party_kind == "debtor" and not for_note
+        else {"receipt_knocks": {}, "receipt_as_advance": False}
+    )
     return JsonResponse(
         {
             "id": account.pk,
             "name": account.name,
             "party_kind": party_kind,
             "has_bills": bool(bills),
+            "receipt_knocks": snapshot["receipt_knocks"],
+            "receipt_as_advance": snapshot["receipt_as_advance"],
             "bills": [
                 {
                     "id": row["id"],
@@ -935,6 +944,54 @@ def account_outstanding(request, pk: int):
                 }
                 for row in bills
             ],
+        }
+    )
+
+
+def _parse_advance_knocks(raw) -> list[dict]:
+    import json
+
+    text = (raw or "").strip()
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        raise ValidationError("Advance knock-off is not valid.")
+    if not isinstance(data, list):
+        raise ValidationError("Advance knock-off is not valid.")
+    rows = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        try:
+            alloc_id = int(item.get("id"))
+        except (TypeError, ValueError):
+            raise ValidationError("Select a valid advance receipt.")
+        rows.append({"id": alloc_id, "amount": money(item.get("amount"))})
+    return rows
+
+
+@login_required
+def account_pending_advances(request, pk: int):
+    if not can_open_voucher_menu(request.user):
+        raise PermissionDenied
+    account = get_object_or_404(Account, pk=pk, is_active=True)
+    ignore_raw = (request.GET.get("ignore") or "").strip()
+    ignore_invoice_id = int(ignore_raw) if ignore_raw.isdigit() else None
+    rows = pending_advance_rows(party=account, ignore_invoice_id=ignore_invoice_id)
+    return JsonResponse(
+        {
+            "advances": [
+                {
+                    "id": row["id"],
+                    "number": row["number"],
+                    "date": row["date"].isoformat() if row["date"] else "",
+                    "pending": str(row["pending"]),
+                    "selected": bool(row["selected"]),
+                }
+                for row in rows
+            ]
         }
     )
 
@@ -1318,6 +1375,11 @@ def _save_voucher(request, voucher=None):
                 on_behalf_of = form.cleaned_data.get("on_behalf_of") if payment_mode else None
                 on_behalf_task = form.cleaned_data.get("on_behalf_task") if payment_mode else None
                 recovery_items = items if invoice_mode and vtype == VOUCHER_SALES else None
+                advance_items = (
+                    _parse_advance_knocks(request.POST.get("advance_knocks"))
+                    if invoice_mode and vtype == VOUCHER_SALES
+                    else None
+                )
                 if existing:
                     posted = update_voucher(
                         existing,
@@ -1328,6 +1390,7 @@ def _save_voucher(request, voucher=None):
                         on_behalf_of=on_behalf_of,
                         on_behalf_task=on_behalf_task,
                         recovery_items=recovery_items,
+                        advance_items=advance_items,
                     )
                 else:
                     posted = post_voucher(
@@ -1343,6 +1406,7 @@ def _save_voucher(request, voucher=None):
                         on_behalf_of=on_behalf_of,
                         on_behalf_task=on_behalf_task,
                         recovery_items=recovery_items,
+                        advance_items=advance_items,
                     )
             except ValidationError as exc:
                 messages.error(request, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
@@ -1370,9 +1434,11 @@ def _save_voucher(request, voucher=None):
         )
     outstanding_url = reverse("accounts_account_outstanding", args=[0])
     recoveries_url = reverse("accounts_account_recoveries", args=[0])
+    advances_url = reverse("accounts_account_advances", args=[0])
     if existing:
         outstanding_url = f"{outstanding_url}?ignore={existing.pk}"
         recoveries_url = f"{recoveries_url}?ignore={existing.pk}"
+        advances_url = f"{advances_url}?ignore={existing.pk}"
     return render(
         request,
         "accounts/voucher_form.html",
@@ -1397,6 +1463,7 @@ def _save_voucher(request, voucher=None):
             "list_title": dict(VOUCHER_TYPE_CHOICES)[vtype],
             "outstanding_url": outstanding_url,
             "recoveries_url": recoveries_url,
+            "advances_url": advances_url,
             "recovery_tasks_url": reverse("accounts_account_recovery_tasks", args=[0]),
             "on_behalf_options": [
                 {"id": a.pk, "label": a.name, "search": " ".join(filter(None, [a.name, a.gstin, a.pan]))}

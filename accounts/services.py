@@ -939,6 +939,111 @@ def resolve_receipt_allocations(
     return rows
 
 
+def pending_advance_rows(*, party, ignore_invoice_id=None) -> list[dict]:
+    """Advance slices for a client. While editing a bill, include the amount already knocked to it."""
+    if party is None:
+        return []
+    qs = ReceiptAllocation.objects.filter(party=party, is_opening=False).select_related("receipt")
+    if ignore_invoice_id:
+        qs = qs.filter(
+            Q(is_advance=True, against__isnull=True) | Q(against_id=ignore_invoice_id, is_advance=False)
+        )
+    else:
+        qs = qs.filter(is_advance=True, against__isnull=True)
+    rows = []
+    for row in qs.order_by("receipt__date", "receipt_id", "pk"):
+        rows.append(
+            {
+                "id": row.pk,
+                "number": row.receipt.number,
+                "date": row.receipt.date,
+                "pending": money(row.amount),
+                "selected": bool(ignore_invoice_id and row.against_id == ignore_invoice_id),
+            }
+        )
+    return rows
+
+
+def receipt_allocation_snapshot(*, receipt_id: int, party) -> dict:
+    """Knock-off amounts already stored on this receipt, so editing it does not refill the bills."""
+    knocks: dict[str, str] = {}
+    advance = Decimal("0.00")
+    knocked_a_bill = False
+    for row in ReceiptAllocation.objects.filter(receipt_id=receipt_id, party=party):
+        if row.is_advance:
+            advance += money(row.amount)
+            continue
+        if row.is_opening:
+            knocks[OPENING_ALLOC_ID] = str(money(row.amount))
+            knocked_a_bill = True
+        elif row.against_id:
+            knocks[str(row.against_id)] = str(money(row.amount))
+            knocked_a_bill = True
+    return {
+        "receipt_knocks": knocks,
+        "receipt_as_advance": advance > 0 and not knocked_a_bill,
+    }
+
+
+def release_invoice_receipt_knocks(invoice: Voucher) -> None:
+    """Put amounts knocked to this bill back on the receipt as advance."""
+    ReceiptAllocation.objects.filter(against=invoice, is_advance=False, is_opening=False).update(
+        against=None,
+        is_advance=True,
+    )
+
+
+def apply_sales_advance_knocks(invoice: Voucher, selections: list[dict] | None) -> None:
+    """Knock selected advance receipts against this sales invoice. Unselected advances stay pending."""
+    if invoice.voucher_type != VOUCHER_SALES or not selections:
+        return
+    party_line = next((ln for ln in invoice.lines.all() if money(ln.debit) > 0), None)
+    if party_line is None:
+        raise ValidationError("Select a buyer.")
+    party = party_line.account
+    invoice_total = money(party_line.debit)
+    used = Decimal("0.00")
+    seen: set[int] = set()
+    for raw in selections:
+        try:
+            alloc_id = int(raw.get("id"))
+        except (TypeError, ValueError):
+            raise ValidationError("Select a valid advance receipt.")
+        amount = money(raw.get("amount"))
+        if amount <= 0:
+            continue
+        if alloc_id in seen:
+            raise ValidationError("The same advance cannot be used twice on one bill.")
+        seen.add(alloc_id)
+        alloc = (
+            ReceiptAllocation.objects.select_for_update()
+            .filter(pk=alloc_id, party=party, is_advance=True, is_opening=False, against__isnull=True)
+            .first()
+        )
+        if alloc is None:
+            raise ValidationError("Select a valid advance receipt.")
+        if amount > money(alloc.amount):
+            raise ValidationError("Knock-off cannot exceed the advance on that receipt.")
+        if used + amount > invoice_total:
+            raise ValidationError("Advance knock-off cannot exceed the invoice total.")
+        if amount == money(alloc.amount):
+            alloc.is_advance = False
+            alloc.against = invoice
+            alloc.save(update_fields=["is_advance", "against"])
+        else:
+            alloc.amount = money(alloc.amount - amount)
+            alloc.save(update_fields=["amount"])
+            ReceiptAllocation.objects.create(
+                receipt=alloc.receipt,
+                party=party,
+                against=invoice,
+                amount=amount,
+                is_advance=False,
+                is_opening=False,
+            )
+        used += amount
+
+
 def apply_receipt_allocations(receipt: Voucher, items: list[dict]) -> None:
     used: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for raw in items:
@@ -1664,6 +1769,7 @@ def post_voucher(
     on_behalf_of=None,
     on_behalf_task=None,
     recovery_items=None,
+    advance_items=None,
     skip_recovery_assignment: bool = False,
 ) -> Voucher:
     cleaned = _validate_lines(lines)
@@ -1713,6 +1819,8 @@ def post_voucher(
         apply_receipt_allocations(voucher, receipt_items)
     if recovery_items:
         apply_recovery_allocations(voucher, recovery_items)
+    if advance_items:
+        apply_sales_advance_knocks(voucher, advance_items)
     return voucher
 
 
@@ -1747,13 +1855,17 @@ def update_voucher(
     on_behalf_of=None,
     on_behalf_task=None,
     recovery_items=None,
+    advance_items=None,
 ) -> Voucher:
     cleaned = _validate_lines(lines)
     if voucher.voucher_type == VOUCHER_PAYMENT and RecoveryAllocation.objects.filter(
         payment_line__voucher=voucher
     ).exists():
         raise ValidationError("This payment has been billed on a sales invoice. Edit or delete that invoice first.")
-    ReceiptAllocation.objects.filter(Q(receipt=voucher) | Q(against=voucher)).delete()
+    if voucher.voucher_type == VOUCHER_SALES and advance_items is not None:
+        release_invoice_receipt_knocks(voucher)
+    else:
+        ReceiptAllocation.objects.filter(Q(receipt=voucher) | Q(against=voucher)).delete()
     RecoveryAllocation.objects.filter(invoice=voucher).delete()
     voucher.lines.all().delete()
     voucher.date = voucher_date
@@ -1782,6 +1894,8 @@ def update_voucher(
         apply_receipt_allocations(voucher, receipt_items)
     if recovery_items:
         apply_recovery_allocations(voucher, recovery_items)
+    if advance_items is not None:
+        apply_sales_advance_knocks(voucher, advance_items)
     return voucher
 
 
@@ -1804,7 +1918,10 @@ def _mark_tasks_billed(tasks, voucher: Voucher) -> None:
 def delete_voucher(voucher: Voucher) -> None:
     tasks = list(voucher.tasks.all())
     number = voucher.number
-    ReceiptAllocation.objects.filter(against=voucher).delete()
+    if voucher.voucher_type == VOUCHER_SALES:
+        release_invoice_receipt_knocks(voucher)
+    else:
+        ReceiptAllocation.objects.filter(against=voucher).delete()
     voucher.delete()
     for task in tasks:
         if task.accounts_vouchers.exists():

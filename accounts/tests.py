@@ -1948,6 +1948,95 @@ class AccountsModuleTests(TestCase):
         self.assertIsNone(row.against_id)
         self.assertEqual(row.amount, Decimal("200.00"))
 
+    def test_outstanding_receipt_stays_advance_until_the_sales_bill_uses_it(self):
+        from accounts.services import apply_sales_advance_knocks
+
+        income = _posting_ledgers()
+        assets = AccountGroup.objects.get(system_key="assets")
+        cash_group = AccountGroup.objects.create(
+            name="Advance cash group",
+            parent=assets,
+            main_head="assets",
+        )
+        bank = Account.objects.create(name="Advance bank", group=cash_group)
+        buyer = sync_client_account(self.client_row)
+        open_bill = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 1),
+            lines=build_invoice_lines(
+                voucher_type="sales",
+                party=buyer,
+                items=[{"account": income, "amount": Decimal("1000.00")}],
+            ),
+            actor=self.admin,
+        )
+        post_voucher(
+            voucher_type="receipt",
+            voucher_date=date(2026, 10, 5),
+            lines=build_receipt_lines(
+                mode=bank,
+                items=[{"account": buyer, "amount": Decimal("400.00")}],
+            ),
+            actor=self.admin,
+            receipt_items=[
+                {
+                    "account": buyer,
+                    "amount": Decimal("400.00"),
+                    "bill_alloc": {
+                        "as_advance": False,
+                        "bills": [{"id": open_bill.pk, "amount": "0.00"}],
+                        "advance": "400.00",
+                    },
+                }
+            ],
+        )
+        self.assertEqual(outstanding_bills_for_account(buyer)[0]["outstanding"], Decimal("1000.00"))
+        advance = ReceiptAllocation.objects.get(party=buyer, is_advance=True)
+        self.assertEqual(advance.amount, Decimal("400.00"))
+        self.assertIsNone(advance.against_id)
+
+        next_bill = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 8),
+            lines=build_invoice_lines(
+                voucher_type="sales",
+                party=buyer,
+                items=[{"account": income, "amount": Decimal("250.00")}],
+            ),
+            actor=self.admin,
+            advance_items=[{"id": advance.pk, "amount": Decimal("250.00")}],
+        )
+        self.assertEqual(outstanding_bills_for_account(buyer, ignore_receipt_id=None)[0]["id"], open_bill.pk)
+        open_rows = {row["id"]: row["outstanding"] for row in outstanding_bills_for_account(buyer)}
+        self.assertEqual(open_rows[open_bill.pk], Decimal("1000.00"))
+        self.assertNotIn(next_bill.pk, open_rows)
+        advance.refresh_from_db()
+        self.assertTrue(advance.is_advance)
+        self.assertEqual(advance.amount, Decimal("150.00"))
+        knocked = ReceiptAllocation.objects.get(against=next_bill)
+        self.assertEqual(knocked.amount, Decimal("250.00"))
+        self.assertFalse(knocked.is_advance)
+
+        with self.assertRaises(ValidationError):
+            apply_sales_advance_knocks(
+                post_voucher(
+                    voucher_type="sales",
+                    voucher_date=date(2026, 10, 9),
+                    lines=build_invoice_lines(
+                        voucher_type="sales",
+                        party=buyer,
+                        items=[{"account": income, "amount": Decimal("100.00")}],
+                    ),
+                    actor=self.admin,
+                ),
+                [{"id": advance.pk, "amount": Decimal("150.00")}],
+            )
+
+        delete_voucher(next_bill)
+        restored = list(ReceiptAllocation.objects.filter(party=buyer, is_advance=True))
+        self.assertEqual(sum((row.amount for row in restored), Decimal("0.00")), Decimal("400.00"))
+        self.assertTrue(all(row.against_id is None for row in restored))
+
     def test_account_group_and_ledger_bulk_upload(self):
         from accounts.csv_import import (
             parse_account_groups_csv,

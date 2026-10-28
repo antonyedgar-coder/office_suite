@@ -155,7 +155,7 @@
   {% include "accounts/_voucher_type_tabs.html" %}
   {% if obj %}<p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.number }}</p>{% endif %}
   <div{% if compact_entry or contra_mode %} class="receipt-form-frame{% if contra_mode %} contra-frame{% endif %}"{% elif journal_mode %} class="journal-form-frame"{% endif %}>
-  <form method="post" class="card p-3" action="{% if obj %}{% url 'accounts_voucher_edit' obj.pk %}{% else %}{% url 'accounts_voucher_create' %}?type={{ vtype }}{% endif %}" id="voucher-form" data-vtype="{{ vtype }}" data-outstanding-url="{{ outstanding_url }}" data-recoveries-url="{{ recoveries_url }}" data-recovery-tasks-url="{{ recovery_tasks_url }}">
+  <form method="post" class="card p-3" action="{% if obj %}{% url 'accounts_voucher_edit' obj.pk %}{% else %}{% url 'accounts_voucher_create' %}?type={{ vtype }}{% endif %}" id="voucher-form" data-vtype="{{ vtype }}" data-outstanding-url="{{ outstanding_url }}" data-recoveries-url="{{ recoveries_url }}" data-advances-url="{{ advances_url }}" data-recovery-tasks-url="{{ recovery_tasks_url }}">
     {% csrf_token %}
     {{ form.voucher_type }}
     {% if linked_task %}
@@ -235,11 +235,13 @@
 
       {{ item_formset.management_form }}
       {% if vtype == 'sales' %}
+      <input type="hidden" name="advance_knocks" id="advance-knocks" value="[]" />
+      <div id="pending-advances" class="border rounded p-2 bg-light mb-3 d-none"></div>
       <div id="pending-recoveries" class="border rounded p-2 bg-light mb-3 d-none"></div>
         <p class="small text-secondary mb-1">Company GST No <span class="mono">{{ company_gstin|default:"—" }}</span>{% if company_address %} · {{ company_address }}{% endif %}</p>
         <p class="small text-secondary">Each account amount is credited. GST uses that account’s rate. Same first two GSTIN digits as the company GST No → CGST and SGST at half the rate. Different digits → IGST. Pure agent lines have no GST. The buyer is debited for amount plus GST.</p>
       {% elif vtype == 'receipt' %}
-        <p class="small text-secondary">The mode of receipt is debited for the total. Each account amount is credited. When the account is a Sundry Debtor, outstanding bills are shown so you can knock off the receipt or enter the balance as advance.</p>
+        <p class="small text-secondary">The mode of receipt is debited for the total. Each account amount is credited. When the client has outstanding bills, type the knock-off against each bill. Anything you do not knock off stays as advance. When there is no outstanding bill, the whole amount is advance.</p>
       {% elif vtype == 'payment' %}
         <p class="small text-secondary">The mode of payment is credited for the total. Each account amount is debited. Cash and cash equivalent ledgers are only used as the mode of payment. If you debit a pure-agent ledger (GST Payment, Income Tax, and similar), select the client this payment is for. Task is optional.</p>
       {% else %}
@@ -531,6 +533,7 @@
         if (amountOut) amountOut.textContent = money(amount);
         if (gstOut) gstOut.textContent = money(gst);
         if (totalOut) totalOut.textContent = money(amount + gst);
+        if (typeof clampAdvanceKnocks === "function") clampAdvanceKnocks();
         var showGst = gstSelected();
         box.querySelectorAll(".js-sales-breakdown").forEach(function (row) {
           row.style.display = showGst ? "" : "none";
@@ -614,39 +617,39 @@
         var amountEl = row.querySelector(".js-invoice-amount");
         var amount = moneyNum(amountEl && amountEl.value);
         var prevAdv = box.querySelector(".js-as-advance");
-        var asAdvance = prevAdv ? prevAdv.checked : !bills.length;
+        var asAdvance;
         if (!bills.length) asAdvance = true;
+        else if (prevAdv) asAdvance = prevAdv.checked;
+        else asAdvance = !!row._receiptAsAdvance;
         var prevKnock = {};
         if (keepManual) {
           box.querySelectorAll(".js-knock-amt").forEach(function (inp) {
             prevKnock[inp.getAttribute("data-bill-id")] = moneyNum(inp.value);
           });
         }
+        var savedKnocks = row._receiptKnocks || {};
         box.classList.remove("d-none");
         var accName = (row.querySelector(".js-invoice-account") || {}).name || "adv";
         var html = "";
+        var knockedSum = 0;
         if (!bills.length) {
           html += "<p class=\"mb-2\">No outstanding bills. Show this receipt as <strong>advance</strong>.</p>";
         } else {
-          html += "<p class=\"mb-2\">Opening balance and outstanding bills — knock off the receipt against each row.</p>";
+          html += "<p class=\"mb-2\">Outstanding bills — type the amount to knock off against each bill. Anything left is <strong>advance</strong>.</p>";
           html += "<div class=\"table-responsive\"><table class=\"table table-sm mb-2 bg-white\"><thead><tr><th>Bill</th><th>Date</th><th class=\"text-end\">Outstanding</th><th class=\"text-end\">Knock off</th></tr></thead><tbody>";
-          var fifo = fifoKnock(bills, asAdvance ? 0 : amount);
-          bills.forEach(function (b, i) {
+          bills.forEach(function (b) {
             var val = 0;
             if (!asAdvance) {
-              val = keepManual && prevKnock[String(b.id)] != null ? prevKnock[String(b.id)] : fifo[i].amount;
+              if (keepManual && prevKnock[String(b.id)] != null) val = prevKnock[String(b.id)];
+              else if (!prevAdv && savedKnocks[String(b.id)] != null) val = moneyNum(savedKnocks[String(b.id)]);
             }
+            knockedSum += moneyNum(val);
             html += "<tr><td class=\"mono\">" + b.number + "</td><td>" + (b.date || "—") + "</td><td class=\"text-end mono\">" + moneyNum(b.outstanding).toFixed(2) + "</td><td><input class=\"form-control form-control-sm text-end js-knock-amt\" data-bill-id=\"" + b.id + "\" data-outstanding=\"" + moneyNum(b.outstanding).toFixed(2) + "\" value=\"" + moneyNum(val).toFixed(2) + "\" step=\"0.01\" min=\"0\" type=\"number\"" + (asAdvance ? " disabled" : "") + " /></td></tr>";
           });
           html += "</tbody></table></div>";
         }
         html += "<div class=\"form-check mb-2\"><input class=\"form-check-input js-as-advance\" type=\"checkbox\" id=\"asadv-" + accName + "\"" + (asAdvance ? " checked" : "") + " /><label class=\"form-check-label\" for=\"asadv-" + accName + "\">Enter as advance</label></div>";
-        var advVal = asAdvance || !bills.length ? amount : leftoverAfter(bills, amount);
-        if (keepManual && !asAdvance) {
-          var knocked = 0;
-          Object.keys(prevKnock).forEach(function (k) { knocked += moneyNum(prevKnock[k]); });
-          advVal = Math.max(0, moneyNum(amount - knocked));
-        }
+        var advVal = asAdvance || !bills.length ? amount : Math.max(0, moneyNum(amount - knockedSum));
         html += "<div class=\"d-flex align-items-center gap-2 flex-wrap\"><label class=\"mb-0\" for=\"advamt-" + accName + "\">Advance amount</label><input id=\"advamt-" + accName + "\" class=\"form-control form-control-sm text-end js-advance-amt\" type=\"number\" step=\"0.01\" min=\"0\" value=\"" + moneyNum(advVal).toFixed(2) + "\" /></div>";
         box.innerHTML = html;
         box._bills = bills;
@@ -673,6 +676,8 @@
               writeAlloc(row, {});
               return;
             }
+            row._receiptKnocks = data.receipt_knocks || {};
+            row._receiptAsAdvance = !!data.receipt_as_advance;
             renderBillwise(row, data.bills || []);
           })
           .catch(function () {
@@ -728,10 +733,35 @@
           refreshSalesTotal();
           if (row && isReceipt) {
             var box = billwiseBox(row);
-            if (box && box._bills) renderBillwise(row, box._bills, false);
+            if (box && !box.classList.contains("d-none")) {
+              var asAdv = box.querySelector(".js-as-advance");
+              var adv = box.querySelector(".js-advance-amt");
+              var amountNow = moneyNum(e.target.value);
+              if (!box._bills || !box._bills.length || (asAdv && asAdv.checked)) {
+                if (adv) adv.value = amountNow.toFixed(2);
+              } else {
+                var knockedNow = 0;
+                box.querySelectorAll(".js-knock-amt").forEach(function (el) { knockedNow += moneyNum(el.value); });
+                if (adv) adv.value = Math.max(0, moneyNum(amountNow - knockedNow)).toFixed(2);
+              }
+              syncAllocJson(row);
+            }
           }
         }
         if (e.target.classList.contains("js-knock-amt")) applyKnockCap(e.target);
+        if (e.target.classList.contains("js-advance-knock")) {
+          var pendingCap = moneyNum(e.target.getAttribute("max"));
+          var typed = moneyNum(e.target.value);
+          if (typed > pendingCap) e.target.value = pendingCap.toFixed(2);
+          if (typed < 0) e.target.value = "0.00";
+          var others = 0;
+          form.querySelectorAll(".js-advance-knock").forEach(function (el) {
+            if (el !== e.target) others += moneyNum(el.value);
+          });
+          var room = Math.max(0, moneyNum(salesBillTotal() - others));
+          if (moneyNum(e.target.value) > room) e.target.value = room.toFixed(2);
+          syncAdvanceKnocks();
+        }
         if (e.target.classList.contains("js-advance-amt")) {
           var wrap = e.target.closest(".js-billwise-wrap");
           var row = wrap ? wrap.previousElementSibling : null;
@@ -988,6 +1018,85 @@
           .then(function (data) { renderRecoveries(data.recoveries || []); })
           .catch(function () { renderRecoveries([]); });
       }
+      var advancesTpl = form.getAttribute("data-advances-url") || "";
+      function salesBillTotal() {
+        var amount = 0;
+        var gst = 0;
+        form.querySelectorAll("#invoice-lines-body .js-invoice-row").forEach(function (row) {
+          var amountEl = row.querySelector(".js-invoice-amount");
+          amount += moneyNum(amountEl && amountEl.value);
+          [".js-invoice-cgst", ".js-invoice-sgst", ".js-invoice-igst"].forEach(function (sel) {
+            var el = row.querySelector(sel);
+            gst += moneyNum(el && el.value);
+          });
+        });
+        return moneyNum(amount + gst);
+      }
+      function clampAdvanceKnocks() {
+        var room = salesBillTotal();
+        form.querySelectorAll(".js-advance-use").forEach(function (box) {
+          var amt = form.querySelector(".js-advance-knock[data-id=\"" + box.getAttribute("data-id") + "\"]");
+          if (!amt || !box.checked) return;
+          var pending = moneyNum(box.getAttribute("data-pending"));
+          var take = Math.min(moneyNum(amt.value), pending, Math.max(0, room));
+          amt.value = take.toFixed(2);
+          room = moneyNum(room - take);
+        });
+        syncAdvanceKnocks();
+      }
+      function syncAdvanceKnocks() {
+        var hidden = document.getElementById("advance-knocks");
+        if (!hidden) return;
+        var rows = [];
+        form.querySelectorAll(".js-advance-use").forEach(function (box) {
+          if (!box.checked) return;
+          var amt = form.querySelector(".js-advance-knock[data-id=\"" + box.getAttribute("data-id") + "\"]");
+          var amount = moneyNum(amt && amt.value);
+          if (amount > 0) rows.push({ id: parseInt(box.getAttribute("data-id"), 10), amount: amount.toFixed(2) });
+        });
+        hidden.value = JSON.stringify(rows);
+      }
+      function renderAdvances(rows) {
+        var box = document.getElementById("pending-advances");
+        if (!box) return;
+        if (!rows || !rows.length) {
+          box.classList.add("d-none");
+          box.innerHTML = "";
+          syncAdvanceKnocks();
+          return;
+        }
+        var html = "<p class=\"mb-2\"><strong>Advance pending</strong> — tick a receipt to knock this bill against that advance.</p>";
+        rows.forEach(function (row) {
+          var checked = row.selected ? " checked" : "";
+          var pending = moneyNum(row.pending);
+          var start = row.selected ? pending : 0;
+          var when = row.date || "";
+          var parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(when);
+          if (parts) when = parts[3] + "-" + parts[2] + "-" + parts[1];
+          html += "<div class=\"d-flex flex-wrap align-items-center gap-2 mb-1\">";
+          html += "<input type=\"checkbox\" class=\"form-check-input js-advance-use\" data-id=\"" + row.id + "\" data-pending=\"" + pending.toFixed(2) + "\"" + checked + " />";
+          html += "<span>" + row.number + (when ? " · " + when : "") + " · Advance " + pending.toFixed(2) + "</span>";
+          html += "<input class=\"form-control form-control-sm text-end js-advance-knock\" style=\"width:8rem\" data-id=\"" + row.id + "\" type=\"number\" step=\"0.01\" min=\"0\" max=\"" + pending.toFixed(2) + "\" value=\"" + start.toFixed(2) + "\"" + (row.selected ? "" : " disabled") + " />";
+          html += "</div>";
+        });
+        box.innerHTML = html;
+        box.classList.remove("d-none");
+        syncAdvanceKnocks();
+      }
+      function loadAdvances() {
+        var box = document.getElementById("pending-advances");
+        if (!isSales || !box) return;
+        var party = document.getElementById("id_party");
+        if (!party || !party.value || !advancesTpl) {
+          renderAdvances([]);
+          return;
+        }
+        var url = advancesTpl.replace("/0/", "/" + party.value + "/").replace("/0?", "/" + party.value + "?");
+        fetch(url, { headers: { Accept: "application/json" } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) { renderAdvances(data.advances || []); })
+          .catch(function () { renderAdvances([]); });
+      }
       function bindTaskPicker() {
         var search = document.getElementById("onBehalfTaskSearch");
         if (!search || !window.initTaskUserSinglePicker) return;
@@ -1032,7 +1141,31 @@
         if (currentClient && currentClient.value) loadRecoveryTasks(currentClient.value, true);
       }
       form.addEventListener("change", function (e) {
-        if (e.target && e.target.id === "id_party") loadRecoveries();
+        if (e.target && e.target.id === "id_party") {
+          loadRecoveries();
+          loadAdvances();
+        }
+        if (e.target && e.target.classList.contains("js-advance-use")) {
+          var amt = form.querySelector(".js-advance-knock[data-id=\"" + e.target.getAttribute("data-id") + "\"]");
+          if (amt) {
+            if (e.target.checked) {
+              var pending = moneyNum(e.target.getAttribute("data-pending"));
+              var others = 0;
+              form.querySelectorAll(".js-advance-use").forEach(function (box) {
+                if (box === e.target || !box.checked) return;
+                var other = form.querySelector(".js-advance-knock[data-id=\"" + box.getAttribute("data-id") + "\"]");
+                others += moneyNum(other && other.value);
+              });
+              var room = Math.max(0, moneyNum(salesBillTotal() - others));
+              amt.disabled = false;
+              amt.value = Math.min(pending, room).toFixed(2);
+            } else {
+              amt.value = "0.00";
+              amt.disabled = true;
+            }
+          }
+          syncAdvanceKnocks();
+        }
         if (e.target && e.target.classList.contains("js-pending-recovery")) {
           toggleRecovery({
             id: e.target.getAttribute("data-id"),
@@ -1043,7 +1176,10 @@
         }
       });
       fillParty();
-      if (isSales) loadRecoveries();
+      if (isSales) {
+        loadRecoveries();
+        loadAdvances();
+      }
       syncTaxTabs();
       refreshAll();
       showPlusOnLastRow();
