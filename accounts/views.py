@@ -43,6 +43,7 @@ from .permissions import (
     can_add_voucher,
     can_change_voucher,
     can_delete_voucher,
+    can_open_voucher_menu,
     can_print_voucher,
     can_view_voucher_type,
     first_addable_voucher_type,
@@ -902,8 +903,10 @@ def _decode_csv_session(raw_bytes: bytes) -> str:
         return raw_bytes.decode("cp1252", errors="replace")
 
 
-@require_perm("accounts.view_voucher")
+@login_required
 def account_outstanding(request, pk: int):
+    if not can_open_voucher_menu(request.user):
+        raise PermissionDenied
     account = get_object_or_404(Account, pk=pk, is_active=True)
     for_note = (request.GET.get("for") or "").strip() == "note"
     ignore_raw = (request.GET.get("ignore") or "").strip()
@@ -935,8 +938,10 @@ def account_outstanding(request, pk: int):
     )
 
 
-@require_perm("accounts.view_voucher")
+@login_required
 def account_recovery_tasks(request, pk: int):
+    if not can_open_voucher_menu(request.user):
+        raise PermissionDenied
     account = get_object_or_404(Account, pk=pk, is_active=True)
     if not account.client_id:
         return JsonResponse({"tasks": []})
@@ -959,8 +964,10 @@ def account_recovery_tasks(request, pk: int):
     )
 
 
-@require_perm("accounts.view_voucher")
+@login_required
 def account_pending_recoveries(request, pk: int):
+    if not can_open_voucher_menu(request.user):
+        raise PermissionDenied
     account = get_object_or_404(Account, pk=pk, is_active=True)
     ignore_raw = (request.GET.get("ignore") or "").strip()
     ignore_invoice_id = int(ignore_raw) if ignore_raw.isdigit() else None
@@ -1553,8 +1560,10 @@ def sales_invoice_print(request, pk: int):
     )
 
 
-@require_perm("accounts.post_voucher")
+@login_required
 def unbilled_tasks(request):
+    if not can_add_voucher(request.user, VOUCHER_SALES):
+        raise PermissionDenied
     seed_chart_of_accounts()
     qs = (
         tasks_queryset_for_user(request.user)
@@ -2044,8 +2053,10 @@ def report_billwise_outstanding(request):
     )
 
 
-@require_perm("accounts.post_voucher")
+@login_required
 def report_pending_recoveries(request):
+    if not can_add_voucher(request.user, VOUCHER_SALES):
+        raise PermissionDenied
     return redirect("accounts_unbilled_tasks")
 
 

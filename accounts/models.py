@@ -67,6 +67,29 @@ SALES_INVOICE_KEYS = {key for key, _ in SALES_INVOICE_TABS}
 VOUCHER_TYPE_KEYS = {key for key, _ in VOUCHER_TYPE_CHOICES}
 REGISTER_TYPE_KEYS = {key for key, _ in REGISTER_TABS}
 
+VOUCHER_ACTIVITY_LABELS = (
+    (VOUCHER_SALES, "Sales voucher"),
+    (VOUCHER_PURCHASE, "Purchase voucher"),
+    (VOUCHER_RECEIPT, "Receipt voucher"),
+    (VOUCHER_PAYMENT, "Payment voucher"),
+    (VOUCHER_CONTRA, "Contra voucher"),
+    (VOUCHER_JOURNAL, "Journal voucher"),
+    (VOUCHER_DEBIT_NOTE, "Debit note"),
+    (VOUCHER_CREDIT_NOTE, "Credit note"),
+)
+VOUCHER_ACTIVITY_ACTIONS = (
+    ("list", "List"),
+    ("add", "Add"),
+    ("change", "Change"),
+    ("delete", "Delete"),
+    ("print", "Print"),
+)
+VOUCHER_ACTIVITY_PERMISSIONS = [
+    (f"{action}_{key}_voucher", f"{label} | {action_label}")
+    for key, label in VOUCHER_ACTIVITY_LABELS
+    for action, action_label in VOUCHER_ACTIVITY_ACTIONS
+]
+
 SERIES_GST = "GST"
 SERIES_GST_B2C = "GSTB2C"
 SERIES_NGST = "NGST"
@@ -317,21 +340,10 @@ class Voucher(models.Model):
                 name="accounts_voucher_type_series_number_uniq",
             ),
         ]
+        default_permissions = ()
         permissions = [
-            ("post_voucher", "Can post accounts vouchers"),
             ("view_accounts_reports", "Can view accounts reports"),
-            ("add_payment_voucher", "Payment voucher | Add"),
-            ("change_payment_voucher", "Payment voucher | Change"),
-            ("delete_payment_voucher", "Payment voucher | Delete"),
-            ("print_payment_voucher", "Payment voucher | Print"),
-            ("list_sales_voucher", "Sales voucher | List"),
-            ("list_purchase_voucher", "Purchase voucher | List"),
-            ("list_receipt_voucher", "Receipt voucher | List"),
-            ("list_payment_voucher", "Payment voucher | List"),
-            ("list_contra_voucher", "Contra voucher | List"),
-            ("list_journal_voucher", "Journal voucher | List"),
-            ("list_debit_note_voucher", "Debit note | List"),
-            ("list_credit_note_voucher", "Credit note | List"),
+            *VOUCHER_ACTIVITY_PERMISSIONS,
         ]
 
     def __str__(self) -> str:

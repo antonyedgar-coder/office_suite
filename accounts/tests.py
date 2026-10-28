@@ -3710,7 +3710,7 @@ class PaymentVoucherPermissionTests(TestCase):
         return request
 
     def test_post_voucher_cannot_add_payment(self):
-        user = self._user_with("post_voucher", "view_voucher")
+        user = self._user_with("add_sales_voucher", "list_sales_voucher")
         request = self._request(
             user,
             "post",
@@ -3794,7 +3794,7 @@ class PaymentVoucherPermissionTests(TestCase):
 
     def test_print_payment_voucher_is_required(self):
         voucher = self._posted_payment()
-        viewer = self._user_with("view_voucher")
+        viewer = self._user_with("list_sales_voucher")
         with self.assertRaises(self.PermissionDenied):
             self.voucher_list(
                 self._request(

@@ -57,7 +57,7 @@
           {% if can_reopen %}
             <a class="btn btn-sm btn-outline-warning" href="{% url 'task_reopen' task.pk %}">Reopen task</a>
           {% endif %}
-          {% if enable_accounts_module and perms.accounts.post_voucher %}
+          {% if enable_accounts_module and perms.accounts.add_sales_voucher %}
             {% if task.status == "complete" and task.is_billable and not task.bill_raised %}
               <a class="btn btn-sm btn-outline-success" href="{% url 'accounts_unbilled_tasks' %}">Raise bill (Accounts)</a>
             {% elif not task.bill_raised %}

@@ -13,7 +13,20 @@ def enable_documents_module(request):
 
 
 def enable_accounts_module(request):
-    return {"enable_accounts_module": accounts_module_enabled()}
+    enabled = accounts_module_enabled()
+    show_vouchers = False
+    user = getattr(request, "user", None)
+    if enabled and getattr(user, "is_authenticated", False):
+        if user.is_superuser:
+            show_vouchers = True
+        else:
+            from accounts.permissions import can_open_voucher_menu
+
+            show_vouchers = can_open_voucher_menu(user)
+    return {
+        "enable_accounts_module": enabled,
+        "show_accounts_voucher_nav": show_vouchers,
+    }
 
 
 def master_request_nav_counts(request):

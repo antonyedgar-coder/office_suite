@@ -62,20 +62,9 @@ class DualListPermissionTests(TestCase):
 
     @patch("core.permission_utils.accounts_module_enabled", return_value=True)
     def test_payment_voucher_activities_are_listed(self, _enabled):
-        expected = {
-            "add_payment_voucher": "Payment voucher | Add",
-            "change_payment_voucher": "Payment voucher | Change",
-            "delete_payment_voucher": "Payment voucher | Delete",
-            "print_payment_voucher": "Payment voucher | Print",
-            "list_sales_voucher": "Sales voucher | List",
-            "list_purchase_voucher": "Purchase voucher | List",
-            "list_receipt_voucher": "Receipt voucher | List",
-            "list_payment_voucher": "Payment voucher | List",
-            "list_contra_voucher": "Contra voucher | List",
-            "list_journal_voucher": "Journal voucher | List",
-            "list_debit_note_voucher": "Debit note | List",
-            "list_credit_note_voucher": "Credit note | List",
-        }
+        from accounts.permissions import voucher_activity_names
+
+        expected = voucher_activity_names()
         found = {
             perm.codename: perm.name
             for perm in manageable_permissions().filter(
@@ -88,6 +77,15 @@ class DualListPermissionTests(TestCase):
         form = EmployeeCreateForm()
         form_names = {perm.name for perm in form.fields["user_permissions"].queryset}
         self.assertTrue(set(expected.values()) <= form_names)
+        removed = {
+            "Can add voucher",
+            "Can change voucher",
+            "Can delete voucher",
+            "Can view voucher",
+            "Can post accounts vouchers",
+        }
+        self.assertTrue(removed.isdisjoint(form_names))
         group = GroupAccessForm()
         group_names = {perm.name for perm in group.fields["assigned_permissions"].queryset}
         self.assertTrue(set(expected.values()) <= group_names)
+        self.assertTrue(removed.isdisjoint(group_names))
