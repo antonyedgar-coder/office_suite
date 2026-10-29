@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import DecimalField, OuterRef, Prefetch, Q, Subquery, Sum, Value
+from django.db.models import DecimalField, Exists, OuterRef, Prefetch, Q, Subquery, Sum, Value
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
@@ -36,6 +36,7 @@ from .forms import (
     TrialBalanceForm,
     UnbilledInvoiceForm,
     VoucherForm,
+    VoucherListFilterForm,
     JournalLineFormSet,
     VoucherLineFormSet,
 )
@@ -867,7 +868,7 @@ def voucher_books_bulk_import(request):
                 "Import vouchers from the previous software from 01-04-2026 to cutover. "
                 "Keep the old NUMBER on every line of the same voucher. The same NUMBER may be used on "
                 "different voucher types (Receipt 1 and Sales 1). This does not use this software's "
-                "GST/NGST monthly serial — new vouchers posted here still start at 00001. "
+                "GST/NGST monthly serial — new vouchers posted here still start at 0001. "
                 "Create Account Ledgers first. One CSV row per debit or credit line. "
                 "Bill-wise receipt knock-off is not imported."
             ),
@@ -1070,7 +1071,7 @@ def _latest_voucher_month(vtype: str):
     return _month_bounds(latest or timezone.localdate())
 
 
-def _voucher_register_qs(vtype: str, *, date_from=None, date_to=None):
+def _voucher_register_qs(vtype: str, *, date_from=None, date_to=None, q=""):
     amount_field = DecimalField(max_digits=14, decimal_places=2)
     zero = Value(Decimal("0.00"), output_field=amount_field)
     qs = Voucher.objects.filter(voucher_type=vtype)
@@ -1078,6 +1079,10 @@ def _voucher_register_qs(vtype: str, *, date_from=None, date_to=None):
         qs = qs.filter(date__gte=date_from)
     if date_to:
         qs = qs.filter(date__lte=date_to)
+    needle = (q or "").strip()
+    if needle:
+        name_match = VoucherLine.objects.filter(voucher_id=OuterRef("pk"), account__name__icontains=needle)
+        qs = qs.filter(Q(number__icontains=needle) | Q(narration__icontains=needle) | Exists(name_match))
     qs = qs.annotate(
         amount=Coalesce(Sum("lines__debit"), zero),
         debit_amount=Coalesce(Sum("lines__debit"), zero),
@@ -1161,6 +1166,38 @@ def _first_side_account_name(voucher, side: str) -> str:
     return ""
 
 
+def _voucher_list_filters(vtype: str, params) -> dict:
+    """Search text and date window for a voucher list. Sales opens on its latest month."""
+    has_query = any(key in params for key in ("q", "date_from", "date_to"))
+    list_title = dict(VOUCHER_TYPE_CHOICES)[vtype]
+    if has_query:
+        form = VoucherListFilterForm(params)
+        if form.is_valid():
+            q = (form.cleaned_data.get("q") or "").strip()
+            date_from = form.cleaned_data.get("date_from")
+            date_to = form.cleaned_data.get("date_to")
+        else:
+            q = (params.get("q") or "").strip()
+            date_from = date_to = None
+    else:
+        q = ""
+        date_from = date_to = None
+        form = None
+    if vtype == VOUCHER_SALES and "date_from" not in params and "date_to" not in params:
+        date_from, date_to = _latest_voucher_month(vtype)
+        list_title = f"{list_title} — {date_from.strftime('%B %Y')}"
+        form = VoucherListFilterForm(initial={"q": q, "date_from": date_from, "date_to": date_to})
+    elif form is None:
+        form = VoucherListFilterForm()
+    return {
+        "form": form,
+        "q": q,
+        "date_from": date_from,
+        "date_to": date_to,
+        "list_title": list_title,
+    }
+
+
 def _voucher_list_layout(vtype: str) -> str:
     if vtype == VOUCHER_SALES:
         return "sales"
@@ -1184,12 +1221,12 @@ def voucher_list(request):
                 return redirect(f"{reverse('accounts_voucher_list')}?type={tabs[0][0]}")
         raise PermissionDenied
     export = (request.GET.get("export") or "").strip().lower()
-    date_from = date_to = None
-    list_title = dict(VOUCHER_TYPE_CHOICES)[vtype]
-    if vtype == VOUCHER_SALES:
-        date_from, date_to = _latest_voucher_month(vtype)
-        list_title = f"{list_title} — {date_from.strftime('%B %Y')}"
-    rows = _voucher_register_qs(vtype, date_from=date_from, date_to=date_to)
+    filters = _voucher_list_filters(vtype, request.GET)
+    date_from = filters["date_from"]
+    date_to = filters["date_to"]
+    q = filters["q"]
+    list_title = filters["list_title"]
+    rows = _voucher_register_qs(vtype, date_from=date_from, date_to=date_to, q=q)
     list_layout = _voucher_list_layout(vtype)
     if list_layout == "receipt":
         rows = list(rows if export == "pdf" else rows[:500])
@@ -1215,6 +1252,13 @@ def voucher_list(request):
             company_address=(settings.address or "").strip(),
         )
     flags = voucher_action_flags(request.user, vtype)
+    pdf_params = {"type": vtype, "export": "pdf"}
+    if q:
+        pdf_params["q"] = q
+    if date_from:
+        pdf_params["date_from"] = date_from.isoformat()
+    if date_to:
+        pdf_params["date_to"] = date_to.isoformat()
     return render(
         request,
         "accounts/voucher_list.html",
@@ -1223,7 +1267,11 @@ def voucher_list(request):
             "vtype": vtype,
             "list_layout": list_layout,
             "list_title": list_title,
-            "pdf_url": f"{reverse('accounts_voucher_list')}?{urlencode({'type': vtype, 'export': 'pdf'})}",
+            "filter_form": filters["form"],
+            "q": q,
+            "date_from": date_from,
+            "date_to": date_to,
+            "pdf_url": f"{reverse('accounts_voucher_list')}?{urlencode(pdf_params)}",
             **flags,
         },
     )

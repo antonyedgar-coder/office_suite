@@ -183,7 +183,7 @@ class AccountsModuleTests(TestCase):
             ],
             actor=self.admin,
         )
-        self.assertTrue(voucher.number.startswith("CV/"))
+        self.assertTrue(voucher.number.startswith("CV-"))
 
     def test_contra_debits_receiver_and_credits_payer(self):
         seed_chart_of_accounts()
@@ -245,7 +245,7 @@ class AccountsModuleTests(TestCase):
             HTTP_HOST="localhost",
         )
         self.assertEqual(posted.status_code, 302)
-        voucher = Voucher.objects.get(number__startswith="CV/")
+        voucher = Voucher.objects.get(number__startswith="CV-")
         self.assertEqual(voucher.debit_total(), Decimal("75.00"))
         self.assertEqual(voucher.credit_total(), Decimal("75.00"))
 
@@ -527,6 +527,75 @@ class AccountsModuleTests(TestCase):
             match = next(row for row in rows if row.pk == posted.pk)
             self.assertEqual(_first_side_account_name(match, "debit"), "First debit ledger")
             self.assertEqual(_first_side_account_name(match, "credit"), "First credit ledger")
+
+    def test_voucher_list_filters_by_search_and_date_range(self):
+        from accounts.services import build_payment_lines
+        from accounts.views import _voucher_list_filters, _voucher_register_qs
+
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        cash_group = AccountGroup.objects.create(
+            name="Cash and Cash Equivalents",
+            parent=assets,
+            main_head="assets",
+        )
+        bank = Account.objects.create(name="Filter bank", group=cash_group)
+        rent = Account.objects.create(name="Filter office rent", group=expenses)
+        other = Account.objects.create(name="Filter other", group=expenses)
+        post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 9, 2),
+            narration="September rent",
+            lines=build_payment_lines(mode=bank, items=[{"account": rent, "amount": Decimal("100.00")}]),
+            actor=self.admin,
+        )
+        october = post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 10, 8),
+            narration="October rent",
+            lines=build_payment_lines(mode=bank, items=[{"account": rent, "amount": Decimal("120.00")}]),
+            actor=self.admin,
+        )
+        post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 10, 9),
+            narration="October other",
+            lines=build_payment_lines(mode=bank, items=[{"account": other, "amount": Decimal("30.00")}]),
+            actor=self.admin,
+        )
+        matched = list(
+            _voucher_register_qs(
+                "payment",
+                q="office rent",
+                date_from=date(2026, 10, 1),
+                date_to=date(2026, 10, 31),
+            )
+        )
+        self.assertEqual([row.pk for row in matched], [october.pk])
+        by_number = list(_voucher_register_qs("payment", q=october.number))
+        self.assertEqual([row.pk for row in by_number], [october.pk])
+
+        income = AccountGroup.objects.get(system_key="income")
+        fees = Account.objects.create(name="Filter fees", group=income)
+        buyer = Account.objects.create(name="Filter buyer", group=assets)
+        post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 7),
+            narration="October sale",
+            lines=[
+                {"account": buyer, "debit": Decimal("100.00"), "credit": Decimal("0.00")},
+                {"account": fees, "debit": Decimal("0.00"), "credit": Decimal("100.00")},
+            ],
+            actor=self.admin,
+        )
+        opened = _voucher_list_filters("sales", {})
+        self.assertEqual(opened["date_from"], date(2026, 10, 1))
+        self.assertEqual(opened["date_to"], date(2026, 10, 31))
+        cleared = _voucher_list_filters("payment", {"date_from": "", "date_to": "", "q": "October"})
+        self.assertEqual(cleared["q"], "October")
+        self.assertIsNone(cleared["date_from"])
+        self.assertIsNone(cleared["date_to"])
 
     def test_book_register_lists_and_exports(self):
         seed_chart_of_accounts()
@@ -873,7 +942,7 @@ class AccountsModuleTests(TestCase):
             ],
             actor=self.admin,
         )
-        self.assertTrue(voucher.number.startswith("JV/"))
+        self.assertTrue(voucher.number.startswith("JV-"))
         self.assertEqual(voucher.debit_total(), voucher.credit_total())
         balanced = [
             {"account": expense, "debit": Decimal("50.00"), "credit": Decimal("0.00")},
@@ -1093,11 +1162,11 @@ class AccountsModuleTests(TestCase):
         n1 = allocate_voucher_number(SERIES_GST, d)
         n2 = allocate_voucher_number(SERIES_NGST, d)
         n3 = allocate_voucher_number(SERIES_GST, d)
-        self.assertEqual(n1, "GST/2026/10/00001")
-        self.assertEqual(n2, "NGST/2026/10/00001")
-        self.assertEqual(n3, "GST/2026/10/00002")
-        self.assertEqual(allocate_voucher_number(SERIES_GST_B2C, d), "GSTB2C/2026/10/00001")
-        self.assertEqual(allocate_voucher_number(SERIES_PUR, d), "PUR/2026/10/00001")
+        self.assertEqual(n1, "GST-2026-10-0001")
+        self.assertEqual(n2, "NGST-2026-10-0001")
+        self.assertEqual(n3, "GST-2026-10-0002")
+        self.assertEqual(allocate_voucher_number(SERIES_GST_B2C, d), "GSTB2C-2026-10-0001")
+        self.assertEqual(allocate_voucher_number(SERIES_PUR, d), "PUR-2026-10-0001")
 
     def test_sales_gst_b2c_uses_separate_series(self):
         income = _posting_ledgers()
@@ -1127,7 +1196,7 @@ class AccountsModuleTests(TestCase):
             tax_kind="gst_b2c",
         )
         self.assertEqual(voucher.series, SERIES_GST_B2C)
-        self.assertTrue(voucher.number.startswith("GSTB2C/"))
+        self.assertTrue(voucher.number.startswith("GSTB2C-"))
         b2b = post_voucher(
             voucher_type="sales",
             voucher_date=date(2026, 10, 15),
@@ -1136,7 +1205,7 @@ class AccountsModuleTests(TestCase):
             tax_kind="gst",
         )
         self.assertEqual(b2b.series, SERIES_GST)
-        self.assertTrue(b2b.number.startswith("GST/"))
+        self.assertTrue(b2b.number.startswith("GST-"))
         b2c_rows = book_register_rows(
             voucher_type="sales",
             date_from=date(2026, 10, 1),
@@ -1237,7 +1306,7 @@ class AccountsModuleTests(TestCase):
             lines=purchase_lines,
             actor=self.admin,
         )
-        self.assertTrue(voucher.number.startswith("PUR/"))
+        self.assertTrue(voucher.number.startswith("PUR-"))
         self.assertEqual(voucher.debit_total(), voucher.credit_total())
 
     def test_sales_invoice_from_completed_task(self):
@@ -1265,7 +1334,7 @@ class AccountsModuleTests(TestCase):
         )
         task.refresh_from_db()
         self.assertTrue(task.bill_raised)
-        self.assertTrue(voucher.number.startswith("NGST/"))
+        self.assertTrue(voucher.number.startswith("NGST-"))
         self.assertEqual(voucher.debit_total(), voucher.credit_total())
         income_line = next(ln for ln in voucher.lines.all() if ln.credit > 0)
         self.assertEqual(income_line.account.name, task.display_title)
@@ -1344,7 +1413,7 @@ class AccountsModuleTests(TestCase):
         voucher = create_sales_invoice_for_task(
             task=intra_task, actor=self.admin, voucher_date=date(2026, 10, 1), with_gst=True
         )
-        self.assertTrue(voucher.number.startswith("GST/"))
+        self.assertTrue(voucher.number.startswith("GST-"))
         by_name = {ln.account.name: ln.credit for ln in voucher.lines.all() if ln.credit > 0}
         self.assertEqual(by_name[intra_task.display_title], Decimal("1000.00"))
         self.assertEqual(by_name["CGST Output 9%"], Decimal("90.00"))
@@ -1809,7 +1878,7 @@ class AccountsModuleTests(TestCase):
             lines=lines,
             actor=self.admin,
         )
-        self.assertTrue(voucher.number.startswith("RV/"))
+        self.assertTrue(voucher.number.startswith("RV-"))
         self.assertEqual(voucher.debit_total(), voucher.credit_total())
 
     def test_payment_credits_cash_mode_and_debits_non_cash_accounts(self):
@@ -1847,7 +1916,7 @@ class AccountsModuleTests(TestCase):
             lines=lines,
             actor=self.admin,
         )
-        self.assertTrue(voucher.number.startswith("PV/"))
+        self.assertTrue(voucher.number.startswith("PV-"))
         self.assertEqual(voucher.debit_total(), voucher.credit_total())
 
     def test_receipt_knocks_off_sales_bills_or_posts_advance(self):
@@ -2243,7 +2312,7 @@ class LegacyVoucherBooksImportTests(TestCase):
         self.assertEqual(voucher.lines.count(), 3)
         self.assertEqual(InvoiceNumberSeq.objects.filter(series=SERIES_GST).count(), 0)
         next_no = allocate_voucher_number(SERIES_GST, date(2026, 4, 15))
-        self.assertEqual(next_no, "GST/2026/04/00001")
+        self.assertEqual(next_no, "GST-2026-04-0001")
 
     def test_existing_number_is_rejected(self):
         from accounts.csv_import import parse_voucher_books_csv
@@ -3220,6 +3289,9 @@ class LedgerFormatTests(TestCase):
         self.assertIn(b"Closing Balance", pdf)
         self.assertIn(b"Voucher No", pdf)
         self.assertNotIn(b"Narration", pdf)
+        shown = next(row["number"] for row in rows if row.get("voucher"))
+        self.assertNotIn("/", shown)
+        self.assertIn(shown.encode(), pdf)
         self.assertNotIn(b"Receipt from party", pdf)
         self.assertIn("Narration", values)
         self.assertIn("Receipt from party", values)
@@ -3290,6 +3362,22 @@ class LedgerFormatTests(TestCase):
         self.assertIn("All Ledger", values)
         self.assertIn("Cash and Cash Equivalents", values)
         self.assertIn("Sundry Debtors", values)
+        from accounts.export import ledger_pdf_bytes
+
+        grouped_pdf = ledger_pdf_bytes(
+            [],
+            date_from=date(2026, 4, 1),
+            date_to=date(2026, 10, 16),
+            company_name="Test Firm",
+            sections=sections,
+        )
+        heading_end = grouped_pdf.find(b"Voucher No")
+        self.assertLess(grouped_pdf.find(b"(Cash)"), heading_end)
+        self.assertNotIn(b"Cash and Cash Equivalents", grouped_pdf[:heading_end])
+        self.assertNotIn(b"Sundry Debtors", grouped_pdf[:heading_end])
+        placed = grouped_pdf.split(b"(Cash)")[0].rsplit(b"Tf ", 1)[-1]
+        ledger_x = float(placed.split()[0])
+        self.assertGreater(ledger_x, 300)
         self.client.force_login(self.admin)
         xlsx_res = self.client.get(
             reverse("accounts_ledger"),
@@ -3734,7 +3822,7 @@ class PaymentRecoveryTests(TestCase):
             with_gst=False,
         )
         self.assertEqual(len(created), 1)
-        self.assertTrue(created[0].number.startswith("NGST/"))
+        self.assertTrue(created[0].number.startswith("NGST-"))
         self.assertEqual(created[0].recovery_allocations.count(), 1)
         self.assertEqual(pending_recovery_rows(), [])
         credits = {ln.account_id: ln.credit for ln in created[0].lines.all() if ln.credit > 0}

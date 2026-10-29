@@ -308,16 +308,17 @@ def _draw_tb_pdf_row(ops, left, y, values, widths, height, *, bold=False, amount
     return y - height
 
 
-def _draw_table_row(ops, left, y, values, widths, height, *, bold=False, fill=False, amounts_from=1):
+def _draw_table_row(ops, left, y, values, widths, height, *, bold=False, fill=False, amounts_from=1, rules=True):
     x = left
     if fill:
         total_w = sum(widths)
         ops.append(f"0.91 0.92 0.93 rg {x:.2f} {y - height + 3:.2f} {total_w:.2f} {height:.2f} re f 0 0 0 rg")
-    ops.append("0.75 0.76 0.78 RG")
-    ops.append(
-        f"{left:.2f} {y + 3:.2f} m {left + sum(widths):.2f} {y + 3:.2f} l "
-        f"{left:.2f} {y - height + 3:.2f} m {left + sum(widths):.2f} {y - height + 3:.2f} l S"
-    )
+    if rules:
+        ops.append("0.75 0.76 0.78 RG")
+        ops.append(
+            f"{left:.2f} {y + 3:.2f} m {left + sum(widths):.2f} {y + 3:.2f} l "
+            f"{left:.2f} {y - height + 3:.2f} m {left + sum(widths):.2f} {y - height + 3:.2f} l S"
+        )
     text_y = y - 7
     for index, (value, width) in enumerate(zip(values, widths)):
         text = str(value or "")
@@ -837,7 +838,7 @@ def _ledger_row_cells(row: dict) -> list:
 def _ledger_pdf_row_cells(row: dict) -> list:
     return [
         _fmt_date(row.get("date")),
-        row.get("number") or "",
+        (row.get("number") or "").replace("/", "-"),
         row.get("ledger_account") or "",
         _amount_or_blank(row.get("debit")),
         _amount_or_blank(row.get("credit")),
@@ -909,7 +910,8 @@ def ledger_xlsx_bytes(
         nonlocal row_no
         for item in items:
             values = _ledger_row_cells(item)
-            bold = item.get("kind") in ("closing", "total")
+            kind = item.get("kind")
+            bold = kind in ("opening", "closing", "total")
             for col, value in enumerate(values, start=1):
                 cell = ws.cell(row_no, col, value if value not in (None, "") else None)
                 cell.border = thin
@@ -921,6 +923,8 @@ def ledger_xlsx_bytes(
                     cell.alignment = wrap
                 if bold:
                     cell.font = header_font
+                if kind == "total":
+                    cell.fill = header_fill
             row_no += 1
 
     def write_banner(text, *, size=11):
@@ -981,7 +985,7 @@ def ledger_pdf_bytes(
     margin = 36.0
     inner_w = page_w - 2 * margin
     date_w = 70.0
-    voucher_w = 110.0 * 0.6
+    voucher_w = 118.0
     amount_w = 80.0
     ledger_w = inner_w - date_w - voucher_w - amount_w * 2
     col_widths = [date_w, voucher_w, ledger_w, amount_w, amount_w]
@@ -991,7 +995,7 @@ def ledger_pdf_bytes(
     y = page_h - margin
     period = " to ".join(part for part in (_fmt_date(date_from), _fmt_date(date_to)) if part)
 
-    def new_page():
+    def new_page(*, columns=False):
         nonlocal ops, y
         if ops:
             pages.append(ops)
@@ -1005,22 +1009,60 @@ def ledger_pdf_bytes(
             y -= 13
         heading = "All Ledger" if sections else account_name
         if heading:
-            ops.append(_pdf_text(margin, y, heading, size=10, bold=True))
-            y -= 13
+            if sections:
+                ops.append(_pdf_text(margin, y, heading, size=10, bold=True))
+            else:
+                ops.append(centered_text(heading, y, size=11))
+            y -= 14
         if period:
             ops.append(_pdf_text(margin, y, period, size=9))
             y -= 14
-        y = _draw_table_row(ops, margin, y, LEDGER_PDF_HEADERS, col_widths, row_h, bold=True, fill=True, amounts_from=3)
+        if columns:
+            draw_columns()
+
+    def draw_columns():
+        nonlocal y
+        y = _draw_table_row(
+            ops,
+            margin,
+            y,
+            LEDGER_PDF_HEADERS,
+            col_widths,
+            row_h,
+            bold=True,
+            fill=True,
+            amounts_from=3,
+            rules=True,
+        )
         y -= 2
 
-    def write_items(items):
+    def centered_text(text: str, baseline: float, *, size=11) -> str:
+        width = len(text) * size * 0.52
+        x = margin + max((inner_w - width) / 2, 0)
+        return _pdf_text(x, baseline, text, size=size, bold=True)
+
+    def paint_section_heading(section):
+        nonlocal y
+        needed = 16 + row_h + 2
+        if y - needed < margin + 20:
+            new_page(columns=False)
+        ops.append(centered_text(section["account"].name, y, size=11))
+        y -= 16
+        draw_columns()
+
+    def write_items(items, section=None):
         nonlocal y
         for item in items:
             if y - row_h < margin + 20:
-                new_page()
+                if section is not None:
+                    new_page(columns=False)
+                    paint_section_heading(section)
+                else:
+                    new_page(columns=True)
             values = _ledger_pdf_row_cells(item)
             display = [_pdf_cell_text(value) for value in values]
-            bold = item.get("kind") in ("closing", "total")
+            kind = item.get("kind")
+            bold = kind in ("opening", "closing", "total")
             y = _draw_table_row(
                 ops,
                 margin,
@@ -1029,27 +1071,20 @@ def ledger_pdf_bytes(
                 col_widths,
                 row_h,
                 bold=bold,
-                fill=item.get("kind") == "total",
+                fill=kind == "total",
                 amounts_from=3,
+                rules=kind == "total",
             )
 
-    new_page()
     if sections:
+        new_page(columns=False)
         for index, section in enumerate(sections):
             if index:
-                new_page()
-            parent = section.get("parent_group") or ""
-            group = section.get("account_group") or ""
-            if parent:
-                ops.append(_pdf_text(margin, y, parent, size=11, bold=True))
-                y -= 14
-            if group:
-                ops.append(_pdf_text(margin, y, group, size=10, bold=True))
-                y -= 13
-            ops.append(_pdf_text(margin, y, section["account"].name, size=10, bold=True))
-            y -= 14
-            write_items(section.get("rows") or [])
+                new_page(columns=False)
+            paint_section_heading(section)
+            write_items(section.get("rows") or [], section)
     else:
+        new_page(columns=True)
         write_items(rows)
     pages.append(ops)
     return _build_pdf(pages, page_w, page_h)

@@ -401,6 +401,43 @@ class UnbilledInvoiceForm(forms.Form):
             self.fields["invoice_date"].initial = timezone.localdate()
 
 
+class VoucherListFilterForm(forms.Form):
+    q = forms.CharField(
+        required=False,
+        label="",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control form-control-sm",
+                "placeholder": "Search",
+                "aria-label": "Search",
+                "style": "width: 16rem",
+            }
+        ),
+    )
+    date_from = forms.DateField(
+        required=False,
+        label="From",
+        widget=forms.DateInput(
+            attrs={"class": "form-control form-control-sm", "type": "date", "style": "width: 11rem"}
+        ),
+    )
+    date_to = forms.DateField(
+        required=False,
+        label="To",
+        widget=forms.DateInput(
+            attrs={"class": "form-control form-control-sm", "type": "date", "style": "width: 11rem"}
+        ),
+    )
+
+    def clean(self):
+        data = super().clean()
+        date_from = data.get("date_from")
+        date_to = data.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            raise ValidationError("From date cannot be after To date.")
+        return data
+
+
 class ReportPeriodForm(forms.Form):
     date_from = forms.DateField(
         label="From date",

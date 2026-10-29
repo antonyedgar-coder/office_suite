@@ -96,7 +96,7 @@ def allocate_voucher_number(series: str, voucher_date: date) -> str:
     )
     seq.last_value += 1
     seq.save(update_fields=["last_value"])
-    return f"{series}/{year:04d}/{month:02d}/{seq.last_value:05d}"
+    return f"{series}-{year:04d}-{month:02d}-{seq.last_value:04d}"
 
 
 SYSTEM_ACCOUNT_NAMES = {
@@ -3422,7 +3422,7 @@ def ledger_lines(account: Account, *, date_from=None, date_to=None):
             _ledger_row(
                 kind="entry",
                 date=line.voucher.date,
-                number=line.voucher.number,
+                number=(line.voucher.number or "").replace("/", "-"),
                 ledger_account=_ledger_counterpart_name(line, line.voucher.lines.all(), account.pk),
                 narration=line.voucher.narration,
                 debit=money(line.debit),

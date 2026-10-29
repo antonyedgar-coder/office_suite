@@ -12,7 +12,16 @@
   {% include "accounts/_voucher_type_tabs.html" %}
 
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-    <h1 class="h5 mb-0">{{ list_title }}</h1>
+    <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-0">
+      <input type="hidden" name="type" value="{{ vtype }}" />
+      <h1 class="h5 mb-0 me-1">{{ list_title }}</h1>
+      {{ filter_form.q }}
+      <label class="small text-secondary mb-0" for="{{ filter_form.date_from.id_for_label }}">From</label>
+      {{ filter_form.date_from }}
+      <label class="small text-secondary mb-0" for="{{ filter_form.date_to.id_for_label }}">To</label>
+      {{ filter_form.date_to }}
+      <button type="submit" class="btn btn-outline-secondary btn-sm">Show</button>
+    </form>
     <div class="d-flex flex-wrap gap-2">
       {% if can_print %}
         <a class="btn btn-outline-secondary btn-sm" href="{{ pdf_url }}">Export PDF</a>
@@ -22,6 +31,9 @@
       {% endif %}
     </div>
   </div>
+  {% if filter_form.non_field_errors %}
+    <div class="alert alert-danger py-2">{{ filter_form.non_field_errors }}</div>
+  {% endif %}
 
   <div class="card p-3">
     <div class="table-responsive">
@@ -84,7 +96,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="{% if list_layout == 'sales' or list_layout == 'sides' %}7{% elif list_layout == 'receipt' or list_layout == 'payment' %}6{% else %}5{% endif %}" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
+            <tr><td colspan="{% if list_layout == 'sales' or list_layout == 'sides' %}7{% elif list_layout == 'receipt' or list_layout == 'payment' %}6{% else %}5{% endif %}" class="text-secondary">{% if q or date_from or date_to %}No matching vouchers.{% else %}No {{ list_title|lower }}s yet. Use Add.{% endif %}</td></tr>
           {% endfor %}
         </tbody>
       </table>
