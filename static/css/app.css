@@ -1033,47 +1033,49 @@ body {
 .voucher-type-tabs {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-start;
   width: 100%;
-  gap: 0.35rem;
-  padding: 0.45rem;
+  gap: 0.25rem 0.15rem;
+  padding: 0;
   background: transparent;
   border: 0;
-  border-radius: var(--app-radius-sm);
+  border-bottom: 1px solid var(--app-border);
+  border-radius: 0;
 }
 
 .voucher-type-tabs .nav-item {
-  flex: 1 1 5.75rem;
+  flex: 0 0 auto;
   display: flex;
-  justify-content: center;
 }
 
 .voucher-type-tabs .nav-link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  width: auto;
+  margin-bottom: -1px;
   text-align: center;
   white-space: nowrap;
-  overflow: visible;
-  padding: 0.45rem 0.35rem;
-  font-size: 0.85rem;
-  color: var(--app-primary);
-  background: #fff;
-  border: 1px solid var(--app-primary);
-  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
 }
 
 .voucher-type-tabs .nav-link:hover {
-  color: #fff;
-  background: var(--app-primary-hover);
-  border-color: var(--app-primary-hover);
+  color: #0f172a;
+  background: transparent;
 }
 
 .voucher-type-tabs .nav-link.active {
-  color: #fff;
+  color: #0f172a;
   font-weight: 600;
-  background: var(--app-primary);
-  border-color: var(--app-primary);
+  background: transparent;
+  border-bottom-color: var(--app-primary);
 }
 
 .tb-indent-0 { padding-left: 0.5rem; }
