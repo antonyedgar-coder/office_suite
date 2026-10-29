@@ -152,12 +152,13 @@
   {% endif %}
 {% endblock %}
 {% block content %}
-  {% include "accounts/_voucher_type_tabs.html" %}
+  {% include "accounts/_voucher_type_tabs.html" with entry_next=back_to_ledger %}
   {% if obj %}<p class="text-secondary">{{ obj.get_voucher_type_display }} · {{ obj.number }}</p>{% endif %}
   <div{% if compact_entry or contra_mode %} class="receipt-form-frame{% if contra_mode %} contra-frame{% endif %}"{% elif journal_mode %} class="journal-form-frame"{% endif %}>
   <form method="post" class="card p-3" action="{% if obj %}{% url 'accounts_voucher_edit' obj.pk %}{% else %}{% url 'accounts_voucher_create' %}?type={{ vtype }}{% endif %}" id="voucher-form" data-vtype="{{ vtype }}" data-outstanding-url="{{ outstanding_url }}" data-recoveries-url="{{ recoveries_url }}" data-advances-url="{{ advances_url }}" data-recovery-tasks-url="{{ recovery_tasks_url }}">
     {% csrf_token %}
     {{ form.voucher_type }}
+    {% if back_to_ledger %}<input type="hidden" name="next" value="{{ back_to_ledger }}" />{% endif %}
     {% if linked_task %}
       <input type="hidden" name="task_id" value="{{ linked_task.pk }}" />
       <p class="alert alert-info">This invoice will be linked to task <strong>{{ linked_task.display_title }}</strong> ({{ linked_task.client.client_name }}). The task will be marked bill raised.</p>
@@ -382,8 +383,18 @@
       </div>
     {% endif %}
     <button class="btn btn-primary" id="voucher-save"{% if journal_mode %} disabled{% endif %}>Save</button>
-    <a class="btn btn-outline-secondary" href="{% url 'accounts_voucher_list' %}?type={{ vtype }}">Cancel</a>
+    <a class="btn btn-outline-secondary" href="{% if back_to_ledger %}{{ back_to_ledger }}{% else %}{% url 'accounts_voucher_list' %}?type={{ vtype }}{% endif %}">Cancel</a>
   </form>
+  {% if back_to_ledger %}
+  <script>
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.target && event.target.closest && event.target.closest(".filtered-select.is-open, .task-suggest-list.show, .dropdown-menu.show")) return;
+      event.preventDefault();
+      window.location.href = "{{ back_to_ledger|escapejs }}";
+    });
+  </script>
+  {% endif %}
   </div>
   {% if invoice_mode or compact_entry %}
   <script src="{% static 'js/task_user_single_picker.js' %}"></script>

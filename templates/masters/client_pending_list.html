@@ -3,14 +3,6 @@
 {% block page_title %}Pending Client Master{% endblock %}
 
 {% block content %}
-  <div class="card p-3 mb-3">
-    <p class="text-secondary small mb-0">
-      Records created or edited by users other than the superuser stay here until someone with approval permission accepts or rejects them.
-      Approve to use in MIS, director mapping, and DIR-3 KYC. Reject removes the record from this queue (new clients are deleted).
-      The user who created a pending client cannot approve or reject it; another approver (or a superuser) must act.
-    </p>
-  </div>
-
   <div class="card p-3">
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
       <div class="fw-semibold">Queue ({{ pending_clients|length }})</div>

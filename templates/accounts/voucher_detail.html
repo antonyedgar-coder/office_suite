@@ -62,7 +62,7 @@
     {% endif %}
     <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_list' %}?type={{ vtype }}">Back to {{ obj.get_voucher_type_display }}</a>
     {% if can_change %}
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_edit' obj.pk %}">Edit</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts_voucher_edit' obj.pk %}{% if back_to_ledger %}?next={{ back_to_ledger|urlencode }}{% endif %}">Edit</a>
     {% endif %}
     {% if can_delete %}
       <form method="post" action="{% url 'accounts_voucher_delete' obj.pk %}" class="d-inline" onsubmit="return confirm('Delete voucher {{ obj.number|escapejs }}?');">

@@ -490,7 +490,6 @@ def client_list(request):
             "clients": qs,
             "q": q,
             "empty_state_add_url": empty_state_add_url,
-            "breadcrumbs": ui_breadcrumbs(("Client Master",)),
         },
     )
 
@@ -1662,7 +1661,6 @@ def portal_password_list(request):
         {
             "rows": rows,
             "q": q,
-            "breadcrumbs": ui_breadcrumbs(("Password management",)),
         },
     )
 

@@ -20,8 +20,7 @@
   <div class="row g-3">
     <div class="col-12">
       <div class="card p-3">
-        <div class="fw-semibold mb-1">Quick actions</div>
-        <div class="text-secondary small mb-3">Go directly to the most-used screens.</div>
+        <div class="fw-semibold mb-3">Quick actions</div>
         <div class="d-flex flex-wrap gap-2">
           {% if perms.masters.view_client %}
             <a class="btn btn-primary btn-sm" href="{% url 'client_list' %}">Client Master</a>

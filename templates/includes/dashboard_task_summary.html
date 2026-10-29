@@ -15,13 +15,6 @@
     <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
       <div>
         <div class="fw-semibold">Tasks</div>
-        <div class="text-secondary small">
-          {% if task_dashboard_office_view %}
-            Open tasks in your branch (excludes complete and cancelled). Overdue = days from due date to {{ task_summary_today|date:"d M Y" }}.
-          {% else %}
-            Your assigned tasks (excludes verified, complete, and cancelled). Overdue = days from due date to {{ task_summary_today|date:"d M Y" }}.
-          {% endif %}
-        </div>
       </div>
       <div class="d-flex flex-wrap gap-2">
         {% if task_dashboard_office_view %}

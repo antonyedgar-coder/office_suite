@@ -47,6 +47,7 @@ from .permissions import (
     can_print_voucher,
     can_view_voucher_type,
     first_addable_voucher_type,
+    visible_voucher_tabs,
     voucher_action_flags,
 )
 from .models import (
@@ -1412,7 +1413,11 @@ def _save_voucher(request, voucher=None):
                 messages.error(request, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
             else:
                 messages.success(request, f"Voucher {posted.number} saved.")
-                return redirect("accounts_voucher_detail", pk=posted.pk)
+                detail_url = reverse("accounts_voucher_detail", args=[posted.pk])
+                back = _ledger_back_url(request.POST.get("next") or "")
+                if back:
+                    detail_url = f"{detail_url}?{urlencode({'next': back})}"
+                return redirect(detail_url)
     else:
         form = (
             VoucherForm(instance=existing, locked_type=vtype)
@@ -1499,6 +1504,7 @@ def _save_voucher(request, voucher=None):
             ],
             "company_gstin": (getattr(get_site_settings(), "gstin", None) or "").strip().upper(),
             "company_address": (getattr(get_site_settings(), "address", None) or "").strip(),
+            "back_to_ledger": _ledger_back_url(request.POST.get("next") or request.GET.get("next") or ""),
             **voucher_action_flags(request.user, vtype),
         },
     )
@@ -1971,6 +1977,11 @@ def report_ledger(request):
             "account": account,
             "all_ledgers": all_ledgers,
             "ledger_return_url": request.get_full_path(),
+            "voucher_entry_tabs": [
+                (key, label)
+                for key, label in visible_voucher_tabs(request.user)
+                if can_add_voucher(request.user, key)
+            ],
             "report_return_url": _report_return_url(request.GET.get("next") or ""),
             "excel_url": f"{reverse('accounts_ledger')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_ledger')}?{query}&export=pdf",

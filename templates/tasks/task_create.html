@@ -75,7 +75,6 @@
       <div class="mb-3">
         <label class="form-label" for="id_description">Description</label>
         {{ form.description }}
-        <div class="form-text">Optional, up to 50 characters.</div>
         {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors }}</div>{% endif %}
       </div>
 
@@ -86,7 +85,6 @@
         {{ form.client }}
         {% if form.client_search.errors %}<div class="text-danger small">{{ form.client_search.errors }}</div>{% endif %}
         {% if form.client.errors %}<div class="text-danger small">{{ form.client.errors }}</div>{% endif %}
-        <div class="form-text">Shows client name and PAN; pick from suggestions.</div>
       </div>
 
       <div class="mb-3 field-wrap">
@@ -96,7 +94,6 @@
         <div id="assigneeChips" class="mt-2"></div>
         {{ form.assignee_ids }}
         {% if form.assignee_picker.errors %}<div class="text-danger small">{{ form.assignee_picker.errors }}</div>{% endif %}
-        <div class="form-text">Type to filter staff; click a name to add. Multiple users allowed. The task creator cannot be listed here — assigned users approve the task before work begins.</div>
       </div>
 
       <div class="mb-3 field-wrap" id="taskVerifierWrap">
@@ -106,7 +103,6 @@
         <div id="verifierChips" class="mt-2"></div>
         {{ form.verifier_ids }}
         {% if form.verifier_picker.errors %}<div class="text-danger small">{{ form.verifier_picker.errors }}</div>{% endif %}
-        <div class="form-text">Add one or more verifiers. They cannot be assigned users on the same task.</div>
       </div>
 
       <div class="mb-3 field-wrap" id="taskDocCheckerWrap">
@@ -115,7 +111,6 @@
         <div id="taskDocCheckerSuggestions" class="task-suggest-list border rounded shadow-sm"></div>
         {{ form.document_checker }}
         {% if form.document_checker.errors %}<div class="text-danger small">{{ form.document_checker.errors }}</div>{% endif %}
-        <div class="form-text">Checks documents after verification; only they can mark the task complete. May be the same person as the verifier or task creator.</div>
       </div>
 
       <div class="mb-3 border rounded p-3 bg-light">

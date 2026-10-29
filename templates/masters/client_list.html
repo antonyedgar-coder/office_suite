@@ -3,7 +3,9 @@
 {% block page_title %}Client Master{% endblock %}
 
 {% block content %}
-  {% include "includes/page_header.html" with title="Client Master" subtitle="Search and manage clients you can access. Approved clients are used across MIS, tasks, and reports." actions_template="masters/includes/client_list_header_actions.html" %}
+  <div class="d-flex flex-wrap justify-content-end gap-2 mb-3">
+    {% include "masters/includes/client_list_header_actions.html" %}
+  </div>
 
   {% include "includes/filter_panel_open.html" with form_id="clientListFilterForm" %}
     <div class="col-12 col-md">

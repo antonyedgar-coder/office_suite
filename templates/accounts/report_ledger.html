@@ -10,6 +10,7 @@
   </style>
 {% endblock %}
 {% block content %}
+  {% include "accounts/_voucher_type_tabs.html" with voucher_tabs=voucher_entry_tabs vtype="" entry_next=ledger_return_url %}
   <form method="get" class="row g-2 mb-3 align-items-end">
     <div class="col-12 col-md-4">
       <label class="form-label" for="{{ form.account.id_for_label }}">Account</label>

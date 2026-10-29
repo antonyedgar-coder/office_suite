@@ -45,7 +45,7 @@
   <ul class="nav nav-tabs nav-justified voucher-type-tabs mb-3">
     {% for key, label in voucher_tabs %}
       <li class="nav-item">
-        <a class="nav-link {% if vtype == key %}active{% endif %}" href="{% url 'accounts_voucher_list' %}?type={{ key }}">{{ label }}</a>
+        <a class="nav-link {% if vtype == key %}active{% endif %}" href="{% if entry_next %}{% url 'accounts_voucher_create' %}?type={{ key }}&amp;next={{ entry_next|urlencode }}{% else %}{% url 'accounts_voucher_list' %}?type={{ key }}{% endif %}">{{ label }}</a>
       </li>
     {% endfor %}
   </ul>
