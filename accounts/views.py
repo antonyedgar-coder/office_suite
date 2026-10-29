@@ -1102,7 +1102,32 @@ def _voucher_register_qs(vtype: str, *, date_from=None, date_to=None):
                 to_attr="payer_lines",
             )
         )
+    if vtype == VOUCHER_PAYMENT:
+        qs = qs.prefetch_related(
+            Prefetch(
+                "lines",
+                queryset=VoucherLine.objects.filter(debit__gt=0).select_related("account").order_by("pk"),
+                to_attr="receiver_lines",
+            )
+        )
+    if vtype in (VOUCHER_JOURNAL, VOUCHER_CREDIT_NOTE, VOUCHER_DEBIT_NOTE):
+        qs = qs.prefetch_related(
+            Prefetch(
+                "lines",
+                queryset=VoucherLine.objects.select_related("account").order_by("pk"),
+                to_attr="ordered_lines",
+            )
+        )
     return qs.order_by("-date", "-id")
+
+
+def _account_names(lines) -> list[str]:
+    names = []
+    for line in lines:
+        name = (line.account.name if line.account_id else "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
 def _receipt_payer_name(voucher) -> str:
@@ -1110,12 +1135,42 @@ def _receipt_payer_name(voucher) -> str:
     lines = getattr(voucher, "payer_lines", None)
     if lines is None:
         lines = voucher.lines.select_related("account").filter(credit__gt=0).order_by("pk")
-    names = []
+    return ", ".join(_account_names(lines))
+
+
+def _payment_receiver_name(voucher) -> str:
+    """Accounts debited on a payment are the ones that received the money."""
+    lines = getattr(voucher, "receiver_lines", None)
+    if lines is None:
+        lines = voucher.lines.select_related("account").filter(debit__gt=0).order_by("pk")
+    return ", ".join(_account_names(lines))
+
+
+def _first_side_account_name(voucher, side: str) -> str:
+    """First debit or credit ledger on a journal, credit note, or debit note."""
+    lines = getattr(voucher, "ordered_lines", None)
+    if lines is None:
+        lines = voucher.lines.select_related("account").order_by("pk")
     for line in lines:
+        amount = money(line.debit if side == "debit" else line.credit)
+        if amount <= 0:
+            continue
         name = (line.account.name if line.account_id else "").strip()
-        if name and name not in names:
-            names.append(name)
-    return ", ".join(names)
+        if name:
+            return name
+    return ""
+
+
+def _voucher_list_layout(vtype: str) -> str:
+    if vtype == VOUCHER_SALES:
+        return "sales"
+    if vtype == VOUCHER_RECEIPT:
+        return "receipt"
+    if vtype == VOUCHER_PAYMENT:
+        return "payment"
+    if vtype in (VOUCHER_JOURNAL, VOUCHER_CREDIT_NOTE, VOUCHER_DEBIT_NOTE):
+        return "sides"
+    return "plain"
 
 
 @login_required
@@ -1135,10 +1190,19 @@ def voucher_list(request):
         date_from, date_to = _latest_voucher_month(vtype)
         list_title = f"{list_title} — {date_from.strftime('%B %Y')}"
     rows = _voucher_register_qs(vtype, date_from=date_from, date_to=date_to)
-    if vtype == VOUCHER_RECEIPT and export != "pdf":
-        rows = list(rows[:500])
+    list_layout = _voucher_list_layout(vtype)
+    if list_layout == "receipt":
+        rows = list(rows if export == "pdf" else rows[:500])
         for row in rows:
             row.payer_name = _receipt_payer_name(row)
+    elif list_layout in ("payment", "sides"):
+        rows = list(rows if export == "pdf" else rows[:500])
+        for row in rows:
+            if list_layout == "payment":
+                row.receiver_name = _payment_receiver_name(row)
+            else:
+                row.debit_account_name = _first_side_account_name(row, "debit")
+                row.credit_account_name = _first_side_account_name(row, "credit")
     if export == "pdf":
         if not can_print_voucher(request.user, vtype):
             raise PermissionDenied
@@ -1157,6 +1221,7 @@ def voucher_list(request):
         {
             "rows": rows[:500],
             "vtype": vtype,
+            "list_layout": list_layout,
             "list_title": list_title,
             "pdf_url": f"{reverse('accounts_voucher_list')}?{urlencode({'type': vtype, 'export': 'pdf'})}",
             **flags,

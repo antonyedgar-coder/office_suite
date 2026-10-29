@@ -2,7 +2,7 @@
 {% block title %}{{ list_title }} — CA Office Suite{% endblock %}
 {% block page_title %}Vouchers{% endblock %}
 {% block extra_head %}
-  {% if vtype == "receipt" %}
+  {% if list_layout == "receipt" or list_layout == "payment" or list_layout == "sides" %}
     <style>
       .voucher-date { width: 15ch; min-width: 15ch; white-space: nowrap; }
     </style>
@@ -28,15 +28,18 @@
       <table class="table table-sm">
         <thead>
           <tr>
-            <th{% if vtype == "receipt" %} class="voucher-date"{% endif %}>Date</th>
+            <th{% if list_layout == "receipt" or list_layout == "payment" or list_layout == "sides" %} class="voucher-date"{% endif %}>Date</th>
             <th>Voucher No</th>
-            {% if vtype == "sales" %}
+            {% if list_layout == "sales" %}
               <th>Client name</th>
-            {% elif vtype == "receipt" %}
-              <th>Payer Name</th>
+            {% elif list_layout == "receipt" or list_layout == "payment" %}
+              <th>Account Ledger</th>
+            {% elif list_layout == "sides" %}
+              <th>Debit Account</th>
+              <th>Credit Account</th>
             {% endif %}
             <th>Narration</th>
-            {% if vtype == "sales" %}
+            {% if list_layout == "sales" %}
               <th class="text-end">Debit</th>
               <th class="text-end">Credit</th>
             {% else %}
@@ -48,15 +51,20 @@
         <tbody>
           {% for v in rows %}
             <tr>
-              <td{% if vtype == "receipt" %} class="voucher-date"{% endif %}>{{ v.date|date:"d-m-Y" }}</td>
+              <td{% if list_layout == "receipt" or list_layout == "payment" or list_layout == "sides" %} class="voucher-date"{% endif %}>{{ v.date|date:"d-m-Y" }}</td>
               <td><a href="{% url 'accounts_voucher_detail' v.pk %}">{{ v.number }}</a></td>
-              {% if vtype == "sales" %}
+              {% if list_layout == "sales" %}
                 <td>{{ v.client_name|default:"—" }}</td>
-              {% elif vtype == "receipt" %}
+              {% elif list_layout == "receipt" %}
                 <td>{{ v.payer_name|default:"—" }}</td>
+              {% elif list_layout == "payment" %}
+                <td>{{ v.receiver_name|default:"—" }}</td>
+              {% elif list_layout == "sides" %}
+                <td>{{ v.debit_account_name|default:"—" }}</td>
+                <td>{{ v.credit_account_name|default:"—" }}</td>
               {% endif %}
               <td>{{ v.narration|default:"—" }}</td>
-              {% if vtype == "sales" %}
+              {% if list_layout == "sales" %}
                 <td class="text-end mono">{{ v.debit_amount }}</td>
                 <td class="text-end mono">{{ v.credit_amount }}</td>
               {% else %}
@@ -76,7 +84,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="{% if vtype == 'sales' %}7{% elif vtype == 'receipt' %}6{% else %}5{% endif %}" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
+            <tr><td colspan="{% if list_layout == 'sales' or list_layout == 'sides' %}7{% elif list_layout == 'receipt' or list_layout == 'payment' %}6{% else %}5{% endif %}" class="text-secondary">No {{ list_title|lower }}s yet. Use Add.</td></tr>
           {% endfor %}
         </tbody>
       </table>

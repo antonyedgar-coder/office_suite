@@ -470,6 +470,64 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(rows[0].pk, voucher.pk)
         self.assertEqual(_receipt_payer_name(rows[0]), "Antony Edgar, Second Payer")
 
+    def test_payment_list_names_receivers_and_side_lists_show_the_first_account(self):
+        from accounts.services import build_payment_lines
+        from accounts.views import (
+            _first_side_account_name,
+            _payment_receiver_name,
+            _voucher_register_qs,
+        )
+
+        seed_chart_of_accounts()
+        assets = AccountGroup.objects.get(system_key="assets")
+        expenses = AccountGroup.objects.get(system_key="expenses")
+        cash_group = AccountGroup.objects.create(
+            name="Cash and Cash Equivalents",
+            parent=assets,
+            main_head="assets",
+        )
+        bank = Account.objects.create(name="Payment list bank", group=cash_group)
+        rent = Account.objects.create(name="Office rent", group=expenses)
+        supplier = Account.objects.create(name="Stationery supplier", group=expenses)
+        payment = post_voucher(
+            voucher_type="payment",
+            voucher_date=date(2026, 10, 22),
+            narration="Rent and stationery",
+            lines=build_payment_lines(
+                mode=bank,
+                items=[
+                    {"account": rent, "amount": Decimal("400.00")},
+                    {"account": supplier, "amount": Decimal("75.00")},
+                ],
+            ),
+            actor=self.admin,
+        )
+        payment_rows = list(_voucher_register_qs("payment"))
+        self.assertEqual(payment_rows[0].pk, payment.pk)
+        self.assertEqual(_payment_receiver_name(payment_rows[0]), "Office rent, Stationery supplier")
+
+        first_debit = Account.objects.create(name="First debit ledger", group=expenses)
+        second_debit = Account.objects.create(name="Second debit ledger", group=expenses)
+        first_credit = Account.objects.create(name="First credit ledger", group=assets)
+        second_credit = Account.objects.create(name="Second credit ledger", group=assets)
+        for voucher_type in ("journal", "credit_note", "debit_note"):
+            posted = post_voucher(
+                voucher_type=voucher_type,
+                voucher_date=date(2026, 10, 23),
+                narration=f"{voucher_type} split",
+                lines=[
+                    {"account": first_debit, "debit": Decimal("40.00"), "credit": Decimal("0.00")},
+                    {"account": second_debit, "debit": Decimal("60.00"), "credit": Decimal("0.00")},
+                    {"account": first_credit, "debit": Decimal("0.00"), "credit": Decimal("70.00")},
+                    {"account": second_credit, "debit": Decimal("0.00"), "credit": Decimal("30.00")},
+                ],
+                actor=self.admin,
+            )
+            rows = list(_voucher_register_qs(voucher_type))
+            match = next(row for row in rows if row.pk == posted.pk)
+            self.assertEqual(_first_side_account_name(match, "debit"), "First debit ledger")
+            self.assertEqual(_first_side_account_name(match, "credit"), "First credit ledger")
+
     def test_book_register_lists_and_exports(self):
         seed_chart_of_accounts()
         assets = AccountGroup.objects.get(system_key="assets")

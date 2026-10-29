@@ -1112,6 +1112,8 @@ def ledger_pdf_response(
 
 VOUCHER_LIST_HEADERS = ["Date", "Voucher No", "Narration", "Amount"]
 SALES_VOUCHER_LIST_HEADERS = ["Date", "Voucher No", "Client name", "Narration", "Debit", "Credit"]
+LEDGER_VOUCHER_LIST_HEADERS = ["Date", "Voucher No", "Account Ledger", "Narration", "Amount"]
+SIDE_VOUCHER_LIST_HEADERS = ["Date", "Voucher No", "Debit Account", "Credit Account", "Narration", "Amount"]
 
 
 def _voucher_list_filename(voucher_type: str) -> str:
@@ -1139,10 +1141,20 @@ def voucher_register_pdf_bytes(
     margin = 36.0
     inner_w = page_w - 2 * margin
     sales_layout = voucher_type == "sales"
+    ledger_layout = voucher_type in ("payment", "receipt")
+    side_layout = voucher_type in ("journal", "credit_note", "debit_note")
     if sales_layout:
         headers = SALES_VOUCHER_LIST_HEADERS
         col_widths = [68.0, 88.0, 120.0, inner_w - 68.0 - 88.0 - 120.0 - 70.0 - 70.0, 70.0, 70.0]
         amounts_from = 4
+    elif ledger_layout:
+        headers = LEDGER_VOUCHER_LIST_HEADERS
+        col_widths = [68.0, 88.0, 120.0, inner_w - 68.0 - 88.0 - 120.0 - 70.0, 70.0]
+        amounts_from = 4
+    elif side_layout:
+        headers = SIDE_VOUCHER_LIST_HEADERS
+        col_widths = [62.0, 78.0, 105.0, 105.0, inner_w - 62.0 - 78.0 - 105.0 - 105.0 - 68.0, 68.0]
+        amounts_from = 5
     else:
         headers = VOUCHER_LIST_HEADERS
         col_widths = [72.0, 110.0, inner_w - 72.0 - 110.0 - 80.0, 80.0]
@@ -1184,6 +1196,26 @@ def voucher_register_pdf_bytes(
                 getattr(voucher, "narration", "") or "",
                 getattr(voucher, "debit_amount", None) if getattr(voucher, "debit_amount", None) is not None else _voucher_list_amount(voucher),
                 getattr(voucher, "credit_amount", None) if getattr(voucher, "credit_amount", None) is not None else _voucher_list_amount(voucher),
+            ]
+        elif ledger_layout:
+            party = getattr(voucher, "receiver_name", None)
+            if party is None:
+                party = getattr(voucher, "payer_name", "") or ""
+            values = [
+                _fmt_date(getattr(voucher, "date", None)),
+                getattr(voucher, "number", "") or "",
+                party or "",
+                getattr(voucher, "narration", "") or "",
+                _voucher_list_amount(voucher),
+            ]
+        elif side_layout:
+            values = [
+                _fmt_date(getattr(voucher, "date", None)),
+                getattr(voucher, "number", "") or "",
+                getattr(voucher, "debit_account_name", "") or "",
+                getattr(voucher, "credit_account_name", "") or "",
+                getattr(voucher, "narration", "") or "",
+                _voucher_list_amount(voucher),
             ]
         else:
             values = [
