@@ -72,6 +72,8 @@ from accounts.services import (
     balance_sheet,
     billwise_outstanding_sections,
     book_register_rows,
+    sales_gst_report_rows,
+    sales_gst_report_totals,
     ledger_lines,
     sales_register_totals,
     profit_and_loss,
@@ -1213,6 +1215,107 @@ class AccountsModuleTests(TestCase):
             series=SERIES_GST_B2C,
         )
         self.assertEqual([row["number"] for row in b2c_rows], [voucher.number])
+
+    def test_sales_gst_report_splits_rates_and_skips_non_gst(self):
+        income = _posting_ledgers()
+        income.gst_rate = Decimal("18.00")
+        income.save(update_fields=["gst_rate"])
+        other = Account.objects.create(
+            name="GST report filing",
+            group=income.group,
+            gst_rate=Decimal("5.00"),
+        )
+        recovery = Account.objects.create(
+            name="GST report recovery",
+            group=AccountGroup.objects.get(system_key="expenses"),
+            is_pure_agent=True,
+        )
+        SiteSettings.objects.update_or_create(
+            pk=1,
+            defaults={"gstin": "33AAAAA0000A1Z5", "company_name": "Antony and Co"},
+        )
+        buyer = sync_client_account(self.client_row)
+        buyer.gstin = "32ABCDE7777F1Z5"
+        buyer.save(update_fields=["gstin"])
+        lines = build_invoice_lines(
+            voucher_type="sales",
+            party=buyer,
+            items=[
+                {"account": income, "amount": Decimal("1000.00")},
+                {"account": other, "amount": Decimal("200.00")},
+                {"account": recovery, "amount": Decimal("500.00")},
+            ],
+            with_gst=True,
+        )
+        voucher = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 12),
+            lines=lines,
+            actor=self.admin,
+            tax_kind="gst",
+        )
+        b2c_buyer = Account.objects.create(name="Walk in client", group=buyer.group)
+        b2c = post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 13),
+            lines=build_invoice_lines(
+                voucher_type="sales",
+                party=b2c_buyer,
+                items=[{"account": income, "amount": Decimal("100.00")}],
+                with_gst=True,
+            ),
+            actor=self.admin,
+            tax_kind="gst_b2c",
+        )
+        post_voucher(
+            voucher_type="sales",
+            voucher_date=date(2026, 10, 14),
+            lines=build_invoice_lines(
+                voucher_type="sales",
+                party=b2c_buyer,
+                items=[{"account": income, "amount": Decimal("50.00")}],
+                with_gst=False,
+            ),
+            actor=self.admin,
+            tax_kind="ngst",
+        )
+        rows = sales_gst_report_rows(date_from=date(2026, 10, 1), date_to=date(2026, 10, 31))
+        by_bill = {}
+        for row in rows:
+            by_bill.setdefault(row["number"], []).append(row)
+        self.assertEqual(set(by_bill), {voucher.number, b2c.number})
+        rated = {row["tax_rate"]: row for row in by_bill[voucher.number]}
+        self.assertEqual(set(rated), {"18%", "5%"})
+        self.assertEqual(rated["18%"]["invoice_value"], Decimal("1890.00"))
+        self.assertEqual(rated["5%"]["invoice_value"], Decimal("1890.00"))
+        self.assertEqual(rated["18%"]["taxable_value"], Decimal("1000.00"))
+        self.assertEqual(rated["18%"]["igst"], Decimal("180.00"))
+        self.assertEqual(rated["18%"]["cgst"], Decimal("0.00"))
+        self.assertEqual(rated["18%"]["sgst"], Decimal("0.00"))
+        self.assertEqual(rated["5%"]["taxable_value"], Decimal("200.00"))
+        self.assertEqual(rated["5%"]["igst"], Decimal("10.00"))
+        self.assertEqual(rated["18%"]["gstin"], "32ABCDE7777F1Z5")
+        self.assertEqual(rated["18%"]["state_of_supply"], "32 - Kerala")
+        self.assertEqual(rated["18%"]["client"], buyer.name)
+        b2c_row = by_bill[b2c.number][0]
+        self.assertEqual(b2c_row["gstin"], "")
+        self.assertEqual(b2c_row["state_of_supply"], "")
+        self.assertEqual(b2c_row["taxable_value"], Decimal("100.00"))
+        self.assertEqual(b2c_row["cgst"], Decimal("9.00"))
+        self.assertEqual(b2c_row["sgst"], Decimal("9.00"))
+        self.assertEqual(b2c_row["invoice_value"], Decimal("118.00"))
+        totals = sales_gst_report_totals(rows)
+        self.assertEqual(totals["invoice_value"], Decimal("2008.00"))
+        self.assertEqual(totals["taxable_value"], Decimal("1300.00"))
+        self.assertEqual(totals["igst"], Decimal("190.00"))
+        outside = sales_gst_report_rows(date_from=date(2026, 11, 1), date_to=date(2026, 11, 30))
+        self.assertEqual(outside, [])
+        from accounts.export import sales_gst_report_pdf_bytes, sales_gst_report_xlsx_bytes
+
+        pdf = sales_gst_report_pdf_bytes(rows, totals, title="GST sales", company_name="Antony and Co")
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        xlsx = sales_gst_report_xlsx_bytes(rows, totals, title="GST sales")
+        self.assertTrue(xlsx.startswith(b"PK"))
 
     def test_sales_and_purchase_party_amounts(self):
         income = _posting_ledgers()

@@ -85,6 +85,8 @@ from .export import (
     billwise_outstanding_pdf_response,
     book_register_excel_response,
     book_register_pdf_response,
+    sales_gst_report_excel_response,
+    sales_gst_report_pdf_response,
     bs_excel_response,
     bs_pdf_response,
     ledger_excel_response,
@@ -120,6 +122,8 @@ from .services import (
     book_register_rows,
     is_gst_output_account,
     sales_register_totals,
+    sales_gst_report_rows,
+    sales_gst_report_totals,
     ledger_lines,
     amount_in_indian_words,
     post_voucher,
@@ -2194,6 +2198,72 @@ def report_register(request):
             "date_to": date_to,
             "excel_url": f"{reverse('accounts_register')}?{query}&export=xlsx",
             "pdf_url": f"{reverse('accounts_register')}?{query}&export=pdf",
+        },
+    )
+
+
+@require_perm("accounts.view_accounts_reports")
+def report_sales_gst(request):
+    initial = {
+        "date_from": financial_year_start(),
+        "date_to": timezone.localdate(),
+    }
+    form = ReportPeriodForm(request.GET or None, initial=initial)
+    date_from = initial["date_from"]
+    date_to = initial["date_to"]
+    get_data = request.GET.copy()
+    get_data.pop("export", None)
+    if get_data and form.is_valid():
+        date_from = form.cleaned_data.get("date_from") or date_from
+        date_to = form.cleaned_data.get("date_to") or date_to
+    title = "GST sales"
+    rows = sales_gst_report_rows(date_from=date_from, date_to=date_to)
+    totals = sales_gst_report_totals(rows)
+    export = (request.GET.get("export") or "").strip().lower()
+    settings = get_site_settings()
+    company_name = (settings.company_name or "").strip()
+    company_address = (settings.address or "").strip()
+    if export in ("xlsx", "excel", "csv"):
+        return sales_gst_report_excel_response(
+            rows,
+            totals,
+            title=title,
+            date_from=date_from,
+            date_to=date_to,
+            company_name=company_name,
+            company_address=company_address,
+        )
+    if export == "pdf":
+        return sales_gst_report_pdf_response(
+            rows,
+            totals,
+            title=title,
+            date_from=date_from,
+            date_to=date_to,
+            company_name=company_name,
+            company_address=company_address,
+        )
+    query = urlencode(
+        {
+            "date_from": date_from.isoformat() if date_from else "",
+            "date_to": date_to.isoformat() if date_to else "",
+        }
+    )
+    return render(
+        request,
+        "accounts/report_sales_gst.html",
+        {
+            "form": form,
+            "rows": rows,
+            "totals": totals,
+            "list_title": title,
+            "register_tabs": REGISTER_TABS,
+            "report_kind": "sales_gst",
+            "invoice_kind": "gst",
+            "date_from": date_from,
+            "date_to": date_to,
+            "excel_url": f"{reverse('accounts_sales_gst')}?{query}&export=xlsx",
+            "pdf_url": f"{reverse('accounts_sales_gst')}?{query}&export=pdf",
         },
     )
 

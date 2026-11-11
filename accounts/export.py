@@ -308,7 +308,9 @@ def _draw_tb_pdf_row(ops, left, y, values, widths, height, *, bold=False, amount
     return y - height
 
 
-def _draw_table_row(ops, left, y, values, widths, height, *, bold=False, fill=False, amounts_from=1, rules=True):
+def _draw_table_row(
+    ops, left, y, values, widths, height, *, bold=False, fill=False, amounts_from=1, amount_indexes=None, rules=True
+):
     x = left
     if fill:
         total_w = sum(widths)
@@ -325,7 +327,8 @@ def _draw_table_row(ops, left, y, values, widths, height, *, bold=False, fill=Fa
         max_chars = max(int(width / 4.6), 8)
         if len(text) > max_chars:
             text = text[: max_chars - 1] + "..."
-        if index >= amounts_from:
+        is_amount = index in amount_indexes if amount_indexes is not None else index >= amounts_from
+        if is_amount:
             approx = min(len(text) * 4.2, width - 4)
             ops.append(_pdf_text(x + width - 4 - approx, text_y, text, size=8, bold=bold))
         else:
@@ -1607,6 +1610,210 @@ def book_register_pdf_response(
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = (
         f'attachment; filename="{_book_register_filename(title, date_from, date_to, "pdf")}"'
+    )
+    return response
+
+
+SALES_GST_REPORT_HEADERS = [
+    "Invoice No",
+    "Client name",
+    "GSTIN of the Client",
+    "Invoice Date",
+    "Invoice Value",
+    "Tax Rate",
+    "Taxable Value",
+    "IGST",
+    "CGST",
+    "SGST",
+    "State of Supply",
+]
+SALES_GST_REPORT_AMOUNT_INDEXES = {4, 6, 7, 8, 9}
+SALES_GST_REPORT_WIDTHS = [100, 108, 82, 58, 64, 40, 64, 50, 50, 50, 128]
+
+
+def _sales_gst_report_cells(row: dict) -> list:
+    return [
+        row.get("number") or "",
+        row.get("client") or "",
+        row.get("gstin") or "",
+        _fmt_date(row.get("date")),
+        _amount_or_blank(row.get("invoice_value")),
+        row.get("tax_rate") or "",
+        _amount_or_blank(row.get("taxable_value")),
+        _amount_or_blank(row.get("igst")),
+        _amount_or_blank(row.get("cgst")),
+        _amount_or_blank(row.get("sgst")),
+        row.get("state_of_supply") or "",
+    ]
+
+
+def sales_gst_report_xlsx_bytes(
+    rows: list[dict],
+    totals: dict,
+    *,
+    title: str = "GST sales",
+    date_from=None,
+    date_to=None,
+    company_name: str = "",
+    company_address: str = "",
+) -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "GST sales"
+    title_font = Font(bold=True, size=14)
+    header_font = Font(bold=True)
+    header_fill = PatternFill("solid", fgColor="D1D5DB")
+    right = Alignment(horizontal="right")
+    ws["A1"] = company_name or title
+    ws["A1"].font = title_font
+    row_no = 2
+    if company_address:
+        ws.cell(row_no, 1, company_address)
+        row_no += 1
+    period = " to ".join(part for part in (_fmt_date(date_from), _fmt_date(date_to)) if part)
+    ws.cell(row_no, 1, period or title).font = Font(bold=True, size=11)
+    row_no += 2
+    for col, header in enumerate(SALES_GST_REPORT_HEADERS, start=1):
+        cell = ws.cell(row_no, col, header)
+        cell.font = header_font
+        cell.fill = header_fill
+    for item in rows:
+        row_no += 1
+        for col, value in enumerate(_sales_gst_report_cells(item), start=1):
+            cell = ws.cell(row_no, col, value if value is not None else "")
+            if col - 1 in SALES_GST_REPORT_AMOUNT_INDEXES and isinstance(value, Decimal):
+                cell.number_format = "#,##0.00"
+                cell.alignment = right
+    row_no += 1
+    footer = ["Total", "", "", "", totals.get("invoice_value"), "", totals.get("taxable_value"), totals.get("igst"), totals.get("cgst"), totals.get("sgst"), ""]
+    for col, value in enumerate(footer, start=1):
+        cell = ws.cell(row_no, col, value if value != "" else None)
+        cell.font = header_font
+        cell.fill = header_fill
+        if col - 1 in SALES_GST_REPORT_AMOUNT_INDEXES and isinstance(value, Decimal):
+            cell.number_format = "#,##0.00"
+            cell.alignment = right
+    for index, width in enumerate([18, 28, 20, 14, 16, 12, 16, 14, 14, 14, 28], start=1):
+        ws.column_dimensions[get_column_letter(index)].width = width
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def sales_gst_report_pdf_bytes(
+    rows: list[dict],
+    totals: dict,
+    *,
+    title: str = "GST sales",
+    date_from=None,
+    date_to=None,
+    company_name: str = "",
+    company_address: str = "",
+) -> bytes:
+    page_w, page_h = 842.0, 595.0
+    margin = 24.0
+    col_widths = SALES_GST_REPORT_WIDTHS
+    row_h = 14.0
+    pages: list[list[str]] = []
+    ops: list[str] = []
+    y = page_h - margin
+    period = " to ".join(part for part in (_fmt_date(date_from), _fmt_date(date_to)) if part)
+
+    def new_page():
+        nonlocal ops, y
+        if ops:
+            pages.append(ops)
+        ops = []
+        y = page_h - margin
+        if company_name:
+            ops.append(_pdf_text(margin, y - 2, company_name, size=13, bold=True))
+            y -= 16
+        if company_address:
+            ops.append(_pdf_text(margin, y, company_address, size=9))
+            y -= 13
+        ops.append(_pdf_text(margin, y, title, size=11, bold=True))
+        y -= 14
+        if period:
+            ops.append(_pdf_text(margin, y, period, size=9))
+            y -= 14
+        y = _draw_table_row(
+            ops,
+            margin,
+            y,
+            SALES_GST_REPORT_HEADERS,
+            col_widths,
+            row_h,
+            bold=True,
+            fill=True,
+            amount_indexes=SALES_GST_REPORT_AMOUNT_INDEXES,
+        )
+        y -= 2
+
+    new_page()
+    for item in rows:
+        if y - row_h < margin + 24:
+            new_page()
+        display = [_pdf_cell_text(value) for value in _sales_gst_report_cells(item)]
+        y = _draw_table_row(
+            ops,
+            margin,
+            y,
+            display,
+            col_widths,
+            row_h,
+            amount_indexes=SALES_GST_REPORT_AMOUNT_INDEXES,
+        )
+    if y - row_h < margin + 20:
+        new_page()
+    footer = [
+        "Total",
+        "",
+        "",
+        "",
+        _pdf_cell_text(totals.get("invoice_value")),
+        "",
+        _pdf_cell_text(totals.get("taxable_value")),
+        _pdf_cell_text(totals.get("igst")),
+        _pdf_cell_text(totals.get("cgst")),
+        _pdf_cell_text(totals.get("sgst")),
+        "",
+    ]
+    _draw_table_row(
+        ops,
+        margin,
+        y,
+        footer,
+        col_widths,
+        row_h,
+        bold=True,
+        fill=True,
+        amount_indexes=SALES_GST_REPORT_AMOUNT_INDEXES,
+    )
+    pages.append(ops)
+    return _build_pdf(pages, page_w, page_h)
+
+
+def sales_gst_report_excel_response(rows, totals, **kwargs) -> HttpResponse:
+    payload = sales_gst_report_xlsx_bytes(rows, totals, **kwargs)
+    response = HttpResponse(
+        payload,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_book_register_filename(kwargs.get("title") or "GST sales", kwargs.get("date_from"), kwargs.get("date_to"), "xlsx")}"'
+    )
+    return response
+
+
+def sales_gst_report_pdf_response(rows, totals, **kwargs) -> HttpResponse:
+    payload = sales_gst_report_pdf_bytes(rows, totals, **kwargs)
+    response = HttpResponse(payload, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_book_register_filename(kwargs.get("title") or "GST sales", kwargs.get("date_from"), kwargs.get("date_to"), "pdf")}"'
     )
     return response
 

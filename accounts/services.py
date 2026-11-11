@@ -19,6 +19,7 @@ from .models import (
     SERIES_CN,
     SERIES_DN,
     SERIES_GST,
+    SERIES_GST_B2C,
     SERIES_JV,
     SERIES_NGST,
     series_for_sales_tax_kind,
@@ -1345,6 +1346,56 @@ def gstin_state_code(gstin: str) -> str:
     return code if len(code) == 2 and code.isdigit() else ""
 
 
+GST_STATE_NAMES = {
+    "01": "Jammu and Kashmir",
+    "02": "Himachal Pradesh",
+    "03": "Punjab",
+    "04": "Chandigarh",
+    "05": "Uttarakhand",
+    "06": "Haryana",
+    "07": "Delhi",
+    "08": "Rajasthan",
+    "09": "Uttar Pradesh",
+    "10": "Bihar",
+    "11": "Sikkim",
+    "12": "Arunachal Pradesh",
+    "13": "Nagaland",
+    "14": "Manipur",
+    "15": "Mizoram",
+    "16": "Tripura",
+    "17": "Meghalaya",
+    "18": "Assam",
+    "19": "West Bengal",
+    "20": "Jharkhand",
+    "21": "Odisha",
+    "22": "Chhattisgarh",
+    "23": "Madhya Pradesh",
+    "24": "Gujarat",
+    "26": "Dadra and Nagar Haveli and Daman and Diu",
+    "27": "Maharashtra",
+    "29": "Karnataka",
+    "30": "Goa",
+    "31": "Lakshadweep",
+    "32": "Kerala",
+    "33": "Tamil Nadu",
+    "34": "Puducherry",
+    "35": "Andaman and Nicobar Islands",
+    "36": "Telangana",
+    "37": "Andhra Pradesh",
+    "38": "Ladakh",
+    "97": "Other Territory",
+}
+
+
+def state_of_supply(gstin: str) -> str:
+    """Place of supply from the GSTIN state code. Blank when the client has no GSTIN."""
+    code = gstin_state_code(gstin)
+    if not code:
+        return ""
+    name = GST_STATE_NAMES.get(code, "")
+    return f"{code} - {name}" if name else code
+
+
 def company_gstin() -> str:
     from core.site_settings import get_site_settings
 
@@ -2457,6 +2508,104 @@ def sales_register_totals(rows: list[dict], *, gst: bool) -> dict:
     for row in rows:
         for key in keys:
             totals[key] += money(row.get(key))
+    return totals
+
+
+def _full_gst_rate(parsed: dict) -> Decimal:
+    """IGST line stores the full rate. CGST and SGST lines store half of it."""
+    rate = money(parsed.get("rate"))
+    if parsed.get("kind") in ("CGST", "SGST"):
+        return money(rate * 2)
+    return rate
+
+
+def sales_gst_report_rows(*, date_from=None, date_to=None) -> list[dict]:
+    """GST and GST-B2C sales, one row per tax rate. Non-GST invoices are omitted.
+
+    Pure-agent recoveries stay in the invoice value and out of taxable value and tax.
+    A client without a GSTIN leaves GSTIN and State of Supply blank.
+    """
+    qs = (
+        Voucher.objects.filter(voucher_type=VOUCHER_SALES, series__in=(SERIES_GST, SERIES_GST_B2C))
+        .prefetch_related("lines__account")
+        .order_by("date", "number", "id")
+    )
+    if date_from:
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+    rows = []
+    for voucher in qs:
+        lines = list(voucher.lines.all())
+        party_line = next((ln for ln in lines if money(ln.debit) > 0), None)
+        party = party_line.account if party_line else None
+        gstin = (getattr(party, "gstin", None) or "").strip().upper() if party else ""
+        invoice_value = money(party_line.debit) if party_line else Decimal("0.00")
+        taxable_by_rate: dict[Decimal, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        tax_by_rate: dict[Decimal, dict[str, Decimal]] = defaultdict(
+            lambda: {"igst": Decimal("0.00"), "cgst": Decimal("0.00"), "sgst": Decimal("0.00")}
+        )
+        for ln in lines:
+            credit = money(ln.credit)
+            if credit <= 0:
+                continue
+            parsed = _parse_gst_output_row(ln.account, credit)
+            if parsed:
+                bucket = tax_by_rate[_full_gst_rate(parsed)]
+                bucket[parsed["kind"].lower()] += parsed["amount"]
+                continue
+            if ln.is_pure_agent:
+                continue
+            taxable_by_rate[money(ln.account.gst_rate)] += credit
+        rates = sorted(set(taxable_by_rate) | set(tax_by_rate))
+        if not rates:
+            rates = [Decimal("0.00")]
+        client = party.name if party else ""
+        supply = state_of_supply(gstin)
+        for rate in rates:
+            tax = tax_by_rate.get(rate) or {}
+            taxable_value = money(taxable_by_rate.get(rate))
+            igst = money(tax.get("igst"))
+            cgst = money(tax.get("cgst"))
+            sgst = money(tax.get("sgst"))
+            has_tax = taxable_value or igst or cgst or sgst
+            rows.append(
+                {
+                    "voucher": voucher,
+                    "number": voucher.number,
+                    "client": client,
+                    "gstin": gstin,
+                    "date": voucher.date,
+                    "invoice_value": invoice_value,
+                    "tax_rate": f"{format_gst_rate_label(rate)}%" if has_tax or rate else "",
+                    "taxable_value": taxable_value,
+                    "igst": igst,
+                    "cgst": cgst,
+                    "sgst": sgst,
+                    "state_of_supply": supply,
+                }
+            )
+    return rows
+
+
+def sales_gst_report_totals(rows: list[dict]) -> dict:
+    """Invoice value is counted once per bill. Tax columns are summed across rate rows."""
+    totals = {
+        "invoice_value": Decimal("0.00"),
+        "taxable_value": Decimal("0.00"),
+        "igst": Decimal("0.00"),
+        "cgst": Decimal("0.00"),
+        "sgst": Decimal("0.00"),
+    }
+    seen = set()
+    for row in rows:
+        voucher = row.get("voucher")
+        key = voucher.pk if voucher is not None else row.get("number")
+        if key not in seen:
+            seen.add(key)
+            totals["invoice_value"] += money(row.get("invoice_value"))
+        for name in ("taxable_value", "igst", "cgst", "sgst"):
+            totals[name] += money(row.get(name))
     return totals
 
 

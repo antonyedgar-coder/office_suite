@@ -1,19 +1,19 @@
 {% if enable_accounts_module and user.is_authenticated %}
   <div
-    class="nav-accordion-item{% if url_name in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_billwise_outstanding' %} is-open{% endif %}"
+    class="nav-accordion-item{% if url_name in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_sales_gst accounts_billwise_outstanding' %} is-open{% endif %}"
     data-nav-section="accounts"
   >
     <button
       type="button"
       class="nav-accordion-toggle"
-      aria-expanded="{% if url_name in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_billwise_outstanding' %}true{% else %}false{% endif %}"
+      aria-expanded="{% if url_name in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_sales_gst accounts_billwise_outstanding' %}true{% else %}false{% endif %}"
       aria-controls="nav-panel-{{ nav_prefix }}-accounts"
     >
       <i class="bi bi-journal-text nav-link-icon" aria-hidden="true"></i>
       <span>Accounts</span>
       <i class="bi bi-chevron-down nav-chevron ms-auto" aria-hidden="true"></i>
     </button>
-    <div id="nav-panel-{{ nav_prefix }}-accounts" class="nav-accordion-panel"{% if url_name not in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_billwise_outstanding' %} hidden{% endif %}>
+    <div id="nav-panel-{{ nav_prefix }}-accounts" class="nav-accordion-panel"{% if url_name not in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print accounts_unbilled_tasks accounts_trial_balance accounts_profit_loss accounts_balance_sheet accounts_ledger accounts_register accounts_sales_gst accounts_billwise_outstanding' %} hidden{% endif %}>
       {% if show_accounts_voucher_nav %}
         <a class="nav-link {% if url_name in 'accounts_voucher_list accounts_voucher_create accounts_voucher_detail accounts_voucher_edit accounts_voucher_print' %}active{% endif %}" href="{% url 'accounts_voucher_list' %}"><i class="bi bi-receipt nav-link-icon" aria-hidden="true"></i><span>Vouchers</span></a>
       {% endif %}
@@ -27,12 +27,13 @@
         <a class="nav-link {% if url_name == 'accounts_ledger' %}active{% endif %}" href="{% url 'accounts_ledger' %}"><i class="bi bi-list-ul nav-link-icon" aria-hidden="true"></i><span>Ledger</span></a>
         <div class="nav-nested">
           <input type="checkbox" id="nav-register-{{ nav_prefix }}" class="nav-nested-check" />
-          <label for="nav-register-{{ nav_prefix }}" class="nav-link nav-nested-toggle {% if url_name == 'accounts_register' or url_name == 'accounts_billwise_outstanding' %}active{% endif %}">
+          <label for="nav-register-{{ nav_prefix }}" class="nav-link nav-nested-toggle {% if url_name == 'accounts_register' or url_name == 'accounts_sales_gst' or url_name == 'accounts_billwise_outstanding' %}active{% endif %}">
             <i class="bi bi-journal-richtext nav-link-icon" aria-hidden="true"></i>
             <span>Reports</span>
           </label>
           <div id="nav-panel-{{ nav_prefix }}-accounts-register" class="nav-nested-panel">
             <a class="nav-link nav-link-nested {% if url_name == 'accounts_register' and request.GET.type == 'sales' or url_name == 'accounts_register' and not request.GET.type %}active{% endif %}" href="{% url 'accounts_register' %}?type=sales"><span>Sales register</span></a>
+            <a class="nav-link nav-link-nested {% if url_name == 'accounts_sales_gst' %}active{% endif %}" href="{% url 'accounts_sales_gst' %}"><span>GST sales</span></a>
             <a class="nav-link nav-link-nested {% if url_name == 'accounts_register' and request.GET.type == 'purchase' %}active{% endif %}" href="{% url 'accounts_register' %}?type=purchase"><span>Purchase register</span></a>
             <a class="nav-link nav-link-nested {% if url_name == 'accounts_register' and request.GET.type == 'journal' %}active{% endif %}" href="{% url 'accounts_register' %}?type=journal"><span>Journal Register</span></a>
             <a class="nav-link nav-link-nested {% if url_name == 'accounts_register' and request.GET.type == 'credit_note' %}active{% endif %}" href="{% url 'accounts_register' %}?type=credit_note"><span>CN Register</span></a>

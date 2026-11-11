@@ -75,6 +75,7 @@ urlpatterns = [
     path("reports/balance-sheet/", views.report_balance_sheet, name="accounts_balance_sheet"),
     path("reports/ledger/", views.report_ledger, name="accounts_ledger"),
     path("reports/register/", views.report_register, name="accounts_register"),
+    path("reports/gst-sales/", views.report_sales_gst, name="accounts_sales_gst"),
     path("reports/bill-wise-outstanding/", views.report_billwise_outstanding, name="accounts_billwise_outstanding"),
     path("reports/pending-recoveries/", views.report_pending_recoveries, name="accounts_pending_recoveries"),
 ]

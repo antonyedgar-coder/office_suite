@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ list_title }} — CA Office Suite{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block extra_head %}
+<style>
+  .gst-date { width: 15ch; min-width: 15ch; white-space: nowrap; }
+  .gst-rate { width: 8ch; white-space: nowrap; }
+</style>
+{% endblock %}
+{% block content %}
+  {% include "accounts/_register_tabs.html" %}
+  <form method="get" class="row g-2 mb-3 align-items-end">
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_from.id_for_label }}">From date</label>
+      {{ form.date_from }}
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="{{ form.date_to.id_for_label }}">To date</label>
+      {{ form.date_to }}
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
+    </div>
+    <div class="col-auto">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Export
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{{ excel_url }}">Excel</a></li>
+          <li><a class="dropdown-item" href="{{ pdf_url }}">PDF</a></li>
+        </ul>
+      </div>
+    </div>
+  </form>
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="h5 mb-0">{{ list_title }}</h1>
+  </div>
+  <div class="card p-3">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Invoice No</th>
+            <th>Client name</th>
+            <th>GSTIN of the Client</th>
+            <th class="gst-date">Invoice Date</th>
+            <th class="text-end">Invoice Value</th>
+            <th class="text-end gst-rate">Tax Rate</th>
+            <th class="text-end">Taxable Value</th>
+            <th class="text-end">IGST</th>
+            <th class="text-end">CGST</th>
+            <th class="text-end">SGST</th>
+            <th>State of Supply</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% if row.voucher %}
+                  <a href="{% url 'accounts_voucher_detail' row.voucher.pk %}">{{ row.number }}</a>
+                {% else %}
+                  {{ row.number }}
+                {% endif %}
+              </td>
+              <td>{{ row.client|default:"—" }}</td>
+              <td class="mono">{{ row.gstin|default:"—" }}</td>
+              <td class="gst-date">{{ row.date|date:"d-m-Y" }}</td>
+              <td class="text-end mono">{{ row.invoice_value }}</td>
+              <td class="text-end mono">{{ row.tax_rate|default:"—" }}</td>
+              <td class="text-end mono">{% if row.taxable_value %}{{ row.taxable_value }}{% endif %}</td>
+              <td class="text-end mono">{% if row.igst %}{{ row.igst }}{% endif %}</td>
+              <td class="text-end mono">{% if row.cgst %}{{ row.cgst }}{% endif %}</td>
+              <td class="text-end mono">{% if row.sgst %}{{ row.sgst }}{% endif %}</td>
+              <td>{{ row.state_of_supply|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="11" class="text-muted">No GST invoices in this period.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <th>Total</th>
+              <th></th>
+              <th></th>
+              <th></th>
+              <th class="text-end mono">{{ totals.invoice_value }}</th>
+              <th></th>
+              <th class="text-end mono">{{ totals.taxable_value }}</th>
+              <th class="text-end mono">{{ totals.igst }}</th>
+              <th class="text-end mono">{{ totals.cgst }}</th>
+              <th class="text-end mono">{{ totals.sgst }}</th>
+              <th></th>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+{% endblock %}
