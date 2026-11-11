@@ -2519,14 +2519,17 @@ def _full_gst_rate(parsed: dict) -> Decimal:
     return rate
 
 
-def sales_gst_report_rows(*, date_from=None, date_to=None) -> list[dict]:
-    """GST and GST-B2C sales, one row per tax rate. Non-GST invoices are omitted.
+def sales_gst_report_rows(*, date_from=None, date_to=None, series=SERIES_GST) -> list[dict]:
+    """One GST sales series, one row per tax rate. Non-GST invoices are omitted.
 
-    Pure-agent recoveries stay in the invoice value and out of taxable value and tax.
-    A client without a GSTIN leaves GSTIN and State of Supply blank.
+    series is SERIES_GST (B2B) or SERIES_GST_B2C. Pure-agent recoveries stay in the
+    invoice value and out of taxable value and tax. A client without a GSTIN leaves
+    GSTIN and State of Supply blank.
     """
+    if series not in (SERIES_GST, SERIES_GST_B2C):
+        series = SERIES_GST
     qs = (
-        Voucher.objects.filter(voucher_type=VOUCHER_SALES, series__in=(SERIES_GST, SERIES_GST_B2C))
+        Voucher.objects.filter(voucher_type=VOUCHER_SALES, series=series)
         .prefetch_related("lines__account")
         .order_by("date", "number", "id")
     )

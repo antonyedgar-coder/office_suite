@@ -1279,11 +1279,21 @@ class AccountsModuleTests(TestCase):
             actor=self.admin,
             tax_kind="ngst",
         )
-        rows = sales_gst_report_rows(date_from=date(2026, 10, 1), date_to=date(2026, 10, 31))
+        rows = sales_gst_report_rows(
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+            series=SERIES_GST,
+        )
         by_bill = {}
         for row in rows:
             by_bill.setdefault(row["number"], []).append(row)
-        self.assertEqual(set(by_bill), {voucher.number, b2c.number})
+        self.assertEqual(set(by_bill), {voucher.number})
+        b2c_only = sales_gst_report_rows(
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+            series=SERIES_GST_B2C,
+        )
+        self.assertEqual([row["number"] for row in b2c_only], [b2c.number])
         rated = {row["tax_rate"]: row for row in by_bill[voucher.number]}
         self.assertEqual(set(rated), {"18%", "5%"})
         self.assertEqual(rated["18%"]["invoice_value"], Decimal("1890.00"))
@@ -1297,7 +1307,7 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(rated["18%"]["gstin"], "32ABCDE7777F1Z5")
         self.assertEqual(rated["18%"]["state_of_supply"], "32 - Kerala")
         self.assertEqual(rated["18%"]["client"], buyer.name)
-        b2c_row = by_bill[b2c.number][0]
+        b2c_row = b2c_only[0]
         self.assertEqual(b2c_row["gstin"], "")
         self.assertEqual(b2c_row["state_of_supply"], "")
         self.assertEqual(b2c_row["taxable_value"], Decimal("100.00"))
@@ -1305,9 +1315,12 @@ class AccountsModuleTests(TestCase):
         self.assertEqual(b2c_row["sgst"], Decimal("9.00"))
         self.assertEqual(b2c_row["invoice_value"], Decimal("118.00"))
         totals = sales_gst_report_totals(rows)
-        self.assertEqual(totals["invoice_value"], Decimal("2008.00"))
-        self.assertEqual(totals["taxable_value"], Decimal("1300.00"))
+        self.assertEqual(totals["invoice_value"], Decimal("1890.00"))
+        self.assertEqual(totals["taxable_value"], Decimal("1200.00"))
         self.assertEqual(totals["igst"], Decimal("190.00"))
+        b2c_totals = sales_gst_report_totals(b2c_only)
+        self.assertEqual(b2c_totals["invoice_value"], Decimal("118.00"))
+        self.assertEqual(b2c_totals["cgst"], Decimal("9.00"))
         outside = sales_gst_report_rows(date_from=date(2026, 11, 1), date_to=date(2026, 11, 30))
         self.assertEqual(outside, [])
         from accounts.export import sales_gst_report_pdf_bytes, sales_gst_report_xlsx_bytes

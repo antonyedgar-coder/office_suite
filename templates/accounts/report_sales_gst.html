@@ -9,7 +9,15 @@
 {% endblock %}
 {% block content %}
   {% include "accounts/_register_tabs.html" %}
+  <ul class="nav nav-tabs nav-justified register-type-tabs mb-3">
+    {% for key, label in gst_sales_tabs %}
+      <li class="nav-item">
+        <a class="nav-link {% if invoice_kind == key %}active{% endif %}" href="{% url 'accounts_sales_gst' %}?invoice={{ key }}{% if date_from %}&date_from={{ date_from|date:'Y-m-d' }}{% endif %}{% if date_to %}&date_to={{ date_to|date:'Y-m-d' }}{% endif %}">{{ label }}</a>
+      </li>
+    {% endfor %}
+  </ul>
   <form method="get" class="row g-2 mb-3 align-items-end">
+    <input type="hidden" name="invoice" value="{{ invoice_kind }}" />
     <div class="col-6 col-md-3">
       <label class="form-label" for="{{ form.date_from.id_for_label }}">From date</label>
       {{ form.date_from }}

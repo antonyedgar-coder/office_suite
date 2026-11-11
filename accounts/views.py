@@ -2216,8 +2216,13 @@ def report_sales_gst(request):
     if get_data and form.is_valid():
         date_from = form.cleaned_data.get("date_from") or date_from
         date_to = form.cleaned_data.get("date_to") or date_to
-    title = "GST sales"
-    rows = sales_gst_report_rows(date_from=date_from, date_to=date_to)
+    invoice_kind = (request.GET.get("invoice") or SALES_INVOICE_GST).strip().lower()
+    if invoice_kind not in (SALES_INVOICE_GST, SALES_INVOICE_GST_B2C):
+        invoice_kind = SALES_INVOICE_GST
+    series = SERIES_GST if invoice_kind == SALES_INVOICE_GST else SERIES_GST_B2C
+    kind_label = "GST-B2B Invoice" if invoice_kind == SALES_INVOICE_GST else "GST-B2C Invoice"
+    title = f"GST sales — {kind_label}"
+    rows = sales_gst_report_rows(date_from=date_from, date_to=date_to, series=series)
     totals = sales_gst_report_totals(rows)
     export = (request.GET.get("export") or "").strip().lower()
     settings = get_site_settings()
@@ -2245,6 +2250,7 @@ def report_sales_gst(request):
         )
     query = urlencode(
         {
+            "invoice": invoice_kind,
             "date_from": date_from.isoformat() if date_from else "",
             "date_to": date_to.isoformat() if date_to else "",
         }
@@ -2259,7 +2265,11 @@ def report_sales_gst(request):
             "list_title": title,
             "register_tabs": REGISTER_TABS,
             "report_kind": "sales_gst",
-            "invoice_kind": "gst",
+            "invoice_kind": invoice_kind,
+            "gst_sales_tabs": [
+                (SALES_INVOICE_GST, "GST-B2B Invoice"),
+                (SALES_INVOICE_GST_B2C, "GST-B2C Invoice"),
+            ],
             "date_from": date_from,
             "date_to": date_to,
             "excel_url": f"{reverse('accounts_sales_gst')}?{query}&export=xlsx",
