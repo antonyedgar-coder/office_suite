@@ -3891,6 +3891,8 @@ class PaymentRecoveryTests(TestCase):
         self.assertEqual(queue[0]["ledger_label"], "GST Payment Rec")
         self.assertEqual(queue[0]["key"], f"recovery:{pending_recovery_rows()[0]['id']}")
 
+        self.client_row.gstin = "32RECDE7777F1Z5"
+        self.client_row.save(update_fields=["gstin"])
         self.task.status = Task.STATUS_COMPLETE
         self.task.is_billable = True
         self.task.fees_amount = Decimal("1000.00")
@@ -3898,8 +3900,11 @@ class PaymentRecoveryTests(TestCase):
         queue = build_unbilled_queue(tasks=[self.task])
         kinds = {item["key"]: item["kind"] for item in queue}
         self.assertEqual(kinds[f"task:{self.task.pk}"], UNBILLED_FEES)
+        fee_item = next(item for item in queue if item["kind"] == UNBILLED_FEES)
+        self.assertEqual(fee_item["gstin"], "32RECDE7777F1Z5")
         recovery_item = next(item for item in queue if item["kind"] == UNBILLED_RECOVERY)
         self.assertEqual(recovery_item["ledger_label"], "GST Payment Rec")
+        self.assertEqual(recovery_item["gstin"], "32RECDE7777F1Z5")
         self.assertEqual(recovery_item["recovery"], Decimal("5180.00"))
 
         other = Task.objects.create(
@@ -3921,6 +3926,8 @@ class PaymentRecoveryTests(TestCase):
 
         found = filter_unbilled_queue(queue, "GST Payment")
         self.assertTrue(any(item["kind"] == UNBILLED_RECOVERY for item in found))
+        by_gstin = filter_unbilled_queue(queue, "32RECDE7777F1Z5")
+        self.assertEqual({item["kind"] for item in by_gstin}, {UNBILLED_FEES, UNBILLED_RECOVERY})
 
     def test_recovery_only_invoice_from_unbilled_keys(self):
         from accounts.services import (
@@ -4044,7 +4051,8 @@ class PaymentRecoveryTests(TestCase):
             encoding="utf-8"
         )
         self.assertIn('name="item"', template)
-        self.assertIn("Type", template)
+        self.assertIn("GSTIN", template)
+        self.assertIn("row.gstin", template)
         self.assertIn("Ledger", template)
         self.assertIn("Recovery", template)
         self.assertIn("Fees", template)

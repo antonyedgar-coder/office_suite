@@ -433,6 +433,7 @@ def pending_recovery_rows(*, party=None, task=None, ignore_invoice_id=None) -> l
         .select_related(
             "voucher",
             "voucher__on_behalf_of",
+            "voucher__on_behalf_of__client",
             "voucher__on_behalf_task",
             "voucher__created_by",
             "account",
@@ -2269,6 +2270,15 @@ UNBILLED_KIND_LABELS = {
 }
 
 
+def _party_client_gstin(party) -> str:
+    """GSTIN from the linked client, then the ledger, when a client has one."""
+    if party is None:
+        return ""
+    client = getattr(party, "client", None)
+    raw = getattr(client, "gstin", None) or getattr(party, "gstin", None) or ""
+    return raw.strip().upper()
+
+
 def build_unbilled_queue(*, tasks) -> list[dict]:
     """Fees waiting on completed tasks, plus each unbilled pure-agent recovery as its own row."""
     items = []
@@ -2279,6 +2289,7 @@ def build_unbilled_queue(*, tasks) -> list[dict]:
                 "kind": UNBILLED_FEES,
                 "kind_label": UNBILLED_KIND_LABELS[UNBILLED_FEES],
                 "client_name": task.client.client_name,
+                "gstin": (task.client.gstin or "").strip().upper(),
                 "task": task,
                 "task_id": task.pk,
                 "task_label": task.display_title,
@@ -2297,6 +2308,7 @@ def build_unbilled_queue(*, tasks) -> list[dict]:
                 "kind": UNBILLED_RECOVERY,
                 "kind_label": UNBILLED_KIND_LABELS[UNBILLED_RECOVERY],
                 "client_name": row["party_name"],
+                "gstin": _party_client_gstin(row.get("party")),
                 "task": None,
                 "task_id": row.get("task_id"),
                 "task_label": row["task_label"] or "—",
@@ -2323,6 +2335,7 @@ def filter_unbilled_queue(items: list[dict], q: str) -> list[dict]:
                 None,
                 [
                     item.get("client_name"),
+                    item.get("gstin"),
                     item.get("task_label"),
                     item.get("ledger_label"),
                     item.get("voucher_number"),

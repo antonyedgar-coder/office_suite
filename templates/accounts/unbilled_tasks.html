@@ -16,7 +16,7 @@
           form="unbilled-search-form"
           name="q"
           value="{{ q }}"
-          placeholder="Client, task, GST Payment, or Fees/Recovery"
+          placeholder="Client, GSTIN, task, GST Payment, or Fees/Recovery"
         />
       </div>
       <div class="col-md-3"><label class="form-label" for="{{ form.invoice_date.id_for_label }}">Invoice date</label>{{ form.invoice_date }}</div>
@@ -34,6 +34,7 @@
               <th></th>
               <th>Type</th>
               <th>Client</th>
+              <th>GSTIN</th>
               <th>Ledger</th>
               <th>Task</th>
               <th>Period</th>
@@ -55,6 +56,7 @@
                   {% endif %}
                 </td>
                 <td>{{ row.client_name }}</td>
+                <td class="mono">{{ row.gstin|default:"—" }}</td>
                 <td>{{ row.ledger_label|default:"—" }}</td>
                 <td>
                   {% if row.task %}
@@ -68,7 +70,7 @@
                 <td class="text-end mono">{% if row.recovery %}{{ row.recovery }}{% else %}—{% endif %}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="8" class="text-secondary">Nothing waiting for an invoice.</td></tr>
+              <tr><td colspan="9" class="text-secondary">Nothing waiting for an invoice.</td></tr>
             {% endfor %}
           </tbody>
         </table>
